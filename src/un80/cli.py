@@ -112,24 +112,117 @@ def cmd_list(path: Path, format_type: str) -> int:
     return 0
 
 
+def safe_write(out_path: Path, data: bytes, no_clobber: bool) -> tuple[Path, str]:
+    """
+    Safely write data to a file, handling overwrites.
+
+    Returns (actual_path, status) where status is 'wrote', 'skipped', or 'overwrote'.
+    """
+    if not out_path.exists():
+        out_path.write_bytes(data)
+        return out_path, 'wrote'
+
+    if no_clobber:
+        return out_path, 'skipped'
+
+    # File exists and we're allowed to overwrite
+    out_path.write_bytes(data)
+    return out_path, 'overwrote'
+
+
+def get_unique_path_for_archive(out_path: Path, used_names: set[str]) -> Path:
+    """
+    Get a unique filename, avoiding conflicts with names already used in this extraction.
+
+    This handles duplicate filenames WITHIN an archive (e.g., two files named README.TXT).
+    Appends _1, _2, etc. to the stem until a unique name is found.
+
+    Note: This only checks used_names, not existing files on disk (that's handled by safe_write).
+    """
+    original = out_path
+    counter = 1
+
+    while str(out_path) in used_names:
+        stem = original.stem
+        suffix = original.suffix
+        out_path = original.parent / f"{stem}_{counter}{suffix}"
+        counter += 1
+
+    return out_path
+
+
 def cmd_extract(
     path: Path,
     output_dir: Path | None,
     format_type: str,
     convert_text: bool,
+    no_clobber: bool = False,
 ) -> int:
     """Extract archive or decompress file."""
+    extracted = 0
+    skipped = 0
+    overwrote = 0
+
     if format_type == 'lbr':
-        results = extract_lbr(path, output_dir, convert_text=convert_text)
-        for filename, _ in results:
-            print(f"  {filename}")
-        print(f"\nExtracted {len(results)} file(s)")
+        results = extract_lbr(path, None, convert_text=convert_text)  # Extract to memory first
+        used_names: set[str] = set()
+
+        for filename, data in results:
+            if output_dir:
+                out_path = output_dir / filename
+            else:
+                out_path = path.parent / filename
+
+            # Handle duplicate names within archive
+            out_path = get_unique_path_for_archive(out_path, used_names)
+            used_names.add(str(out_path))
+
+            actual_path, status = safe_write(out_path, data, no_clobber)
+
+            if status == 'skipped':
+                print(f"  {filename} (skipped, already exists)")
+                skipped += 1
+            elif status == 'overwrote':
+                print(f"  {filename} (overwrote)")
+                overwrote += 1
+            else:
+                if actual_path.name != filename:
+                    print(f"  {filename} -> {actual_path.name}")
+                else:
+                    print(f"  {filename}")
+                extracted += 1
+
+        _print_extract_summary(extracted, skipped, overwrote)
 
     elif format_type == 'arc':
-        results = extract_arc(path, output_dir, convert_text=convert_text)
-        for filename, _ in results:
-            print(f"  {filename}")
-        print(f"\nExtracted {len(results)} file(s)")
+        results = extract_arc(path, None, convert_text=convert_text)
+        used_names = set()
+
+        for filename, data in results:
+            if output_dir:
+                out_path = output_dir / filename
+            else:
+                out_path = path.parent / filename
+
+            out_path = get_unique_path_for_archive(out_path, used_names)
+            used_names.add(str(out_path))
+
+            actual_path, status = safe_write(out_path, data, no_clobber)
+
+            if status == 'skipped':
+                print(f"  {filename} (skipped, already exists)")
+                skipped += 1
+            elif status == 'overwrote':
+                print(f"  {filename} (overwrote)")
+                overwrote += 1
+            else:
+                if actual_path.name != filename:
+                    print(f"  {filename} -> {actual_path.name}")
+                else:
+                    print(f"  {filename}")
+                extracted += 1
+
+        _print_extract_summary(extracted, skipped, overwrote)
 
     elif format_type in ('squeeze', 'crunch', 'crlzh'):
         with open(path, 'rb') as f:
@@ -152,14 +245,37 @@ def cmd_extract(
         else:
             out_path = path.parent / out_name
 
-        out_path.write_bytes(result)
-        print(f"  {out_name} ({len(result)} bytes)")
+        actual_path, status = safe_write(out_path, result, no_clobber)
+
+        if status == 'skipped':
+            print(f"  {out_name} (skipped, already exists)")
+        elif status == 'overwrote':
+            print(f"  {out_name} ({len(result)} bytes, overwrote)")
+        else:
+            print(f"  {out_name} ({len(result)} bytes)")
 
     else:
         print(f"Unknown format: {format_type}", file=sys.stderr)
         return 1
 
     return 0
+
+
+def _print_extract_summary(extracted: int, skipped: int, overwrote: int) -> None:
+    """Print extraction summary."""
+    parts = []
+    if extracted:
+        parts.append(f"{extracted} extracted")
+    if skipped:
+        parts.append(f"{skipped} skipped")
+    if overwrote:
+        parts.append(f"{overwrote} overwrote")
+
+    total = extracted + skipped + overwrote
+    if parts:
+        print(f"\n{total} file(s): {', '.join(parts)}")
+    else:
+        print(f"\n{total} file(s)")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -197,6 +313,11 @@ def main(argv: list[str] | None = None) -> int:
         choices=['lbr', 'arc', 'squeeze', 'crunch', 'crlzh'],
         help='Force file format (auto-detected by default)',
     )
+    parser.add_argument(
+        '-n', '--no-clobber',
+        action='store_true',
+        help='Do not overwrite existing files',
+    )
 
     args = parser.parse_args(argv)
 
@@ -219,7 +340,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.list:
             return cmd_list(args.file, format_type)
         else:
-            return cmd_extract(args.file, args.output, format_type, args.text)
+            return cmd_extract(args.file, args.output, format_type, args.text, args.no_clobber)
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1

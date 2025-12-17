@@ -61,7 +61,7 @@ Files with no extension used `.QQQ`, `.ZZZ`, or `.YYY`.
 ## Command Line Usage
 
 ```
-usage: 80un [-h] [--version] [-o DIR] [-l] [-t] [-f FORMAT] file
+usage: 80un [-h] [--version] [-o DIR] [-l] [-t] [-f FORMAT] [-n] file
 
 Unpacker for CP/M compression and packing formats
 
@@ -75,6 +75,7 @@ options:
   -l, --list            List contents without extracting
   -t, --text            Convert text files (strip ^Z, CR/LF to LF)
   -f, --format FORMAT   Force file format: lbr, arc, squeeze, crunch, crlzh
+  -n, --no-clobber      Do not overwrite existing files
 ```
 
 ### Examples
@@ -142,6 +143,18 @@ The original filename is recovered from the compressed file header.
 ```bash
 $ 80un unknown.dat -f crunch
 ```
+
+**Extract without overwriting existing files:**
+```bash
+$ 80un myarchive.lbr -o output/ -n
+  README.TXT
+  PROGRAM.COM (skipped, already exists)
+  DATA.DAT
+
+3 file(s): 2 extracted, 1 skipped
+```
+
+The `-n` / `--no-clobber` option is useful when extracting multiple archives to the same directory, or when you want to preserve files you've already modified.
 
 ## Python API
 
@@ -313,6 +326,19 @@ The file may be corrupted, truncated, or not actually in the detected format. Tr
 ### Files extract with wrong names
 
 Some very old archives don't store original filenames. The tool will use the archive member name with the compression indicator removed.
+
+### Duplicate filenames in archive
+
+Some archives contain multiple files with the same name (e.g., from different directories that CP/M flattened). When this happens, 80un automatically renames duplicates by appending `_1`, `_2`, etc.:
+
+```bash
+$ 80un archive_with_dupes.lbr
+  README.TXT
+  README.TXT -> README_1.TXT
+  DATA.DAT
+
+3 file(s): 3 extracted
+```
 
 ## History
 
