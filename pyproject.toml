@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "80un"
+version = "0.1.0"
+description = "Unpacker for CP/M compression and packing formats (8080)"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "avwohl"}
+]
+keywords = ["cpm", "cp/m", "8080", "unpack", "squeeze", "crunch", "lbr", "arc", "retro"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Archiving :: Compression",
+    "Topic :: System :: Archiving",
+]
+requires-python = ">=3.8"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-cov"]
+
+[project.scripts]
+80un = "un80.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/avwohl/80un"
+Repository = "https://github.com/avwohl/80un"
+
+[tool.setuptools.packages.find]
+where = ["src"]
