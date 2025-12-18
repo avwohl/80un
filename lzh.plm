@@ -1,0 +1,80 @@
+/*
+ * lzh.plm - CrLZH Decompression (LZSS)
+ *
+ * Decompresses .?Y? files (CrLZH format)
+ */
+
+declare cpm$eof literally '01AH';
+declare ring$size literally '4096';
+declare ring$mask literally '0FFFH';
+
+/* External declarations */
+declare ring$ptr address external;
+declare ring based ring$ptr (1) byte;
+declare ring$pos address external;
+declare input$limit address external;
+
+/* Procedures from common.plm and io.plm - visible when compiled together */
+
+/*========================================================
+ * CrLZH Decompression (LZSS)
+ *========================================================*/
+
+uncrlzh: procedure byte public;
+    declare (b, i) byte;
+    declare (offset, length) address;
+    declare done byte;
+    declare rb byte;
+    declare rp address;
+
+    /* Magic already verified, skip it */
+    b = getbyte;  /* 76 */
+    b = getbyte;  /* FD */
+
+    /* Skip original filename (null-terminated) */
+    do while (b := getbyte) <> 0 and b <> cpm$eof;
+    end;
+
+    /* Initialize ring buffer and bit reader */
+    call fillmem(ring$ptr, ring$size, ' ');
+    ring$pos = ring$size - 18;  /* Standard initial position */
+    call init$bits$lsb;
+
+    done = 0;
+    do while not done and input$avail;
+        /* Read flag bit: 1 = literal, 0 = match */
+        if read$bit$lsb then do;
+            /* Literal byte */
+            b = low(read$bits$lsb(8));
+            if not putbyte(b) then return 0;
+            ring(ring$pos) = b;
+            ring$pos = (ring$pos + 1) and ring$mask;
+        end;
+        else do;
+            /* Match: 12-bit offset, 4-bit length */
+            offset = read$bits$lsb(12);
+            length = read$bits$lsb(4) + 3;
+
+            /* Check for end marker */
+            if offset = 0 and length = 3 then do;
+                done = 1;
+            end;
+            else do;
+                /* Copy from ring buffer */
+                i = 0;
+                do while i < low(length);
+                    rp = (offset + i) and ring$mask;
+                    rb = ring(rp);
+                    if not putbyte(rb) then return 0;
+                    ring(ring$pos) = rb;
+                    ring$pos = (ring$pos + 1) and ring$mask;
+                    i = i + 1;
+                end;
+            end;
+        end;
+    end;
+
+    return 1;
+end uncrlzh;
+
+eof

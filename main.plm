@@ -1,0 +1,446 @@
+/*
+ * main.plm - 80UN Main Program
+ *
+ * CP/M Archive Unpacker - Main driver
+ * Extracts and decompresses files from CP/M archives:
+ *   - LBR (Library archives)
+ *   - ARC archives (methods 1-9)
+ *   - Squeezed files (.?Q? - Huffman + RLE)
+ *   - Crunched files (.?Z? - LZW + RLE)
+ *   - CrLZH files (.?Y? - LZSS)
+ *
+ * To build:
+ *   uplm80 common.plm -o common.mac
+ *   uplm80 io.plm -o io.mac
+ *   uplm80 squeeze.plm -o squeeze.mac
+ *   uplm80 crunch.plm -o crunch.mac
+ *   uplm80 lzh.plm -o lzh.mac
+ *   uplm80 arc.plm -o arc.mac
+ *   uplm80 lbr.plm -o lbr.mac
+ *   uplm80 main.plm -o main.mac
+ *   um80 common.mac io.mac squeeze.mac crunch.mac lzh.mac arc.mac lbr.mac main.mac
+ *   ul80 -o 80un.com common.rel io.rel squeeze.rel crunch.rel lzh.rel arc.rel lbr.rel main.rel
+ *
+ * Copyright 2024 - GPL v3 License
+ */
+
+/* Magic numbers for compression detection */
+declare
+    magic$sq$lo   literally '0FFH',   /* Squeeze: 76 FF */
+    magic$sq$hi   literally '076H',
+    magic$cr$lo   literally '0FEH',   /* Crunch: 76 FE */
+    magic$cr$hi   literally '076H',
+    magic$lzh$lo  literally '0FDH',   /* CrLZH: 76 FD */
+    magic$lzh$hi  literally '076H',
+    arc$marker    literally '01AH',   /* ARC: 1A xx */
+    cpm$eof       literally '01AH';   /* CP/M EOF marker */
+
+/* External declarations from common.plm */
+declare fcb$ptr address external;
+declare fcb based fcb$ptr (36) byte;
+declare ifcb$ptr address external;
+declare ifcb based ifcb$ptr (36) byte;
+declare ofcb$ptr address external;
+declare ofcb based ofcb$ptr (36) byte;
+declare dma$ptr address external;
+declare dma based dma$ptr (128) byte;
+declare inbuf$ptr address external;
+declare inbuf based inbuf$ptr (1) byte;
+declare inbuf$size address external;
+declare inbuf$pos address external;
+declare inbuf$end address external;
+declare outbuf$ptr address external;
+declare outbuf$size address external;
+declare outbuf$pos address external;
+declare huff$tree$ptr address external;
+declare lzw$prefix$ptr address external;
+declare lzw$suffix$ptr address external;
+declare ring$ptr address external;
+declare work$ptr address external;
+declare file$count byte external;
+declare input$limit address external;
+
+/*
+ * Note: When compiling all files together with uplm80, procedures
+ * defined in earlier files are automatically visible. No external
+ * declarations needed.
+ */
+
+/*========================================================
+ * Single File Decompression
+ *========================================================*/
+
+decompress$file: procedure byte;
+    declare msg$creating data('Creating: $');
+    declare msg$ok data(' OK$');
+    declare msg$err data(' Error$');
+    declare (i, j, result) byte;
+    declare orig$name (13) byte;
+    declare name$pos byte;
+
+    /* Read file into buffer */
+    inbuf$pos = 0;
+    inbuf$end = 0;
+    if not fill$inbuf then return 0;
+
+    /* Detect compression type */
+    if inbuf(0) = magic$sq$hi and inbuf(1) = magic$sq$lo then do;
+        /* Squeezed file - extract original name */
+        /* Skip magic, read name */
+        name$pos = 0;
+        i = 2;
+        do while inbuf(i) <> 0 and name$pos < 12;
+            orig$name(name$pos) = inbuf(i);
+            name$pos = name$pos + 1;
+            i = i + 1;
+        end;
+        orig$name(name$pos) = 0;
+
+        /* Set up output FCB from original name */
+        call fillmem(ofcb$ptr, 36, 0);
+        i = 0;
+        j = 1;
+        do while orig$name(i) <> 0 and orig$name(i) <> '.' and j <= 8;
+            ofcb(j) = orig$name(i);
+            i = i + 1;
+            j = j + 1;
+        end;
+        do while j <= 8;
+            ofcb(j) = ' ';
+            j = j + 1;
+        end;
+        if orig$name(i) = '.' then do;
+            i = i + 1;
+            j = 9;
+            do while orig$name(i) <> 0 and j <= 11;
+                ofcb(j) = orig$name(i);
+                i = i + 1;
+                j = j + 1;
+            end;
+        end;
+        do while j <= 11;
+            ofcb(j) = ' ';
+            j = j + 1;
+        end;
+
+        call printstr(.msg$creating);
+        i = 0;
+        do while orig$name(i) <> 0;
+            call printchar(orig$name(i));
+            i = i + 1;
+        end;
+
+        call deletefile(ofcb$ptr);
+        if makefile(ofcb$ptr) = 0ffh then do;
+            call printstr(.(' - cannot create$'));
+            return 0;
+        end;
+
+        outbuf$pos = 0;
+        result = unsqueeze;
+        if result then result = flush$outbuf;
+        call closefile(ofcb$ptr);
+
+        if result then
+            call printstr(.msg$ok);
+        else
+            call printstr(.msg$err);
+        call crlf;
+        return result;
+    end;
+
+    if inbuf(0) = magic$cr$hi and inbuf(1) = magic$cr$lo then do;
+        /* Crunched file - similar to squeeze */
+        name$pos = 0;
+        i = 2;
+        do while inbuf(i) <> 0 and name$pos < 12;
+            orig$name(name$pos) = inbuf(i);
+            name$pos = name$pos + 1;
+            i = i + 1;
+        end;
+        orig$name(name$pos) = 0;
+
+        call fillmem(ofcb$ptr, 36, 0);
+        i = 0;
+        j = 1;
+        do while orig$name(i) <> 0 and orig$name(i) <> '.' and j <= 8;
+            ofcb(j) = orig$name(i);
+            i = i + 1;
+            j = j + 1;
+        end;
+        do while j <= 8;
+            ofcb(j) = ' ';
+            j = j + 1;
+        end;
+        if orig$name(i) = '.' then do;
+            i = i + 1;
+            j = 9;
+            do while orig$name(i) <> 0 and j <= 11;
+                ofcb(j) = orig$name(i);
+                i = i + 1;
+                j = j + 1;
+            end;
+        end;
+        do while j <= 11;
+            ofcb(j) = ' ';
+            j = j + 1;
+        end;
+
+        call printstr(.msg$creating);
+        i = 0;
+        do while orig$name(i) <> 0;
+            call printchar(orig$name(i));
+            i = i + 1;
+        end;
+
+        call deletefile(ofcb$ptr);
+        if makefile(ofcb$ptr) = 0ffh then do;
+            call printstr(.(' - cannot create$'));
+            return 0;
+        end;
+
+        outbuf$pos = 0;
+        result = uncrunch;
+        if result then result = flush$outbuf;
+        call closefile(ofcb$ptr);
+
+        if result then
+            call printstr(.msg$ok);
+        else
+            call printstr(.msg$err);
+        call crlf;
+        return result;
+    end;
+
+    if inbuf(0) = magic$lzh$hi and inbuf(1) = magic$lzh$lo then do;
+        /* CrLZH file */
+        name$pos = 0;
+        i = 2;
+        do while inbuf(i) <> 0 and name$pos < 12;
+            orig$name(name$pos) = inbuf(i);
+            name$pos = name$pos + 1;
+            i = i + 1;
+        end;
+        orig$name(name$pos) = 0;
+
+        call fillmem(ofcb$ptr, 36, 0);
+        i = 0;
+        j = 1;
+        do while orig$name(i) <> 0 and orig$name(i) <> '.' and j <= 8;
+            ofcb(j) = orig$name(i);
+            i = i + 1;
+            j = j + 1;
+        end;
+        do while j <= 8;
+            ofcb(j) = ' ';
+            j = j + 1;
+        end;
+        if orig$name(i) = '.' then do;
+            i = i + 1;
+            j = 9;
+            do while orig$name(i) <> 0 and j <= 11;
+                ofcb(j) = orig$name(i);
+                i = i + 1;
+                j = j + 1;
+            end;
+        end;
+        do while j <= 11;
+            ofcb(j) = ' ';
+            j = j + 1;
+        end;
+
+        call printstr(.msg$creating);
+        i = 0;
+        do while orig$name(i) <> 0;
+            call printchar(orig$name(i));
+            i = i + 1;
+        end;
+
+        call deletefile(ofcb$ptr);
+        if makefile(ofcb$ptr) = 0ffh then do;
+            call printstr(.(' - cannot create$'));
+            return 0;
+        end;
+
+        outbuf$pos = 0;
+        result = uncrlzh;
+        if result then result = flush$outbuf;
+        call closefile(ofcb$ptr);
+
+        if result then
+            call printstr(.msg$ok);
+        else
+            call printstr(.msg$err);
+        call crlf;
+        return result;
+    end;
+
+    /* Unknown format */
+    call printstr(.('Unknown compression format$'));
+    call crlf;
+    return 0;
+end decompress$file;
+
+/*========================================================
+ * Main Program
+ *========================================================*/
+
+/* Linker provides __END__ at end of all code/data - bridged via heap.asm */
+declare heap$base address external;
+
+main: procedure public;
+    declare msg$banner data('80UN - CP/M Archive Unpacker v2.1$');
+    declare msg$usage data('Usage: 80UN filename$');
+    declare msg$formats data('Supports: LBR, ARC, .?Q?, .?Z?, .?Y?$');
+    declare msg$noopen data('Cannot open input file$');
+    declare msg$extract data('Extracting:$');
+    declare msg$done data(' file(s) extracted$');
+
+    declare (i, result) byte;
+    declare ext (4) byte;
+    declare is$lbr byte;
+    declare is$arc byte;
+    declare magic (2) byte;
+    declare base address;
+
+    /* Initialize pointers */
+    fcb$ptr = 005ch;
+    dma$ptr = 0080h;
+
+    /* Allocate buffers after program using __END__ (via heap$base)
+     * Memory layout (offsets from base):
+     *   IFCB:      36 bytes   (base + 0)
+     *   OFCB:      36 bytes   (base + 36)
+     *   INBUF:     4096 bytes (base + 72)
+     *   OUTBUF:    4096 bytes (base + 4168)
+     *   HUFF_TREE: 1024 bytes (base + 8264)
+     *   LZW_PREFIX:8192 bytes (base + 9288)
+     *   LZW_SUFFIX:4096 bytes (base + 17480)
+     *   RING:      4096 bytes (base + 21576)
+     *   WORK:      4096 bytes (base + 25672)
+     * Total: ~30K from base
+     */
+    base = heap$base;
+    ifcb$ptr = base;
+    ofcb$ptr = ifcb$ptr + 36;
+    inbuf$ptr = ofcb$ptr + 36;
+    inbuf$size = 4096;
+    outbuf$ptr = inbuf$ptr + 4096;
+    outbuf$size = 4096;
+    huff$tree$ptr = outbuf$ptr + 4096;
+    lzw$prefix$ptr = huff$tree$ptr + 1024;
+    lzw$suffix$ptr = lzw$prefix$ptr + 8192;
+    ring$ptr = lzw$suffix$ptr + 4096;
+    work$ptr = ring$ptr + 4096;
+
+    /* Print banner */
+    call crlf;
+    call printstr(.msg$banner);
+    call crlf;
+
+    /* Check if filename provided */
+    if fcb(1) = ' ' then do;
+        call crlf;
+        call printstr(.msg$usage);
+        call crlf;
+        call printstr(.msg$formats);
+        call crlf;
+        return;
+    end;
+
+    /* Get extension for type detection */
+    ext(0) = fcb(9) and 07fh;
+    ext(1) = fcb(10) and 07fh;
+    ext(2) = fcb(11) and 07fh;
+    ext(3) = 0;
+
+    /* Copy FCB to working area */
+    call copymem(fcb$ptr, ifcb$ptr, 36);
+    call fillmem(ofcb$ptr, 36, 0);
+
+    /* Open input file */
+    call setdmaaddr(dma$ptr);
+    result = openfile(ifcb$ptr);
+    if result = 0ffh then do;
+        call crlf;
+        call printstr(.msg$noopen);
+        call crlf;
+        return;
+    end;
+
+    /* Read first bytes to detect format */
+    inbuf$pos = 0;
+    inbuf$end = 0;
+    if not fill$inbuf then do;
+        call closefile(ifcb$ptr);
+        return;
+    end;
+
+    magic(0) = inbuf(0);
+    magic(1) = inbuf(1);
+
+    /* Detect format by magic bytes */
+    is$lbr = 0;
+    is$arc = 0;
+
+    /* LBR: First byte = 0x00 (active entry), followed by spaces */
+    if magic(0) = 0 and inbuf(1) = ' ' then
+        is$lbr = 1;
+
+    /* ARC: First byte = 0x1A, second = method (1-9) */
+    if magic(0) = arc$marker and magic(1) >= 1 and magic(1) <= 9 then
+        is$arc = 1;
+
+    /* Also check extension */
+    if ext(0) = 'L' and ext(1) = 'B' and ext(2) = 'R' then
+        is$lbr = 1;
+    if ext(0) = 'A' and ext(1) = 'R' and ext(2) = 'C' then
+        is$arc = 1;
+
+    call crlf;
+    call printstr(.msg$extract);
+    call crlf;
+
+    file$count = 0;
+
+    /* Close and reopen file to reset position */
+    call closefile(ifcb$ptr);
+    call copymem(fcb$ptr, ifcb$ptr, 36);
+    result = openfile(ifcb$ptr);
+    if result = 0ffh then do;
+        call printstr(.msg$noopen);
+        call crlf;
+        return;
+    end;
+
+    if is$lbr then do;
+        result = extract$lbr;
+    end;
+    else if is$arc then do;
+        /* Reset buffer position for ARC */
+        inbuf$pos = 0;
+        inbuf$end = 0;
+        result = extract$arc;
+    end;
+    else if magic(0) = magic$sq$hi or magic(0) = magic$cr$hi then do;
+        /* Compressed single file - reread from beginning */
+        inbuf$pos = 0;
+        inbuf$end = 0;
+        result = decompress$file;
+        if result then file$count = 1;
+    end;
+    else do;
+        /* Unknown format - try as LBR anyway */
+        result = extract$lbr;
+    end;
+
+    call closefile(ifcb$ptr);
+
+    call crlf;
+    call printnum(file$count);
+    call printstr(.msg$done);
+    call crlf;
+
+end main;
+
+eof

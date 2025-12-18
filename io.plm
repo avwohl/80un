@@ -1,0 +1,287 @@
+/*
+ * io.plm - Buffered I/O for 80UN
+ *
+ * Input/output buffering, bit readers, RLE decoder
+ */
+
+/* External declarations from common.plm */
+declare cpm$eof literally '01AH';
+declare rle$marker literally '090H';
+
+declare ifcb$ptr address external;
+declare ofcb$ptr address external;
+declare inbuf$ptr address external;
+declare inbuf based inbuf$ptr (1) byte;
+declare inbuf$pos address external;
+declare inbuf$end address external;
+declare outbuf$ptr address external;
+declare outbuf based outbuf$ptr (1) byte;
+declare outbuf$pos address external;
+declare input$limit address external;
+declare bit$buffer address external;
+declare bits$left byte external;
+
+/* Procedures from common.plm - visible when compiled together */
+
+/*========================================================
+ * Buffered Input
+ *========================================================*/
+
+/* Fill input buffer from file */
+fill$inbuf: procedure byte public;
+    declare result byte;
+    declare loop$cnt byte;
+
+    inbuf$pos = 0;
+    inbuf$end = 0;
+
+    /* Read up to 32 sectors (4K) */
+    loop$cnt = 0;
+    do while loop$cnt < 32;
+        call setdmaaddr(inbuf$ptr + shl(loop$cnt, 7));
+        result = readfile(ifcb$ptr);
+        if result <> 0 then
+            return loop$cnt > 0;
+        loop$cnt = loop$cnt + 1;
+        inbuf$end = inbuf$end + 128;
+    end;
+
+    return 1;
+end fill$inbuf;
+
+/* Get next byte from input buffer */
+getbyte: procedure byte public;
+    declare b byte;
+    declare p address;
+
+    if input$limit = 0 then
+        return cpm$eof;
+
+    if inbuf$pos >= inbuf$end then do;
+        if not fill$inbuf then
+            return cpm$eof;
+    end;
+
+    p = inbuf$ptr + inbuf$pos;
+    inbuf$pos = inbuf$pos + 1;
+    if input$limit <> 0ffffh then
+        input$limit = input$limit - 1;
+    return inbuf(p - inbuf$ptr);
+end getbyte;
+
+/* Peek at current byte without consuming */
+peekbyte: procedure byte public;
+    declare p address;
+
+    if input$limit = 0 then
+        return cpm$eof;
+
+    if inbuf$pos >= inbuf$end then do;
+        if not fill$inbuf then
+            return cpm$eof;
+    end;
+
+    p = inbuf$ptr + inbuf$pos;
+    return inbuf(p - inbuf$ptr);
+end peekbyte;
+
+/* Check if more input available */
+input$avail: procedure byte public;
+    if input$limit = 0 then return 0;
+    if inbuf$pos < inbuf$end then return 1;
+    return fill$inbuf;
+end input$avail;
+
+/*========================================================
+ * Buffered Output
+ *========================================================*/
+
+/* Flush output buffer to file */
+flush$outbuf: procedure byte public;
+    declare (i, sectors, result) byte;
+    declare remaining address;
+
+    if outbuf$pos = 0 then return 1;
+
+    sectors = low(shr(outbuf$pos, 7));
+    remaining = outbuf$pos and 127;
+
+    i = 0;
+    do while i < sectors;
+        call setdmaaddr(outbuf$ptr + shl(i, 7));
+        result = writefile(ofcb$ptr);
+        if result <> 0 then return 0;
+        i = i + 1;
+    end;
+
+    if remaining > 0 then do;
+        call fillmem(outbuf$ptr + outbuf$pos, 128 - remaining, cpm$eof);
+        call setdmaaddr(outbuf$ptr + shl(sectors, 7));
+        result = writefile(ofcb$ptr);
+        if result <> 0 then return 0;
+    end;
+
+    outbuf$pos = 0;
+    return 1;
+end flush$outbuf;
+
+/* Write byte to output buffer */
+putbyte: procedure(b) byte public;
+    declare b byte;
+    declare p address;
+
+    p = outbuf$ptr + outbuf$pos;
+    outbuf(p - outbuf$ptr) = b;
+    outbuf$pos = outbuf$pos + 1;
+
+    if outbuf$pos >= 4096 then
+        return flush$outbuf;
+
+    return 1;
+end putbyte;
+
+/*========================================================
+ * Bit Reader (LSB first, for CrLZH and ARC)
+ *========================================================*/
+
+init$bits$lsb: procedure public;
+    bit$buffer = 0;
+    bits$left = 0;
+end init$bits$lsb;
+
+read$bit$lsb: procedure byte public;
+    declare b byte;
+
+    if bits$left = 0 then do;
+        bit$buffer = getbyte;
+        bits$left = 8;
+    end;
+
+    b = low(bit$buffer) and 1;
+    bit$buffer = shr(bit$buffer, 1);
+    bits$left = bits$left - 1;
+    return b;
+end read$bit$lsb;
+
+read$bits$lsb: procedure(count) address public;
+    declare count byte;
+    declare (result, shift) address;
+
+    result = 0;
+    shift = 1;
+    do while count > 0;
+        if read$bit$lsb then
+            result = result + shift;
+        shift = shl(shift, 1);
+        count = count - 1;
+    end;
+    return result;
+end read$bits$lsb;
+
+/*========================================================
+ * Bit Reader (MSB first within bytes, for Squeeze Huffman)
+ *========================================================*/
+
+declare sq$bit$buffer byte;
+declare sq$bit$pos byte;
+
+init$bits$sq: procedure public;
+    sq$bit$buffer = 0;
+    sq$bit$pos = 0;
+end init$bits$sq;
+
+read$bit$sq: procedure byte public;
+    declare b byte;
+
+    if sq$bit$pos = 0 then do;
+        sq$bit$buffer = getbyte;
+        sq$bit$pos = 8;
+    end;
+
+    sq$bit$pos = sq$bit$pos - 1;
+    b = shr(sq$bit$buffer, sq$bit$pos) and 1;
+    return b;
+end read$bit$sq;
+
+/*========================================================
+ * Bit Reader (MSB first, for Crunch)
+ *========================================================*/
+
+init$bits$msb: procedure public;
+    bit$buffer = 0;
+    bits$left = 0;
+end init$bits$msb;
+
+read$code$msb: procedure(bits) address public;
+    declare bits byte;
+    declare code address;
+    declare b byte;
+    declare shift$amt byte;
+    declare mask address;
+
+    do while bits$left < bits;
+        b = getbyte;
+        bit$buffer = shl(bit$buffer, 8) + b;
+        bits$left = bits$left + 8;
+    end;
+
+    shift$amt = bits$left - bits;
+    code = shr(bit$buffer, shift$amt);
+    mask = shl(1, bits) - 1;
+    code = code and mask;
+
+    bits$left = bits$left - bits;
+    if bits$left > 0 then
+        bit$buffer = bit$buffer and (shl(1, bits$left) - 1);
+    else
+        bit$buffer = 0;
+
+    return code;
+end read$code$msb;
+
+/*========================================================
+ * RLE90 Decoder
+ *========================================================*/
+
+declare rle$prev byte public;
+declare rle$count byte public;
+declare rle$active byte public;
+
+init$rle: procedure public;
+    rle$prev = 0;
+    rle$count = 0;
+    rle$active = 0;
+end init$rle;
+
+/* Decode one byte through RLE90 and output it */
+rle$decode$byte: procedure(b) byte public;
+    declare b byte;
+    declare cnt byte;
+
+    if rle$active then do;
+        if b = 0 then do;
+            rle$active = 0;
+            rle$prev = rle$marker;
+            return putbyte(rle$marker);
+        end;
+        else do;
+            rle$active = 0;
+            cnt = b;
+            do while cnt > 0;
+                if not putbyte(rle$prev) then return 0;
+                cnt = cnt - 1;
+            end;
+            return 1;
+        end;
+    end;
+
+    if b = rle$marker then do;
+        rle$active = 1;
+        return 1;
+    end;
+
+    rle$prev = b;
+    return putbyte(b);
+end rle$decode$byte;
+
+eof

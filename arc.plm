@@ -1,0 +1,526 @@
+/*
+ * arc.plm - ARC Archive Extractor
+ *
+ * Extracts files from ARC archives (methods 1-9)
+ */
+
+declare cpm$eof literally '01AH';
+declare arc$marker literally '01AH';
+declare rle$marker literally '090H';
+
+/* External declarations */
+declare ofcb$ptr address external;
+declare ofcb based ofcb$ptr (36) byte;
+declare outbuf$pos address external;
+declare input$limit address external;
+declare file$count byte external;
+declare huff$tree$ptr address external;
+declare huff$tree based huff$tree$ptr (1) byte;
+declare huff$nodes address external;
+declare lzw$prefix$ptr address external;
+declare lzw$suffix$ptr address external;
+declare lzw$next$code address external;
+declare lzw$code$size byte external;
+declare lzw$max$bits byte external;
+
+/* Procedures from earlier modules - visible when compiled together */
+
+/*========================================================
+ * ARC Decompression Methods
+ *========================================================*/
+
+/* ARC method 1/2: Stored (no compression) */
+arc$decomp$stored: procedure(size) byte;
+    declare size address;
+    declare b byte;
+
+    do while size > 0;
+        b = getbyte;
+        if not putbyte(b) then return 0;
+        size = size - 1;
+    end;
+    return 1;
+end arc$decomp$stored;
+
+/* ARC method 3: RLE only */
+arc$decomp$rle: procedure(size) byte;
+    declare size address;
+    declare (b, cnt, prev) byte;
+
+    prev = 0;
+    do while size > 0;
+        b = getbyte;
+        size = size - 1;
+
+        if b = rle$marker then do;
+            if size = 0 then do;
+                if not putbyte(rle$marker) then return 0;
+            end;
+            else do;
+                cnt = getbyte;
+                size = size - 1;
+                if cnt = 0 then do;
+                    if not putbyte(rle$marker) then return 0;
+                    prev = rle$marker;
+                end;
+                else do;
+                    do while cnt > 0;
+                        if not putbyte(prev) then return 0;
+                        cnt = cnt - 1;
+                    end;
+                end;
+            end;
+        end;
+        else do;
+            if not putbyte(b) then return 0;
+            prev = b;
+        end;
+    end;
+    return 1;
+end arc$decomp$rle;
+
+/* ARC method 4: Squeezed (Huffman + RLE) */
+arc$decomp$squeezed: procedure byte;
+    declare (i, b) byte;
+    declare (node$count, node, left, symbol) address;
+    declare p address;
+    declare done byte;
+
+    /* Read node count */
+    node$count = read$bits$lsb(16);
+    if node$count > 256 then return 0;
+
+    /* Read Huffman tree */
+    i = 0;
+    do while i < low(node$count);
+        p = huff$tree$ptr + shl(i, 2);
+        /* Read left (16 bits) and right (16 bits) as signed */
+        call writeword(p, read$bits$lsb(16));
+        call writeword(p + 2, read$bits$lsb(16));
+        i = i + 1;
+    end;
+
+    huff$nodes = node$count;
+    call init$rle;
+
+    /* Decode symbols */
+    done = 0;
+    do while not done and input$avail;
+        node = 0;
+        do while node < huff$nodes;
+            p = huff$tree$ptr + shl(low(node), 2);
+            if read$bit$lsb then
+                left = readword(p + 2);
+            else
+                left = readword(p);
+
+            if (left and 8000h) <> 0 then do;
+                symbol = not left;
+                if symbol = 256 then
+                    done = 1;
+                else do;
+                    if not rle$decode$byte(low(symbol)) then return 0;
+                end;
+                node = huff$nodes;
+            end;
+            else do;
+                node = left;
+            end;
+        end;
+    end;
+
+    return 1;
+end arc$decomp$squeezed;
+
+/* ARC method 5/6: Old LZW (MSB first, 12-bit fixed) */
+arc$decomp$lzw56: procedure(with$rle) byte;
+    declare with$rle byte;
+    declare (code, prev$code) address;
+    declare (first$flag, done) byte;
+    declare fb byte;
+
+    call init$lzw;
+    lzw$next$code = 256;  /* Old format starts at 256 */
+    call init$bits$msb;
+    if with$rle then call init$rle;
+
+    prev$code = 0ffffh;
+    first$flag = 1;
+    done = 0;
+
+    do while not done and input$avail;
+        code = read$code$msb(12);
+
+        if code < 256 then do;
+            if with$rle then do;
+                if not rle$decode$byte(low(code)) then return 0;
+            end;
+            else do;
+                if not putbyte(low(code)) then return 0;
+            end;
+            fb = low(code);
+        end;
+        else if code < lzw$next$code then do;
+            fb = lzw$first$byte(code);
+            /* Output string - uses RLE internally if enabled */
+            call lzw$output(code);
+        end;
+        else if code = lzw$next$code and prev$code <> 0ffffh then do;
+            fb = lzw$first$byte(prev$code);
+            call lzw$output(prev$code);
+            if with$rle then do;
+                if not rle$decode$byte(fb) then return 0;
+            end;
+            else do;
+                if not putbyte(fb) then return 0;
+            end;
+        end;
+        else do;
+            done = 1;
+        end;
+
+        if not first$flag and prev$code <> 0ffffh and not done then do;
+            if lzw$next$code < 4096 then
+                call lzw$add$entry(prev$code, fb);
+        end;
+
+        prev$code = code;
+        first$flag = 0;
+    end;
+
+    return 1;
+end arc$decomp$lzw56;
+
+/* ARC method 8: LZW with variable codes (LSB first) */
+arc$decomp$lzw8: procedure byte;
+    declare (code, prev$code) address;
+    declare (first$flag, done) byte;
+    declare fb byte;
+    declare max$code address;
+
+    /* First byte is max bits */
+    lzw$max$bits = getbyte;
+    if lzw$max$bits < 9 or lzw$max$bits > 16 then
+        lzw$max$bits = 12;
+
+    call init$lzw;
+    lzw$next$code = 257;  /* ARC uses 256 for clear, 257+ for dict */
+    lzw$code$size = 9;
+    call init$bits$lsb;
+    call init$rle;
+
+    prev$code = 0ffffh;
+    first$flag = 1;
+    done = 0;
+
+    do while not done and input$avail;
+        code = read$bits$lsb(lzw$code$size);
+
+        if code = 256 then do;
+            /* Clear code */
+            call init$lzw;
+            lzw$next$code = 257;
+            lzw$code$size = 9;
+            prev$code = 0ffffh;
+            first$flag = 1;
+        end;
+        else do;
+            if code < 256 then do;
+                if not rle$decode$byte(low(code)) then return 0;
+                fb = low(code);
+            end;
+            else if code < lzw$next$code then do;
+                fb = lzw$first$byte(code);
+                if lzw$output(code) = 0 then return 0;
+            end;
+            else if code = lzw$next$code and prev$code <> 0ffffh then do;
+                fb = lzw$first$byte(prev$code);
+                if lzw$output(prev$code) = 0 then return 0;
+                if not rle$decode$byte(fb) then return 0;
+            end;
+            else do;
+                done = 1;
+            end;
+
+            if not first$flag and prev$code <> 0ffffh and not done then do;
+                if lzw$next$code < shl(1, lzw$max$bits) then do;
+                    call lzw$add$entry(prev$code, fb);
+                    /* Increase code size when needed */
+                    max$code = shl(1, lzw$code$size) - 1;
+                    if lzw$next$code > max$code and lzw$code$size < lzw$max$bits then
+                        lzw$code$size = lzw$code$size + 1;
+                end;
+            end;
+
+            prev$code = code;
+            first$flag = 0;
+        end;
+    end;
+
+    return 1;
+end arc$decomp$lzw8;
+
+/* ARC method 9: Squashed (13-bit LZW, LSB first, no RLE, no header) */
+arc$decomp$squashed: procedure byte;
+    declare (code, prev$code) address;
+    declare (first$flag, done) byte;
+    declare fb byte;
+    declare max$code address;
+
+    call init$lzw;
+    lzw$next$code = 257;
+    lzw$code$size = 9;
+    lzw$max$bits = 13;
+    call init$bits$lsb;
+
+    prev$code = 0ffffh;
+    first$flag = 1;
+    done = 0;
+
+    do while not done and input$avail;
+        code = read$bits$lsb(lzw$code$size);
+
+        if code = 256 then do;
+            /* Clear */
+            call init$lzw;
+            lzw$next$code = 257;
+            lzw$code$size = 9;
+            prev$code = 0ffffh;
+            first$flag = 1;
+        end;
+        else do;
+            if code < 256 then do;
+                if not putbyte(low(code)) then return 0;
+                fb = low(code);
+            end;
+            else if code < lzw$next$code then do;
+                fb = lzw$first$byte(code);
+                if lzw$output(code) = 0 then return 0;
+            end;
+            else if code = lzw$next$code and prev$code <> 0ffffh then do;
+                fb = lzw$first$byte(prev$code);
+                if lzw$output(prev$code) = 0 then return 0;
+                if not putbyte(fb) then return 0;
+            end;
+            else do;
+                done = 1;
+            end;
+
+            if not first$flag and prev$code <> 0ffffh and not done then do;
+                if lzw$next$code < 8192 then do;
+                    call lzw$add$entry(prev$code, fb);
+                    max$code = shl(1, lzw$code$size) - 1;
+                    if lzw$next$code > max$code and lzw$code$size < 13 then
+                        lzw$code$size = lzw$code$size + 1;
+                end;
+            end;
+
+            prev$code = code;
+            first$flag = 0;
+        end;
+    end;
+
+    return 1;
+end arc$decomp$squashed;
+
+/*========================================================
+ * ARC Archive Extraction
+ *========================================================*/
+
+/* Extract one ARC member */
+extract$arc$member: procedure byte public;
+    declare msg$method data('Unsupported ARC method$');
+    declare (i, method) byte;
+    declare (comp$size, orig$size) address;
+    declare filename (14) byte;
+    declare result byte;
+
+    /* Read method byte */
+    method = getbyte;
+    if method = 0 then return 0;  /* End of archive */
+
+    /* Read filename (13 bytes) */
+    i = 0;
+    do while i < 13;
+        filename(i) = getbyte;
+        i = i + 1;
+    end;
+    filename(13) = 0;
+
+    /* Read compressed size (4 bytes LE) */
+    comp$size = getbyte;
+    comp$size = comp$size + shl(getbyte, 8);
+    i = getbyte;  /* High word, ignore for now */
+    i = getbyte;
+
+    /* Read date/time (4 bytes, skip) */
+    i = getbyte;
+    i = getbyte;
+    i = getbyte;
+    i = getbyte;
+
+    /* Read CRC (2 bytes, skip) */
+    i = getbyte;
+    i = getbyte;
+
+    /* Read original size (4 bytes LE) for method >= 2 */
+    if method >= 2 then do;
+        orig$size = getbyte;
+        orig$size = orig$size + shl(getbyte, 8);
+        i = getbyte;
+        i = getbyte;
+    end;
+    else do;
+        orig$size = comp$size;
+    end;
+
+    /* Print filename */
+    call printchar(' ');
+    call printchar(' ');
+    i = 0;
+    do while filename(i) <> 0;
+        call printchar(filename(i));
+        i = i + 1;
+    end;
+
+    /* Set up output FCB */
+    call fillmem(ofcb$ptr, 36, 0);
+    i = 0;
+    do while i < 8 and filename(i) <> 0 and filename(i) <> '.';
+        ofcb(i + 1) = filename(i);
+        i = i + 1;
+    end;
+    /* Pad filename with spaces */
+    do while i < 8;
+        ofcb(i + 1) = ' ';
+        i = i + 1;
+    end;
+    /* Find and copy extension */
+    i = 0;
+    do while filename(i) <> 0 and filename(i) <> '.';
+        i = i + 1;
+    end;
+    if filename(i) = '.' then do;
+        i = i + 1;  /* Skip dot */
+        ofcb(9) = filename(i);
+        if filename(i) <> 0 then i = i + 1;
+        ofcb(10) = filename(i);
+        if filename(i) <> 0 then i = i + 1;
+        ofcb(11) = filename(i);
+    end;
+    else do;
+        ofcb(9) = ' ';
+        ofcb(10) = ' ';
+        ofcb(11) = ' ';
+    end;
+
+    /* Create output file */
+    call deletefile(ofcb$ptr);
+    if makefile(ofcb$ptr) = 0ffh then do;
+        call printstr(.(13, 10, 'Cannot create file$'));
+        return 2;  /* Skip but continue */
+    end;
+
+    outbuf$pos = 0;
+    result = 1;
+
+    /* Set input byte limit for compressed methods */
+    input$limit = comp$size;
+
+    /* Decompress based on method */
+    if method = 1 or method = 2 then do;
+        /* Stored */
+        result = arc$decomp$stored(comp$size);
+    end;
+    else if method = 3 then do;
+        /* Packed (RLE) */
+        result = arc$decomp$rle(comp$size);
+    end;
+    else if method = 4 then do;
+        /* Squeezed */
+        call init$bits$lsb;
+        result = arc$decomp$squeezed;
+    end;
+    else if method = 5 then do;
+        /* Old crunched (no RLE) */
+        result = arc$decomp$lzw56(0);
+    end;
+    else if method = 6 then do;
+        /* Old crunched + RLE */
+        result = arc$decomp$lzw56(1);
+    end;
+    else if method = 7 or method = 8 then do;
+        /* Crunched (newer LZW) */
+        result = arc$decomp$lzw8;
+    end;
+    else if method = 9 then do;
+        /* Squashed */
+        result = arc$decomp$squashed;
+    end;
+    else do;
+        call printstr(.(13, 10, '  $'));
+        call printstr(.msg$method);
+        call printchar(' ');
+        call printhex(method);
+        /* Skip the compressed data - already limited by input$limit */
+        do while input$limit > 0;
+            i = getbyte;
+        end;
+        call closefile(ofcb$ptr);
+        input$limit = 0ffffh;
+        return 2;
+    end;
+
+    /* Skip any remaining bytes in compressed data */
+    do while input$limit > 0 and input$limit <> 0ffffh;
+        i = getbyte;
+    end;
+
+    /* Reset input limit for next member */
+    input$limit = 0ffffh;
+
+    /* Flush and close output */
+    if result then
+        result = flush$outbuf;
+    call closefile(ofcb$ptr);
+
+    if result then do;
+        call printstr(.(' OK$'));
+        file$count = file$count + 1;
+    end;
+    else do;
+        call printstr(.(13, 10, '  Error$'));
+    end;
+    call crlf;
+
+    return result;
+end extract$arc$member;
+
+/* Extract all files from ARC archive */
+extract$arc: procedure byte public;
+    declare result byte;
+    declare b byte;
+
+    file$count = 0;
+    input$limit = 0ffffh;  /* No limit when scanning for headers */
+
+    do while input$avail;
+        /* Check for ARC marker */
+        b = peekbyte;
+        if b <> arc$marker then
+            return 1;  /* Done */
+
+        b = getbyte;  /* Consume marker */
+        b = peekbyte; /* Check method */
+        if b = 0 then
+            return 1;  /* End of archive */
+
+        result = extract$arc$member;
+        if result = 0 then return 0;  /* Error */
+        /* Result = 2 means skip but continue */
+    end;
+
+    return 1;
+end extract$arc;
+
+eof

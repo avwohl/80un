@@ -1,0 +1,13 @@
+/*
+ * startup.plm - Entry point for 80UN
+ *
+ * This module must be linked FIRST to ensure the startup code
+ * is at address 100h (CP/M program entry point).
+ */
+
+main: procedure external;
+end main;
+
+call main;
+
+eof

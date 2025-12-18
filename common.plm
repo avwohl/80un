@@ -1,0 +1,284 @@
+/*
+ * common.plm - Shared declarations for 80UN
+ *
+ * BDOS interface, global variables, console I/O, memory operations
+ */
+
+/* BDOS Interface */
+mon1: procedure(func, parm) external;
+    declare func byte, parm address;
+end mon1;
+
+mon2: procedure(func, parm) byte external;
+    declare func byte, parm address;
+end mon2;
+
+/* BDOS Function Numbers */
+declare
+    conout   literally '2',
+    prtstr   literally '9',
+    openf    literally '15',
+    closef   literally '16',
+    deletef  literally '19',
+    readf    literally '20',
+    writef   literally '21',
+    makef    literally '22',
+    setdma   literally '26';
+
+/* Magic numbers for compression detection */
+declare
+    magic$sq$lo   literally '0FFH',   /* Squeeze: 76 FF */
+    magic$sq$hi   literally '076H',
+    magic$cr$lo   literally '0FEH',   /* Crunch: 76 FE */
+    magic$cr$hi   literally '076H',
+    magic$lzh$lo  literally '0FDH',   /* CrLZH: 76 FD */
+    magic$lzh$hi  literally '076H',
+    arc$marker    literally '01AH',   /* ARC: 1A xx */
+    rle$marker    literally '090H',   /* RLE escape byte */
+    cpm$eof       literally '01AH';   /* CP/M EOF marker */
+
+/*========================================================
+ * Global Variables
+ *========================================================*/
+
+/* File Control Block pointers */
+declare fcb$ptr address public;
+declare fcb based fcb$ptr (36) byte;
+declare ifcb$ptr address public;
+declare ifcb based ifcb$ptr (36) byte;
+declare ofcb$ptr address public;
+declare ofcb based ofcb$ptr (36) byte;
+
+/* DMA buffer for file I/O */
+declare dma$ptr address public;
+declare dma based dma$ptr (128) byte;
+
+/* Large input buffer for decompression (4K) */
+declare inbuf$ptr address public;
+declare inbuf based inbuf$ptr (1) byte;
+declare inbuf$size address public;
+declare inbuf$pos address public;
+declare inbuf$end address public;
+
+/* Output buffer */
+declare outbuf$ptr address public;
+declare outbuf based outbuf$ptr (1) byte;
+declare outbuf$size address public;
+declare outbuf$pos address public;
+
+/* Bit reader state */
+declare bit$buffer address public;
+declare bits$left byte public;
+
+/* Huffman tree for squeeze (max 256 nodes, 4 bytes each = 1K) */
+declare huff$tree$ptr address public;
+declare huff$tree based huff$tree$ptr (1) byte;
+declare huff$nodes address public;
+
+/* LZW dictionary for crunch (4096 entries max) */
+declare lzw$prefix$ptr address public;
+declare lzw$prefix based lzw$prefix$ptr (1) byte;
+declare lzw$suffix$ptr address public;
+declare lzw$suffix based lzw$suffix$ptr (1) byte;
+declare lzw$next$code address public;
+declare lzw$code$size byte public;
+declare lzw$max$bits byte public;
+
+/* Ring buffer for CrLZH (4K) */
+declare ring$ptr address public;
+declare ring based ring$ptr (1) byte;
+declare ring$pos address public;
+declare ring$size literally '4096';
+declare ring$mask literally '0FFFH';
+
+/* Work buffer for LZW string output */
+declare work$ptr address public;
+declare work based work$ptr (1) byte;
+declare work$len address public;
+
+/* File count and status */
+declare file$count byte public;
+declare error$flag byte public;
+
+/* Input byte limit for ARC decompression (0FFFFH = no limit) */
+declare input$limit address public;
+
+/*========================================================
+ * Console Output
+ *========================================================*/
+
+printchar: procedure(c) public;
+    declare c byte;
+    call mon1(conout, c);
+end printchar;
+
+crlf: procedure public;
+    call printchar(13);
+    call printchar(10);
+end crlf;
+
+printstr: procedure(s) public;
+    declare s address;
+    call mon1(prtstr, s);
+end printstr;
+
+printhex: procedure(n) public;
+    declare n byte;
+    declare hex data('0123456789ABCDEF');
+    call printchar(hex(shr(n, 4)));
+    call printchar(hex(n and 0fh));
+end printhex;
+
+printnum: procedure(n) public;
+    declare n address;
+    declare (d, started) byte;
+
+    started = 0;
+
+    d = 0;
+    do while n >= 10000;
+        d = d + 1;
+        n = n - 10000;
+    end;
+    if d > 0 then do;
+        call printchar('0' + d);
+        started = 1;
+    end;
+
+    d = 0;
+    do while n >= 1000;
+        d = d + 1;
+        n = n - 1000;
+    end;
+    if d > 0 or started then do;
+        call printchar('0' + d);
+        started = 1;
+    end;
+
+    d = 0;
+    do while n >= 100;
+        d = d + 1;
+        n = n - 100;
+    end;
+    if d > 0 or started then do;
+        call printchar('0' + d);
+        started = 1;
+    end;
+
+    d = 0;
+    do while n >= 10;
+        d = d + 1;
+        n = n - 10;
+    end;
+    if d > 0 or started then do;
+        call printchar('0' + d);
+    end;
+
+    call printchar('0' + low(n));
+end printnum;
+
+/*========================================================
+ * File Operations
+ *========================================================*/
+
+setdmaaddr: procedure(addr) public;
+    declare addr address;
+    call mon1(setdma, addr);
+end setdmaaddr;
+
+openfile: procedure(fcbaddr) byte public;
+    declare fcbaddr address;
+    return mon2(openf, fcbaddr);
+end openfile;
+
+closefile: procedure(fcbaddr) byte public;
+    declare fcbaddr address;
+    return mon2(closef, fcbaddr);
+end closefile;
+
+deletefile: procedure(fcbaddr) public;
+    declare fcbaddr address;
+    declare result byte;
+    result = mon2(deletef, fcbaddr);
+end deletefile;
+
+makefile: procedure(fcbaddr) byte public;
+    declare fcbaddr address;
+    return mon2(makef, fcbaddr);
+end makefile;
+
+readfile: procedure(fcbaddr) byte public;
+    declare fcbaddr address;
+    return mon2(readf, fcbaddr);
+end readfile;
+
+writefile: procedure(fcbaddr) byte public;
+    declare fcbaddr address;
+    return mon2(writef, fcbaddr);
+end writefile;
+
+/*========================================================
+ * Memory Operations
+ *========================================================*/
+
+copymem: procedure(src, dst, len) public;
+    declare (src, dst, len) address;
+    declare s based src byte;
+    declare d based dst byte;
+
+    do while len > 0;
+        d = s;
+        src = src + 1;
+        dst = dst + 1;
+        len = len - 1;
+    end;
+end copymem;
+
+fillmem: procedure(dst, len, val) public;
+    declare (dst, len) address;
+    declare val byte;
+    declare d based dst byte;
+
+    do while len > 0;
+        d = val;
+        dst = dst + 1;
+        len = len - 1;
+    end;
+end fillmem;
+
+/* Read a 16-bit little-endian value from memory */
+read16: procedure(addr) address public;
+    declare addr address;
+    declare b based addr byte;
+    declare lo byte;
+    lo = b;
+    addr = addr + 1;
+    return lo + shl(b, 8);
+end read16;
+
+/* Write a 16-bit little-endian value to memory */
+write16: procedure(addr, val) public;
+    declare addr address;
+    declare val address;
+    declare b based addr byte;
+    b = low(val);
+    addr = addr + 1;
+    b = high(val);
+end write16;
+
+/* Read 16-bit LE from based pointer (for Huffman/LZW tables) */
+readword: procedure(addr) address public;
+    declare addr address;
+    declare p based addr (2) byte;
+    return p(0) + shl(p(1), 8);
+end readword;
+
+/* Write 16-bit LE to based pointer */
+writeword: procedure(addr, val) public;
+    declare (addr, val) address;
+    declare p based addr (2) byte;
+    p(0) = low(val);
+    p(1) = high(val);
+end writeword;
+
+eof

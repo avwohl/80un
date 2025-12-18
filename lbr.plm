@@ -1,0 +1,237 @@
+/*
+ * lbr.plm - LBR Archive Extractor
+ *
+ * Extracts files from LBR (Library) archives
+ */
+
+declare cpm$eof literally '01AH';
+declare magic$sq$lo literally '0FFH';
+declare magic$sq$hi literally '076H';
+declare magic$cr$lo literally '0FEH';
+declare magic$cr$hi literally '076H';
+declare magic$lzh$lo literally '0FDH';
+declare magic$lzh$hi literally '076H';
+
+/* External declarations */
+declare fcb$ptr address external;
+declare fcb based fcb$ptr (36) byte;
+declare ifcb$ptr address external;
+declare ifcb based ifcb$ptr (36) byte;
+declare ofcb$ptr address external;
+declare ofcb based ofcb$ptr (36) byte;
+declare dma$ptr address external;
+declare dma based dma$ptr (128) byte;
+declare inbuf$ptr address external;
+declare inbuf based inbuf$ptr (1) byte;
+declare inbuf$pos address external;
+declare inbuf$end address external;
+declare outbuf$pos address external;
+declare input$limit address external;
+declare file$count byte external;
+
+/* Procedures from earlier modules - visible when compiled together */
+
+/*========================================================
+ * LBR Archive Extraction
+ *========================================================*/
+
+/* Extract files from LBR archive */
+extract$lbr: procedure byte public;
+    declare msg$badlbr data('Invalid LBR file$');
+    declare msg$nocreat data(' - cannot create$');
+    declare msg$ok data(' OK$');
+
+    declare saved$fcb (36) byte;
+
+    declare result byte;
+    declare dir$sectors byte;
+    declare k byte;
+    declare entry$num address;
+    declare max$entries address;
+    declare sectors$left address;
+    declare member$index address;
+    declare member$length address;
+
+    /* Pointers for directory entries */
+    declare ent$ptr address;
+    declare ent based ent$ptr (32) byte;
+
+    /* Read and buffer directory */
+    inbuf$pos = 0;
+    inbuf$end = 0;
+    input$limit = 0ffffh;  /* No limit for LBR */
+    if not fill$inbuf then do;
+        call printstr(.msg$badlbr);
+        return 0;
+    end;
+
+    /* Check first entry (directory itself) */
+    ent$ptr = inbuf$ptr;
+    if ent(0) <> 0 then do;
+        call printstr(.msg$badlbr);
+        return 0;
+    end;
+
+    /* Get directory size in sectors */
+    dir$sectors = ent(14);
+    if dir$sectors = 0 or dir$sectors > 32 then do;
+        call printstr(.msg$badlbr);
+        return 0;
+    end;
+
+    max$entries = shl(dir$sectors, 2);
+
+    /* Save the original FCB for reopening */
+    call copymem(fcb$ptr, .saved$fcb, 12);
+    call fillmem(.saved$fcb(12), 24, 0);
+
+    file$count = 0;
+    entry$num = 1;
+
+    do while entry$num < max$entries;
+        ent$ptr = inbuf$ptr + (entry$num * 32);
+
+        if ent$ptr >= inbuf$ptr + inbuf$end then do;
+            entry$num = max$entries;
+        end;
+        else do;
+            if ent(0) = 0ffh then do;
+                entry$num = max$entries;
+            end;
+            else if ent(0) = 0 then do;
+                /* Active entry */
+                call printchar(' ');
+                call printchar(' ');
+
+                /* Print filename */
+                k = 1;
+                do while k <= 8;
+                    if (ent(k) and 07fh) <> ' ' then call printchar(ent(k) and 07fh);
+                    k = k + 1;
+                end;
+                if (ent(9) and 07fh) <> ' ' then do;
+                    call printchar('.');
+                    k = 9;
+                    do while k <= 11;
+                        if (ent(k) and 07fh) <> ' ' then call printchar(ent(k) and 07fh);
+                        k = k + 1;
+                    end;
+                end;
+
+                /* Save member info */
+                member$index = ent(12) + shl(ent(13), 8);
+                member$length = ent(14) + shl(ent(15), 8);
+
+                /* Set up output FCB */
+                call fillmem(ofcb$ptr, 36, 0);
+                k = 1;
+                do while k <= 11;
+                    ofcb(k) = ent(k) and 07fh;
+                    k = k + 1;
+                end;
+
+                if member$length <> 0 then do;
+                    call deletefile(ofcb$ptr);
+                    result = makefile(ofcb$ptr);
+                    if result = 0ffh then do;
+                        call printstr(.msg$nocreat);
+                        call crlf;
+                    end;
+                    else do;
+                        /* Reopen input file */
+                        call closefile(ifcb$ptr);
+                        call copymem(.saved$fcb, ifcb$ptr, 12);
+                        call fillmem(ifcb$ptr + 12, 24, 0);
+
+                        result = openfile(ifcb$ptr);
+                        if result = 0ffh then do;
+                            call closefile(ofcb$ptr);
+                            call crlf;
+                        end;
+                        else do;
+                            /* Skip to member */
+                            call setdmaaddr(dma$ptr);
+                            sectors$left = member$index;
+                            do while sectors$left <> 0;
+                                result = readfile(ifcb$ptr);
+                                sectors$left = sectors$left - 1;
+                            end;
+
+                            inbuf$pos = 0;
+                            inbuf$end = 0;
+                            input$limit = 0ffffh;  /* No byte limit for LBR members */
+                            if not fill$inbuf then do;
+                                call closefile(ofcb$ptr);
+                                call crlf;
+                            end;
+                            else do;
+                                if inbuf(0) = magic$sq$hi and inbuf(1) = magic$sq$lo then do;
+                                    outbuf$pos = 0;
+                                    result = unsqueeze;
+                                    if result then result = flush$outbuf;
+                                end;
+                                else if inbuf(0) = magic$cr$hi and inbuf(1) = magic$cr$lo then do;
+                                    outbuf$pos = 0;
+                                    if uncrunch then result = flush$outbuf;
+                                end;
+                                else if inbuf(0) = magic$lzh$hi and inbuf(1) = magic$lzh$lo then do;
+                                    outbuf$pos = 0;
+                                    if uncrlzh then result = flush$outbuf;
+                                end;
+                                else do;
+                                    sectors$left = member$length;
+                                    do while sectors$left <> 0;
+                                        call setdmaaddr(dma$ptr);
+                                        if inbuf$pos < inbuf$end then do;
+                                            call copymem(inbuf$ptr + inbuf$pos, dma$ptr, 128);
+                                            inbuf$pos = inbuf$pos + 128;
+                                        end;
+                                        else do;
+                                            result = readfile(ifcb$ptr);
+                                        end;
+                                        if writefile(ofcb$ptr) <> 0 then sectors$left = 1;
+                                        sectors$left = sectors$left - 1;
+                                    end;
+                                end;
+
+                                call closefile(ofcb$ptr);
+                                file$count = file$count + 1;
+                                call printstr(.msg$ok);
+                                call crlf;
+
+                                /* Reload directory after extracting */
+                                call closefile(ifcb$ptr);
+                                call copymem(.saved$fcb, ifcb$ptr, 12);
+                                call fillmem(ifcb$ptr + 12, 24, 0);
+                                result = openfile(ifcb$ptr);
+                                if result <> 0ffh then do;
+                                    inbuf$pos = 0;
+                                    inbuf$end = 0;
+                                    input$limit = 0ffffh;
+                                    result = fill$inbuf;
+                                end;
+                                else do;
+                                    /* Reopen failed - exit loop */
+                                    entry$num = max$entries;
+                                end;
+                            end;
+                        end;
+                    end;
+                end;
+                else do;
+                    call crlf;
+                end;
+
+                entry$num = entry$num + 1;
+            end;
+            else do;
+                /* Deleted entry, skip */
+                entry$num = entry$num + 1;
+            end;
+        end;
+    end;
+
+    return 1;
+end extract$lbr;
+
+eof

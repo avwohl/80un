@@ -1,0 +1,102 @@
+/*
+ * squeeze.plm - Squeeze Decompression (Huffman + RLE)
+ *
+ * Decompresses .?Q? files (USQ format)
+ */
+
+declare cpm$eof literally '01AH';
+
+/* External declarations */
+declare huff$tree$ptr address external;
+declare huff$tree based huff$tree$ptr (1) byte;
+declare huff$nodes address external;
+declare input$limit address external;
+
+/* Procedures from common.plm and io.plm - visible when compiled together */
+
+/*========================================================
+ * Squeeze Decompression
+ *========================================================*/
+
+unsqueeze: procedure byte public;
+    declare msg$sqtree data('Bad Huffman tree$');
+    declare (b, i) byte;
+    declare (node$count, node, left, symbol) address;
+    declare p address;
+    declare done byte;
+    declare (lo$byte, hi$byte) byte;
+
+    /* Magic already verified, skip it */
+    b = getbyte;  /* 76 */
+    b = getbyte;  /* FF */
+
+    /* Read checksum (ignored) */
+    lo$byte = getbyte;
+    hi$byte = getbyte;
+
+    /* Skip original filename (null-terminated) */
+    do while (b := getbyte) <> 0 and b <> cpm$eof;
+    end;
+
+    /* Read node count */
+    lo$byte = getbyte;
+    hi$byte = getbyte;
+    node$count = lo$byte + shl(hi$byte, 8);
+
+    if node$count > 256 then do;
+        call printstr(.msg$sqtree);
+        call printchar(' ');
+        call printhex(high(node$count));
+        call printhex(low(node$count));
+        return 0;
+    end;
+
+    /* Read Huffman tree nodes */
+    i = 0;
+    do while i < low(node$count);
+        p = huff$tree$ptr + shl(i, 2);
+        huff$tree(p - huff$tree$ptr) = getbyte;
+        huff$tree(p - huff$tree$ptr + 1) = getbyte;
+        huff$tree(p - huff$tree$ptr + 2) = getbyte;
+        huff$tree(p - huff$tree$ptr + 3) = getbyte;
+        i = i + 1;
+    end;
+
+    huff$nodes = node$count;
+
+    /* Initialize bit reader and RLE decoder */
+    call init$bits$lsb;
+    call init$rle;
+
+    /* Decode symbols */
+    done = 0;
+    do while not done and input$avail;
+        node = 0;
+        do while node < huff$nodes;
+            p = huff$tree$ptr + shl(low(node), 2);
+            if read$bit$lsb then
+                left = readword(p + 2);
+            else
+                left = readword(p);
+
+            if (left and 8000h) <> 0 then do;
+                symbol = (not left);
+                if symbol = 256 then do;
+                    done = 1;
+                end;
+                else do;
+                    if not rle$decode$byte(low(symbol)) then
+                        return 0;
+                end;
+                node = huff$nodes;
+            end;
+            else do;
+                node = left;
+            end;
+        end;
+    end;
+
+    return 1;
+end unsqueeze;
+
+eof

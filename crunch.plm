@@ -1,0 +1,211 @@
+/*
+ * crunch.plm - Crunch Decompression (LZW + RLE)
+ *
+ * Decompresses .?Z? files (Crunch V1/V2 format)
+ */
+
+declare cpm$eof literally '01AH';
+
+/* External declarations */
+declare lzw$prefix$ptr address external;
+declare lzw$prefix based lzw$prefix$ptr (1) byte;
+declare lzw$suffix$ptr address external;
+declare lzw$suffix based lzw$suffix$ptr (1) byte;
+declare lzw$next$code address external;
+declare lzw$code$size byte external;
+declare lzw$max$bits byte external;
+declare work$ptr address external;
+declare work based work$ptr (1) byte;
+declare work$len address external;
+declare input$limit address external;
+
+/* Procedures from common.plm and io.plm - visible when compiled together */
+
+/*========================================================
+ * LZW Dictionary Management
+ *========================================================*/
+
+/* Initialize LZW dictionary with single-byte entries */
+init$lzw: procedure public;
+    declare i address;
+
+    i = 0;
+    do while i < 256;
+        call writeword(lzw$prefix$ptr + shl(i, 1), 0ffffh);
+        lzw$suffix(lzw$suffix$ptr - lzw$suffix$ptr + i) = low(i);
+        i = i + 1;
+    end;
+
+    lzw$next$code = 260;
+end init$lzw;
+
+/* Output an LZW string by code, returns length */
+lzw$output: procedure(code) address public;
+    declare code address;
+    declare (prefix, len) address;
+    declare suffix byte;
+    declare p address;
+
+    len = 0;
+    do while code <> 0ffffh and len < 4096;
+        suffix = lzw$suffix(code);
+        work(len) = suffix;
+        len = len + 1;
+        prefix = readword(lzw$prefix$ptr + shl(code, 1));
+        code = prefix;
+    end;
+
+    work$len = len;
+    do while len > 0;
+        len = len - 1;
+        if not rle$decode$byte(work(len)) then
+            return 0;
+    end;
+
+    return work$len;
+end lzw$output;
+
+/* Get first byte of an LZW string */
+lzw$first$byte: procedure(code) byte public;
+    declare code address;
+    declare prefix address;
+
+    do while code >= 256;
+        prefix = readword(lzw$prefix$ptr + shl(code, 1));
+        if prefix = 0ffffh then
+            return lzw$suffix(code);
+        code = prefix;
+    end;
+    return low(code);
+end lzw$first$byte;
+
+/* Add entry to LZW dictionary */
+lzw$add$entry: procedure(prefix, suffix) public;
+    declare prefix address;
+    declare suffix byte;
+
+    if lzw$next$code < 4096 then do;
+        call writeword(lzw$prefix$ptr + shl(lzw$next$code, 1), prefix);
+        lzw$suffix(lzw$next$code) = suffix;
+        lzw$next$code = lzw$next$code + 1;
+    end;
+end lzw$add$entry;
+
+/*========================================================
+ * Crunch Decompression
+ *========================================================*/
+
+uncrunch: procedure byte public;
+    declare (b, reflevel, spare) byte;
+    declare (siglevel, errdetect) byte;
+    declare (is$v2, first$code$flag) byte;
+    declare (code, prev$code) address;
+    declare initial$bits byte;
+    declare checksum address;
+    declare done byte;
+    declare fb byte;
+    declare max$code address;
+
+    /* Magic already verified, skip it */
+    b = getbyte;  /* 76 */
+    b = getbyte;  /* FE */
+
+    /* Skip original filename (null-terminated) */
+    do while (b := getbyte) <> 0 and b <> cpm$eof;
+    end;
+
+    /* Read 4 info bytes */
+    reflevel = getbyte;
+    siglevel = getbyte;
+    errdetect = getbyte;
+    spare = getbyte;
+
+    /* Check version - SIGLEVEL >= 0x20 means V2 format */
+    is$v2 = 0;
+    if siglevel > 31 then is$v2 = 1;
+    if is$v2 <> 0 then
+        initial$bits = 9;
+    else
+        initial$bits = 12;
+
+    /* Read checksum if present */
+    if errdetect > 0 then do;
+        checksum = getbyte;
+        checksum = checksum + shl(getbyte, 8);
+    end;
+
+    /* Initialize LZW and bit reader */
+    call init$lzw;
+    call init$bits$msb;
+    call init$rle;
+
+    lzw$code$size = initial$bits;
+    lzw$max$bits = 12;
+    prev$code = 0ffffh;
+    first$code$flag = 1;
+    done = 0;
+
+    do while not done and input$avail;
+        /* V2: Increase code size when needed */
+        if is$v2 <> 0 then do;
+            max$code = shl(1, lzw$code$size) - 1;
+            if lzw$next$code = max$code and lzw$code$size < lzw$max$bits then
+                lzw$code$size = lzw$code$size + 1;
+        end;
+
+        code = read$code$msb(lzw$code$size);
+
+        /* Skip filler codes 258, 259 */
+        do while code = 258 or code = 259;
+            code = read$code$msb(lzw$code$size);
+        end;
+
+        /* Handle special codes */
+        if code = 256 then do;
+            /* EOF */
+            done = 1;
+        end;
+        else if code = 257 then do;
+            /* Reset dictionary */
+            call init$lzw;
+            lzw$code$size = initial$bits;
+            prev$code = 0ffffh;
+            first$code$flag = 1;
+        end;
+        else do;
+            /* Regular code */
+            if code < 256 then do;
+                /* Literal byte */
+                if not rle$decode$byte(low(code)) then return 0;
+                fb = low(code);
+            end;
+            else if code < lzw$next$code then do;
+                /* Known dictionary entry */
+                fb = lzw$first$byte(code);
+                if lzw$output(code) = 0 then return 0;
+            end;
+            else if code = lzw$next$code and prev$code <> 0ffffh then do;
+                /* Special case: code not yet in dictionary */
+                fb = lzw$first$byte(prev$code);
+                if lzw$output(prev$code) = 0 then return 0;
+                if not rle$decode$byte(fb) then return 0;
+            end;
+            else do;
+                /* Unknown code - end of data */
+                done = 1;
+            end;
+
+            /* Add new dictionary entry */
+            if not first$code$flag and prev$code <> 0ffffh and not done then do;
+                call lzw$add$entry(prev$code, fb);
+            end;
+
+            prev$code = code;
+            first$code$flag = 0;
+        end;
+    end;
+
+    return 1;
+end uncrunch;
+
+eof
