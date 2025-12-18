@@ -1,10 +1,21 @@
 # 80un
 
-A Python utility to unpack and decompress archive and compression formats used on the CP/M operating system for 8080/Z80 computers.
+Unpack and decompress archive and compression formats used on the CP/M operating system for 8080/Z80 computers.
 
-If you have old CP/M disks, disk images, or downloads from CP/M archives, this tool will help you extract the files within.
+Two implementations are provided:
 
-## Installation
+| Version | Runs On | Use Case |
+|---------|---------|----------|
+| **80un.com** | CP/M 2.2+ | Extract archives on vintage hardware or emulators |
+| **80un (Python)** | Python 3.8+ | Extract archives on modern systems |
+
+Both support the same formats and produce identical output.
+
+---
+
+## Python Version
+
+### Installation
 
 ```bash
 pip install 80un
@@ -358,6 +369,57 @@ GPL v3 License
 ## Contributing
 
 Bug reports and pull requests welcome at https://github.com/avwohl/80un
+
+---
+
+## CP/M Version (80un.com)
+
+A native CP/M program written in PL/M-80 that runs on real vintage hardware or emulators.
+
+### Usage
+
+```
+A>80UN ARCHIVE.LBR
+A>80UN DOCUMENT.TQT
+A>80UN PROGRAM.ARC
+```
+
+Files are extracted to the current drive and user area.
+
+### Building from Source
+
+Requires the [uplm80](https://github.com/avwohl/uplm80) toolchain:
+
+```bash
+make            # Build 80un.com
+make test       # Test with sample archives
+make clean      # Remove build artifacts
+```
+
+### Source Files
+
+The PL/M-80 source is split into modules:
+
+| File | Purpose |
+|------|---------|
+| `startup.plm` | Entry point |
+| `common.plm` | BDOS interface, memory ops |
+| `io.plm` | Buffered I/O, bit readers |
+| `squeeze.plm` | Huffman decompressor |
+| `crunch.plm` | LZW decompressor |
+| `lzh.plm` | LZSS decompressor |
+| `arc.plm` | ARC archive extractor |
+| `lbr.plm` | LBR archive extractor |
+| `main.plm` | Main program logic |
+| `heap.asm` | Heap allocation bridge |
+
+### Requirements
+
+- CP/M 2.2 or compatible (MP/M, ZCPR, etc.)
+- ~40KB TPA (Transient Program Area)
+- Z80 or 8080 processor
+
+---
 
 ## See Also
 
