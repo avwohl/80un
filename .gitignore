@@ -2,7 +2,9 @@
 *.mac
 *.rel
 *.sym
-*.com
+
+# Test binaries (but not 80un.com which we distribute)
+tests/*.com
 
 # Editor backups
 *~
