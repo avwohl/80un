@@ -285,19 +285,20 @@ END WRITEWORD;
 
 /* Fill input buffer from file */
 FILL$INBUF: PROCEDURE BYTE;
-    DECLARE (I, RESULT) BYTE;
+    DECLARE RESULT BYTE;
+    DECLARE LOOP$CNT ADDRESS;  /* Use ADDRESS to prevent compiler corruption bug */
 
     INBUF$POS = 0;
     INBUF$END = 0;
 
     /* Read up to 32 sectors (4K) */
-    I = 0;
-    DO WHILE I < 32;
-        CALL SETDMAADDR(INBUF$PTR + SHL(I, 7));
+    LOOP$CNT = 0;
+    DO WHILE LOOP$CNT < 32;
+        CALL SETDMAADDR(INBUF$PTR + SHL(LOW(LOOP$CNT), 7));
         RESULT = READFILE(IFCB$PTR);
         IF RESULT <> 0 THEN
-            RETURN I > 0;  /* Return true if we read something */
-        I = I + 1;
+            RETURN LOOP$CNT > 0;  /* Return true if we read something */
+        LOOP$CNT = LOOP$CNT + 1;
         INBUF$END = INBUF$END + 128;
     END;
 
@@ -588,15 +589,15 @@ UNSQUEEZE: PROCEDURE BYTE;
     B = GETBYTE;  /* 76 */
     B = GETBYTE;  /* FF */
 
-    /* Skip original filename (null-terminated) */
-    DO WHILE (B := GETBYTE) <> 0 AND B <> CPM$EOF;
-    END;
-
-    /* Read checksum (ignored) - read as 16-bit LE */
+    /* Read checksum (ignored) - comes BEFORE filename per USQ format */
     /* Workaround: assign bytes to ADDRESS vars to avoid DOUBLE() bug */
     LO$BYTE = GETBYTE;
     HI$BYTE = GETBYTE;
     /* CHECKSUM not used */
+
+    /* Skip original filename (null-terminated) */
+    DO WHILE (B := GETBYTE) <> 0 AND B <> CPM$EOF;
+    END;
 
     /* Read node count - read as 16-bit LE */
     LO$BYTE = GETBYTE;
@@ -1510,11 +1511,18 @@ EXTRACT$LBR: PROCEDURE BYTE;
                 IF MEMBER$LENGTH <> 0 THEN DO;
                     /* Set up output FCB */
                     CALL FILLMEM(OFCB$PTR, 36, 0);
-                    J = 1;
-                    DO WHILE J <= 11;
-                        OFCB(J) = ENT(J) AND 07FH;
-                        J = J + 1;
-                    END;
+                    /* Copy filename (bytes 1-11) unrolled to avoid loop corruption */
+                    OFCB(1) = ENT(1) AND 07FH;
+                    OFCB(2) = ENT(2) AND 07FH;
+                    OFCB(3) = ENT(3) AND 07FH;
+                    OFCB(4) = ENT(4) AND 07FH;
+                    OFCB(5) = ENT(5) AND 07FH;
+                    OFCB(6) = ENT(6) AND 07FH;
+                    OFCB(7) = ENT(7) AND 07FH;
+                    OFCB(8) = ENT(8) AND 07FH;
+                    OFCB(9) = ENT(9) AND 07FH;
+                    OFCB(10) = ENT(10) AND 07FH;
+                    OFCB(11) = ENT(11) AND 07FH;
 
                     CALL DELETEFILE(OFCB$PTR);
                     IF MAKEFILE(OFCB$PTR) = 0FFH THEN DO;
@@ -1853,29 +1861,31 @@ MAIN: PROCEDURE;
     /* Initialize pointers */
     FCB$PTR = 005CH;
     DMA$PTR = 0080H;
-    IFCB$PTR = 0E00H;
-    OFCB$PTR = 0E24H;
+    /* FCBs at end of program, before main buffers */
+    IFCB$PTR = 2400H;
+    OFCB$PTR = 2424H;
 
     /* Allocate buffers in high memory */
-    /* Memory layout (from 0x0E48):
-     *   INBUF:     4096 bytes (0E48H - 1E47H)
-     *   OUTBUF:    4096 bytes (1E48H - 2E47H)
-     *   HUFF_TREE: 1024 bytes (2E48H - 3247H)
-     *   LZW_PREFIX:8192 bytes (3248H - 5247H)
-     *   LZW_SUFFIX:4096 bytes (5248H - 6247H)
-     *   RING:      4096 bytes (6248H - 7247H)
-     *   WORK:      4096 bytes (7248H - 8247H)
-     * Total: ~29K, leaving ~27K for TPA
+    /* Program is ~9K, ends around 0x2400. Buffers start at 0x2500.
+     * Memory layout (from 0x2500):
+     *   INBUF:     4096 bytes (2500H - 34FFH)
+     *   OUTBUF:    4096 bytes (3500H - 44FFH)
+     *   HUFF_TREE: 1024 bytes (4500H - 48FFH)
+     *   LZW_PREFIX:8192 bytes (4900H - 68FFH)
+     *   LZW_SUFFIX:4096 bytes (6900H - 78FFH)
+     *   RING:      4096 bytes (7900H - 88FFH)
+     *   WORK:      4096 bytes (8900H - 98FFH)
+     * Total: ~29K, ends at ~0x9900, well below TPA top (~0xC000)
      */
-    INBUF$PTR = 0E48H;
+    INBUF$PTR = 2500H;
     INBUF$SIZE = 4096;
-    OUTBUF$PTR = 1E48H;
+    OUTBUF$PTR = 3500H;
     OUTBUF$SIZE = 4096;
-    HUFF$TREE$PTR = 2E48H;
-    LZW$PREFIX$PTR = 3248H;
-    LZW$SUFFIX$PTR = 5248H;
-    RING$PTR = 6248H;
-    WORK$PTR = 7248H;
+    HUFF$TREE$PTR = 4500H;
+    LZW$PREFIX$PTR = 4900H;
+    LZW$SUFFIX$PTR = 6900H;
+    RING$PTR = 7900H;
+    WORK$PTR = 8900H;
 
     /* Print banner */
     CALL CRLF;

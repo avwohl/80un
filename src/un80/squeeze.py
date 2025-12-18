@@ -38,27 +38,25 @@ class SqueezeError(Exception):
 
 
 class BitReader:
-    """Read individual bits from a byte stream."""
+    """Read individual bits from a byte stream, LSB first."""
 
     def __init__(self, data: bytes, offset: int = 0):
         self.data = data
         self.pos = offset
-        self.bit_pos = 0
+        self.bit_pos = 8  # Force initial read (like USQ's bpos=99)
         self.current_byte = 0
 
     def read_bit(self) -> int:
-        """Read a single bit, returns 0 or 1."""
-        if self.bit_pos == 0:
+        """Read a single bit LSB-first, returns 0 or 1."""
+        if self.bit_pos >= 8:
             if self.pos >= len(self.data):
                 raise SqueezeError("Unexpected end of data")
             self.current_byte = self.data[self.pos]
             self.pos += 1
-            self.bit_pos = 8
+            self.bit_pos = 0
 
-        self.bit_pos -= 1
-        bit = (self.current_byte >> (7 - self.bit_pos)) & 1
-        # Actually, squeeze uses LSB-first bit order
-        bit = (self.current_byte >> (self.bit_pos)) & 1
+        bit = (self.current_byte >> self.bit_pos) & 1
+        self.bit_pos += 1
         return bit
 
 
@@ -164,17 +162,19 @@ def unsqueeze(data: bytes) -> bytes:
 
     pos = 2
 
+    # Read checksum (comes BEFORE filename per original USQ format)
+    if pos + 2 > len(data):
+        raise SqueezeError("Data too short for checksum")
+    checksum = struct.unpack('<H', data[pos:pos+2])[0]
+    pos += 2
+
     # Skip original filename (null-terminated)
     while pos < len(data) and data[pos] != 0:
         pos += 1
     pos += 1  # Skip null terminator
 
-    if pos + 4 > len(data):
+    if pos + 2 > len(data):
         raise SqueezeError("Data too short for header")
-
-    # Read checksum (we'll ignore for now)
-    checksum = struct.unpack('<H', data[pos:pos+2])[0]
-    pos += 2
 
     # Read node count (signed 16-bit)
     node_count = struct.unpack('<h', data[pos:pos+2])[0]
@@ -226,15 +226,17 @@ def get_squeezed_filename(data: bytes) -> str | None:
     Returns:
         Original filename or None if not valid
     """
-    if len(data) < 4:
+    if len(data) < 6:  # magic + checksum + at least 1 char + null
         return None
 
     magic = (data[0] << 8) | data[1]
     if magic != SQUEEZE_MAGIC:
         return None
 
-    # Find null terminator
-    pos = 2
+    # Skip checksum (2 bytes after magic)
+    pos = 4
+
+    # Find null terminator for filename
     end = pos
     while end < len(data) and data[end] != 0:
         end += 1
