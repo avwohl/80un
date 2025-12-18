@@ -81,14 +81,15 @@ decompress$file: procedure byte;
     /* Read file into buffer */
     inbuf$pos = 0;
     inbuf$end = 0;
+    input$limit = 0ffffh;  /* No limit for single file */
     if not fill$inbuf then return 0;
 
     /* Detect compression type */
     if inbuf(0) = magic$sq$hi and inbuf(1) = magic$sq$lo then do;
         /* Squeezed file - extract original name */
-        /* Skip magic, read name */
+        /* Skip magic (2 bytes) and checksum (2 bytes), read name */
         name$pos = 0;
-        i = 2;
+        i = 4;
         do while inbuf(i) <> 0 and name$pos < 12;
             orig$name(name$pos) = inbuf(i);
             name$pos = name$pos + 1;
