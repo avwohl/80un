@@ -1,0 +1,27 @@
+/*
+ * 80UN Minimal Test - Just print banner
+ */
+
+0100H:
+
+/* BDOS Interface */
+MON1: PROCEDURE(FUNC, PARM) EXTERNAL;
+    DECLARE FUNC BYTE, PARM ADDRESS;
+END MON1;
+
+DECLARE
+    CR LITERALLY '13',
+    LF LITERALLY '10';
+
+/* Main program */
+MAIN: PROCEDURE;
+    DECLARE MSG1 DATA('80UN - CP/M Archive Unpacker v1.0', CR, LF, '$');
+    DECLARE MSG2 DATA('Test message 2', CR, LF, '$');
+
+    CALL MON1(9, .MSG1);
+    CALL MON1(9, .MSG2);
+END MAIN;
+
+CALL MAIN;
+
+EOF

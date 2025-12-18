@@ -1,5 +1,8 @@
 __pycache__/
 \#*
+**.sym
+**.com
+**.rel
 *.py[cod]
 *$py.class
 *.so

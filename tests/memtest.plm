@@ -1,0 +1,72 @@
+/*
+ * Memory test - using BASED pointer for write
+ */
+
+MON1: PROCEDURE(FUNC, PARM) EXTERNAL;
+    DECLARE FUNC BYTE, PARM ADDRESS;
+END MON1;
+
+DECLARE CONOUT LITERALLY '2';
+
+PRINTCHAR: PROCEDURE(C);
+    DECLARE C BYTE;
+    CALL MON1(CONOUT, C);
+END PRINTCHAR;
+
+CRLF: PROCEDURE;
+    CALL PRINTCHAR(13);
+    CALL PRINTCHAR(10);
+END CRLF;
+
+PRINTHEX: PROCEDURE(B);
+    DECLARE B BYTE;
+    DECLARE N BYTE;
+    N = B / 16;
+    IF N > 9 THEN CALL PRINTCHAR(N + 'A' - 10);
+    ELSE CALL PRINTCHAR(N + '0');
+    N = B AND 0FH;
+    IF N > 9 THEN CALL PRINTCHAR(N + 'A' - 10);
+    ELSE CALL PRINTCHAR(N + '0');
+END PRINTHEX;
+
+/* Use a procedure to write a byte to memory */
+POKEB: PROCEDURE(ADDR, VAL);
+    DECLARE ADDR ADDRESS;
+    DECLARE VAL BYTE;
+    DECLARE P BASED ADDR BYTE;
+    P = VAL;
+END POKEB;
+
+/* Use a procedure to read a byte from memory */
+PEEKB: PROCEDURE(ADDR) BYTE;
+    DECLARE ADDR ADDRESS;
+    DECLARE P BASED ADDR BYTE;
+    RETURN P;
+END PEEKB;
+
+MAIN: PROCEDURE;
+    DECLARE I BYTE;
+
+    CALL CRLF;
+
+    /* Write known pattern to 0x80-0x8F */
+    I = 0;
+    DO WHILE I < 16;
+        CALL POKEB(80H + I, 0AAH);
+        I = I + 1;
+    END;
+
+    /* Read back and print */
+    I = 0;
+    DO WHILE I < 16;
+        CALL PRINTHEX(PEEKB(80H + I));
+        CALL PRINTCHAR(' ');
+        I = I + 1;
+    END;
+    CALL CRLF;
+
+END MAIN;
+
+CALL MAIN;
+
+EOF

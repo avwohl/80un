@@ -1,0 +1,84 @@
+/*
+ * Simple read test v2 - using BASED pointer instead of AT array
+ */
+
+0100H:
+
+MON1: PROCEDURE(FUNC, PARM) EXTERNAL;
+    DECLARE FUNC BYTE, PARM ADDRESS;
+END MON1;
+
+MON2: PROCEDURE(FUNC, PARM) BYTE EXTERNAL;
+    DECLARE FUNC BYTE, PARM ADDRESS;
+END MON2;
+
+DECLARE
+    CONOUT LITERALLY '2',
+    OPENF  LITERALLY '15',
+    READF  LITERALLY '20',
+    SETDMA LITERALLY '26';
+
+PRINTCHAR: PROCEDURE(C);
+    DECLARE C BYTE;
+    CALL MON1(CONOUT, C);
+END PRINTCHAR;
+
+CRLF: PROCEDURE;
+    CALL PRINTCHAR(13);
+    CALL PRINTCHAR(10);
+END CRLF;
+
+PRINTHEX: PROCEDURE(B);
+    DECLARE B BYTE;
+    DECLARE N BYTE;
+    /* Avoid broken SHR - use division instead */
+    N = B / 16;
+    IF N > 9 THEN CALL PRINTCHAR(N + 'A' - 10);
+    ELSE CALL PRINTCHAR(N + '0');
+    N = B AND 0FH;
+    IF N > 9 THEN CALL PRINTCHAR(N + 'A' - 10);
+    ELSE CALL PRINTCHAR(N + '0');
+END PRINTHEX;
+
+MAIN: PROCEDURE;
+    DECLARE (I, RESULT) BYTE;
+    DECLARE PTR ADDRESS;
+    DECLARE MEMBYTE BASED PTR BYTE;
+
+    CALL CRLF;
+
+    /* Set DMA to default buffer */
+    CALL MON1(SETDMA, 0080H);
+
+    /* Open file using default FCB */
+    RESULT = MON2(OPENF, 005CH);
+    IF RESULT = 0FFH THEN DO;
+        CALL PRINTCHAR('E');
+        CALL PRINTCHAR('1');
+        CALL CRLF;
+        RETURN;
+    END;
+
+    /* Read first sector */
+    RESULT = MON2(READF, 005CH);
+    IF RESULT <> 0 THEN DO;
+        CALL PRINTCHAR('E');
+        CALL PRINTCHAR('2');
+        CALL CRLF;
+        RETURN;
+    END;
+
+    /* Dump first 64 bytes using BASED pointer */
+    DO I = 0 TO 63;
+        PTR = 0080H + I;
+        CALL PRINTHEX(MEMBYTE);
+        IF (I AND 0FH) = 0FH THEN CALL CRLF;
+        ELSE CALL PRINTCHAR(' ');
+    END;
+    CALL CRLF;
+
+END MAIN;
+
+CALL MAIN;
+
+EOF

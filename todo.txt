@@ -20,3 +20,27 @@ see uplm80/examples and uplm80/sample_code
 for cp/m programs written in pl/m
 Output of this project should be 80un.com and documentation
 (command line switches may need to be different)
+
+## Build Instructions for 80un.com
+
+    uplm80 80un.plm -o 80un.mac
+    um80 80un.mac
+    ul80 -o 80un.com 80un.rel
+
+Test with:
+    ~/src/cpmemu/src/cpmemu 80un.com test.lbr
+
+## Target Platform: CP/M 2.2
+
+See ~/src/cpmemu/docs/ for documentation:
+- cpm22_bdos_calls.pdf - BDOS function reference
+- cpm22_fcb_detailed.pdf - FCB structure
+- cpm22_memory_layout.pdf - Memory map
+- file_handling_notes.md - File handling details
+
+Key points:
+- Files are 128-byte records
+- Text files use ^Z (0x1A) as EOF
+- FCB at 005CH, DMA buffer at 0080H
+- BDOS entry at 0005H
+- TPA (program area) starts at 0100H

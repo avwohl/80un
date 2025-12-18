@@ -1,0 +1,350 @@
+/*
+ * 80UN - CP/M Archive Unpacker (LBR only)
+ *
+ * Extracts files from LBR archives.
+ *
+ * Usage:
+ *   80UN archive.LBR    - Extract all files from LBR archive
+ *
+ * To build:
+ *   uplm80 80un.plm -o 80un.mac
+ *   um80 80un.mac
+ *   ul80 -o 80un.com 80un.rel
+ *
+ * Copyright 2024 - MIT License
+ */
+
+/* BDOS Interface */
+MON1: PROCEDURE(FUNC, PARM) EXTERNAL;
+    DECLARE FUNC BYTE, PARM ADDRESS;
+END MON1;
+
+MON2: PROCEDURE(FUNC, PARM) BYTE EXTERNAL;
+    DECLARE FUNC BYTE, PARM ADDRESS;
+END MON2;
+
+/* BDOS Function Numbers */
+DECLARE
+    CONOUT   LITERALLY '2',
+    PRTSTR   LITERALLY '9',
+    OPENF    LITERALLY '15',
+    CLOSEF   LITERALLY '16',
+    DELETEF  LITERALLY '19',
+    READF    LITERALLY '20',
+    WRITEF   LITERALLY '21',
+    MAKEF    LITERALLY '22',
+    SETDMA   LITERALLY '26';
+
+/*========================================================
+ * Console Output
+ *========================================================*/
+
+PRINTCHAR: PROCEDURE(C);
+    DECLARE C BYTE;
+    CALL MON1(CONOUT, C);
+END PRINTCHAR;
+
+CRLF: PROCEDURE;
+    CALL PRINTCHAR(13);
+    CALL PRINTCHAR(10);
+END CRLF;
+
+PRINTSTR: PROCEDURE(S);
+    DECLARE S ADDRESS;
+    CALL MON1(PRTSTR, S);
+END PRINTSTR;
+
+/*========================================================
+ * File I/O Wrappers
+ *========================================================*/
+
+OPENFILE: PROCEDURE(FCBPTR) BYTE;
+    DECLARE FCBPTR ADDRESS;
+    RETURN MON2(OPENF, FCBPTR);
+END OPENFILE;
+
+CLOSEFILE: PROCEDURE(FCBPTR) BYTE;
+    DECLARE FCBPTR ADDRESS;
+    RETURN MON2(CLOSEF, FCBPTR);
+END CLOSEFILE;
+
+READFILE: PROCEDURE(FCBPTR) BYTE;
+    DECLARE FCBPTR ADDRESS;
+    RETURN MON2(READF, FCBPTR);
+END READFILE;
+
+WRITEFILE: PROCEDURE(FCBPTR) BYTE;
+    DECLARE FCBPTR ADDRESS;
+    RETURN MON2(WRITEF, FCBPTR);
+END WRITEFILE;
+
+MAKEFILE: PROCEDURE(FCBPTR) BYTE;
+    DECLARE FCBPTR ADDRESS;
+    RETURN MON2(MAKEF, FCBPTR);
+END MAKEFILE;
+
+DELETEFILE: PROCEDURE(FCBPTR);
+    DECLARE FCBPTR ADDRESS;
+    CALL MON1(DELETEF, FCBPTR);
+END DELETEFILE;
+
+SETDMAADDR: PROCEDURE(ADDR);
+    DECLARE ADDR ADDRESS;
+    CALL MON1(SETDMA, ADDR);
+END SETDMAADDR;
+
+/*========================================================
+ * Memory Operations - using BASED pointers
+ *========================================================*/
+
+COPYMEM: PROCEDURE(SRC, DST, CNT);
+    DECLARE (SRC, DST) ADDRESS;
+    DECLARE CNT BYTE;
+    DECLARE S BASED SRC BYTE;
+    DECLARE D BASED DST BYTE;
+    DO WHILE CNT > 0;
+        D = S;
+        SRC = SRC + 1;
+        DST = DST + 1;
+        CNT = CNT - 1;
+    END;
+END COPYMEM;
+
+FILLMEM: PROCEDURE(DST, CNT, VAL);
+    DECLARE DST ADDRESS;
+    DECLARE (CNT, VAL) BYTE;
+    DECLARE D BASED DST BYTE;
+    DO WHILE CNT > 0;
+        D = VAL;
+        DST = DST + 1;
+        CNT = CNT - 1;
+    END;
+END FILLMEM;
+
+/*========================================================
+ * Main Program
+ *========================================================*/
+
+MAIN: PROCEDURE;
+    /* All DATA declarations inside MAIN to avoid address bugs */
+    DECLARE MSG$BANNER DATA('80UN - CP/M LBR Extractor v1.0$');
+    DECLARE MSG$USAGE DATA('Usage: 80UN filename.LBR$');
+    DECLARE MSG$NOOPEN DATA('Cannot open input file$');
+    DECLARE MSG$NOREAD DATA('Cannot read LBR header$');
+    DECLARE MSG$BADLBR DATA('Invalid LBR file$');
+    DECLARE MSG$BADDIR DATA('Invalid directory size$');
+    DECLARE MSG$EXTRACT DATA('Extracting: $');
+    DECLARE MSG$DONE DATA(' file(s) extracted$');
+    DECLARE MSG$NOCREAT DATA(' - cannot create$');
+    DECLARE MSG$OK DATA(' OK$');
+    /* Hex lookup table for high nibble */
+    DECLARE HI$NIB DATA(
+        '0000000000000000',
+        '1111111111111111',
+        '2222222222222222',
+        '3333333333333333',
+        '4444444444444444',
+        '5555555555555555',
+        '6666666666666666',
+        '7777777777777777',
+        '8888888888888888',
+        '9999999999999999',
+        'AAAAAAAAAAAAAAAA',
+        'BBBBBBBBBBBBBBBB',
+        'CCCCCCCCCCCCCCCC',
+        'DDDDDDDDDDDDDDDD',
+        'EEEEEEEEEEEEEEEE',
+        'FFFFFFFFFFFFFFFF'
+    );
+    DECLARE LO$NIB DATA('0123456789ABCDEF');
+
+    DECLARE (I, J, RESULT) BYTE;
+    DECLARE (DIR$SECTORS, FILE$COUNT) BYTE;
+    DECLARE SECTORS$LEFT ADDRESS;  /* 16-bit sector counter */
+    DECLARE ENTRY$OFF ADDRESS;  /* Offset to current entry */
+
+    /* Use BASED pointers for memory access */
+    DECLARE FCB$PTR ADDRESS;
+    DECLARE FCB BASED FCB$PTR (36) BYTE;
+    DECLARE DMA$PTR ADDRESS;
+    DECLARE DMA BASED DMA$PTR (128) BYTE;
+    DECLARE IFCB$PTR ADDRESS;
+    DECLARE IFCB BASED IFCB$PTR (36) BYTE;
+    DECLARE OFCB$PTR ADDRESS;
+    DECLARE OFCB BASED OFCB$PTR (36) BYTE;
+    /* Pointer to current directory entry */
+    DECLARE ENT$PTR ADDRESS;
+    DECLARE ENT BASED ENT$PTR (32) BYTE;
+
+    /* Initialize pointers */
+    FCB$PTR = 005CH;
+    DMA$PTR = 0080H;
+    IFCB$PTR = 0E00H;   /* Use high memory for working FCBs */
+    OFCB$PTR = 0E24H;
+
+    /* Print banner */
+    CALL CRLF;
+    CALL PRINTSTR(.MSG$BANNER);
+    CALL CRLF;
+
+    /* Check if filename provided */
+    IF FCB(1) = ' ' THEN DO;
+        CALL CRLF;
+        CALL PRINTSTR(.MSG$USAGE);
+        CALL CRLF;
+        RETURN;
+    END;
+
+    /* Copy FCB to working area */
+    CALL COPYMEM(FCB$PTR, IFCB$PTR, 36);
+    CALL FILLMEM(OFCB$PTR, 36, 0);
+
+    /* Open input file */
+    CALL SETDMAADDR(DMA$PTR);
+    IF OPENFILE(IFCB$PTR) = 0FFH THEN DO;
+        CALL CRLF;
+        CALL PRINTSTR(.MSG$NOOPEN);
+        CALL CRLF;
+        RETURN;
+    END;
+
+    /* Read first sector - directory header */
+    IF READFILE(IFCB$PTR) <> 0 THEN DO;
+        CALL CRLF;
+        CALL PRINTSTR(.MSG$NOREAD);
+        CALL CRLF;
+        RETURN;
+    END;
+
+    /* Check first entry (directory itself) */
+    IF DMA(0) <> 0 THEN DO;
+        CALL CRLF;
+        CALL PRINTSTR(.MSG$BADLBR);
+        CALL CRLF;
+        RETURN;
+    END;
+
+    /* Get directory size in sectors */
+    DIR$SECTORS = DMA(14);
+    IF DIR$SECTORS = 0 OR DIR$SECTORS > 16 THEN DO;
+        CALL CRLF;
+        CALL PRINTSTR(.MSG$BADDIR);
+        CALL CRLF;
+        RETURN;
+    END;
+
+    CALL CRLF;
+    CALL PRINTSTR(.MSG$EXTRACT);
+    CALL CRLF;
+
+    FILE$COUNT = 0;
+
+    /* Process directory entries (4 per sector, skip first) */
+    ENT$PTR = 00A0H;  /* Start at entry 1 = 0x80 + 32 */
+    I = 1;
+    DO WHILE I <= 3;
+
+        /* Check entry status */
+        IF ENT(0) = 0FFH THEN DO;
+            /* Unused entry - end of directory */
+            GO TO DONE;
+        END;
+
+        IF ENT(0) = 0 THEN DO;
+            /* Active entry - extract file */
+            CALL PRINTCHAR(' ');
+            CALL PRINTCHAR(' ');
+
+            /* Print filename (bytes 1-8) */
+            J = 1;
+            DO WHILE J <= 8;
+                IF (ENT(J) AND 07FH) <> ' ' THEN
+                    CALL PRINTCHAR(ENT(J) AND 07FH);
+                J = J + 1;
+            END;
+
+            /* Print extension if present */
+            IF (ENT(9) AND 07FH) <> ' ' THEN DO;
+                CALL PRINTCHAR('.');
+                J = 9;
+                DO WHILE J <= 11;
+                    IF (ENT(J) AND 07FH) <> ' ' THEN
+                        CALL PRINTCHAR(ENT(J) AND 07FH);
+                    J = J + 1;
+                END;
+            END;
+
+            /* Check if member has any sectors (bytes 14-15 = length) */
+            IF ENT(14) <> 0 OR ENT(15) <> 0 THEN DO;
+                /* Set up output FCB */
+                CALL FILLMEM(OFCB$PTR, 36, 0);
+                /* Copy name and extension from directory entry */
+                J = 1;
+                DO WHILE J <= 11;
+                    OFCB(J) = ENT(J) AND 07FH;
+                    J = J + 1;
+                END;
+
+                CALL DELETEFILE(OFCB$PTR);
+                IF MAKEFILE(OFCB$PTR) = 0FFH THEN DO;
+                    CALL PRINTSTR(.MSG$NOCREAT);
+                    CALL CRLF;
+                    GO TO NEXT$ENTRY;
+                END;
+
+                /* Reset and reopen input file */
+                CALL CLOSEFILE(IFCB$PTR);
+                CALL COPYMEM(FCB$PTR, IFCB$PTR, 36);
+                IF OPENFILE(IFCB$PTR) <> 0 THEN RETURN;
+
+                /* Skip to member start */
+                CALL SETDMAADDR(DMA$PTR);
+                SECTORS$LEFT = ENT(12) + SHL(ENT(13), 8);  /* 16-bit index */
+                DO WHILE SECTORS$LEFT <> 0;
+                    RESULT = READFILE(IFCB$PTR);
+                    SECTORS$LEFT = SECTORS$LEFT - 1;
+                END;
+
+                /* Read and write member data */
+                SECTORS$LEFT = ENT(14) + SHL(ENT(15), 8);  /* 16-bit length */
+                DO WHILE SECTORS$LEFT <> 0;
+                    CALL SETDMAADDR(DMA$PTR);
+                    RESULT = READFILE(IFCB$PTR);
+                    IF WRITEFILE(OFCB$PTR) <> 0 THEN
+                        GO TO CLOSE$OUT;
+                    SECTORS$LEFT = SECTORS$LEFT - 1;
+                END;
+
+                CLOSE$OUT:
+                CALL CLOSEFILE(OFCB$PTR);
+                FILE$COUNT = FILE$COUNT + 1;
+                CALL PRINTSTR(.MSG$OK);
+                CALL CRLF;
+
+                /* Reposition for next entry */
+                CALL CLOSEFILE(IFCB$PTR);
+                CALL COPYMEM(FCB$PTR, IFCB$PTR, 36);
+                IF OPENFILE(IFCB$PTR) <> 0 THEN RETURN;
+                CALL SETDMAADDR(DMA$PTR);
+                RESULT = READFILE(IFCB$PTR);
+            END;
+        END;
+        NEXT$ENTRY:
+        ENT$PTR = ENT$PTR + 32;  /* Move to next entry */
+        I = I + 1;
+    END;
+
+    DONE:
+    CALL CLOSEFILE(IFCB$PTR);
+    CALL CRLF;
+    /* Print count using lookup table */
+    CALL PRINTCHAR(HI$NIB(FILE$COUNT));
+    CALL PRINTCHAR(LO$NIB(FILE$COUNT AND 0FH));
+    CALL PRINTSTR(.MSG$DONE);
+    CALL CRLF;
+
+END MAIN;
+
+CALL MAIN;
+
+EOF

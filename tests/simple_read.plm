@@ -1,0 +1,72 @@
+/*
+ * Simple file read test - hex output using lookup tables
+ */
+
+MON1: PROCEDURE(FUNC, PARM) EXTERNAL;
+    DECLARE FUNC BYTE, PARM ADDRESS;
+END MON1;
+
+MON2: PROCEDURE(FUNC, PARM) BYTE EXTERNAL;
+    DECLARE FUNC BYTE, PARM ADDRESS;
+END MON2;
+
+MAIN: PROCEDURE;
+    /* High nibble lookup - 256 entries, one for each byte value */
+    DECLARE HI$NIB DATA(
+        '0000000000000000',  /* 00-0F */
+        '1111111111111111',  /* 10-1F */
+        '2222222222222222',  /* 20-2F */
+        '3333333333333333',  /* 30-3F */
+        '4444444444444444',  /* 40-4F */
+        '5555555555555555',  /* 50-5F */
+        '6666666666666666',  /* 60-6F */
+        '7777777777777777',  /* 70-7F */
+        '8888888888888888',  /* 80-8F */
+        '9999999999999999',  /* 90-9F */
+        'AAAAAAAAAAAAAAAA',  /* A0-AF */
+        'BBBBBBBBBBBBBBBB',  /* B0-BF */
+        'CCCCCCCCCCCCCCCC',  /* C0-CF */
+        'DDDDDDDDDDDDDDDD',  /* D0-DF */
+        'EEEEEEEEEEEEEEEE',  /* E0-EF */
+        'FFFFFFFFFFFFFFFF'   /* F0-FF */
+    );
+    /* Low nibble lookup */
+    DECLARE LO$NIB DATA('0123456789ABCDEF');
+    DECLARE MSG$ERR DATA('ERR$');
+    DECLARE RESULT BYTE;
+    DECLARE I BYTE;
+    DECLARE VAL BYTE;
+    DECLARE DMA$PTR ADDRESS;
+    DECLARE DMA BASED DMA$PTR (128) BYTE;
+
+    DMA$PTR = 0080H;
+
+    /* Open file from default FCB at 5CH */
+    RESULT = MON2(15, 005CH);
+    IF RESULT = 0FFH THEN DO;
+        CALL MON1(9, .MSG$ERR);
+        RETURN;
+    END;
+
+    /* Read first sector */
+    RESULT = MON2(20, 005CH);
+
+    /* Print first 64 bytes as hex */
+    I = 0;
+    DO WHILE I < 64;
+        VAL = DMA(I);
+        CALL MON1(2, HI$NIB(VAL));
+        CALL MON1(2, LO$NIB(VAL AND 0FH));
+        CALL MON1(2, ' ');
+        IF (I AND 0FH) = 0FH THEN DO;
+            CALL MON1(2, 13);
+            CALL MON1(2, 10);
+        END;
+        I = I + 1;
+    END;
+
+END MAIN;
+
+CALL MAIN;
+
+EOF

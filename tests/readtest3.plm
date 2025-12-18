@@ -1,0 +1,83 @@
+/*
+ * Simple read test v3 - manual memory read using array arithmetic
+ */
+
+MON1: PROCEDURE(FUNC, PARM) EXTERNAL;
+    DECLARE FUNC BYTE, PARM ADDRESS;
+END MON1;
+
+MON2: PROCEDURE(FUNC, PARM) BYTE EXTERNAL;
+    DECLARE FUNC BYTE, PARM ADDRESS;
+END MON2;
+
+DECLARE
+    CONOUT LITERALLY '2',
+    OPENF  LITERALLY '15',
+    READF  LITERALLY '20',
+    SETDMA LITERALLY '26';
+
+/* Try with large array at fixed address */
+DECLARE MEM(256) BYTE AT(0000H);
+
+PRINTCHAR: PROCEDURE(C);
+    DECLARE C BYTE;
+    CALL MON1(CONOUT, C);
+END PRINTCHAR;
+
+CRLF: PROCEDURE;
+    CALL PRINTCHAR(13);
+    CALL PRINTCHAR(10);
+END CRLF;
+
+PRINTHEX: PROCEDURE(B);
+    DECLARE B BYTE;
+    DECLARE N BYTE;
+    /* High nibble via division */
+    N = B / 16;
+    IF N > 9 THEN CALL PRINTCHAR(N + 'A' - 10);
+    ELSE CALL PRINTCHAR(N + '0');
+    /* Low nibble via AND */
+    N = B AND 0FH;
+    IF N > 9 THEN CALL PRINTCHAR(N + 'A' - 10);
+    ELSE CALL PRINTCHAR(N + '0');
+END PRINTHEX;
+
+MAIN: PROCEDURE;
+    DECLARE (I, RESULT) BYTE;
+
+    CALL CRLF;
+
+    /* Set DMA to 0x80 */
+    CALL MON1(SETDMA, 0080H);
+
+    /* Open file using default FCB */
+    RESULT = MON2(OPENF, 005CH);
+    IF RESULT = 0FFH THEN DO;
+        CALL PRINTCHAR('E');
+        CALL PRINTCHAR('1');
+        CALL CRLF;
+        RETURN;
+    END;
+
+    /* Read first sector */
+    RESULT = MON2(READF, 005CH);
+    IF RESULT <> 0 THEN DO;
+        CALL PRINTCHAR('E');
+        CALL PRINTCHAR('2');
+        CALL CRLF;
+        RETURN;
+    END;
+
+    /* Dump bytes at 0x80-0xBF using MEM array */
+    DO I = 0 TO 63;
+        CALL PRINTHEX(MEM(80H + I));
+        IF (I AND 0FH) = 0FH THEN CALL CRLF;
+        ELSE CALL PRINTCHAR(' ');
+    END;
+    CALL CRLF;
+
+END MAIN;
+
+CALL MAIN;
+
+EOF

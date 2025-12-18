@@ -1,0 +1,21 @@
+/*
+ * Minimal print test
+ */
+
+0100H:
+
+MON1: PROCEDURE(FUNC, PARM) EXTERNAL;
+    DECLARE FUNC BYTE, PARM ADDRESS;
+END MON1;
+
+MAIN: PROCEDURE;
+    DECLARE MSG1 DATA('Hello from PL/M!', 13, 10, '$');
+    DECLARE MSG2 DATA('Test complete.$');
+
+    CALL MON1(9, .MSG1);
+    CALL MON1(9, .MSG2);
+END MAIN;
+
+CALL MAIN;
+
+EOF
