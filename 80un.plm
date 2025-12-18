@@ -1,17 +1,24 @@
 /*
- * 80UN - CP/M Archive Unpacker (LBR only)
+ * 80UN - CP/M Archive Unpacker
  *
- * Extracts files from LBR archives.
+ * Extracts and decompresses files from CP/M archives:
+ *   - LBR (Library archives)
+ *   - ARC archives (methods 1-9)
+ *   - Squeezed files (.?Q? - Huffman + RLE)
+ *   - Crunched files (.?Z? - LZW + RLE)
+ *   - CrLZH files (.?Y? - LZSS)
  *
  * Usage:
- *   80UN archive.LBR    - Extract all files from LBR archive
+ *   80UN archive     - Extract all files
+ *   80UN file.?Q?    - Unsqueeze single file
+ *   80UN file.?Z?    - Uncrunch single file
  *
  * To build:
  *   uplm80 80un.plm -o 80un.mac
  *   um80 80un.mac
  *   ul80 -o 80un.com 80un.rel
  *
- * Copyright 2024 - MIT License
+ * Copyright 2024 - GPL v3 License
  */
 
 /* BDOS Interface */
@@ -35,6 +42,83 @@ DECLARE
     MAKEF    LITERALLY '22',
     SETDMA   LITERALLY '26';
 
+/* Magic numbers for compression detection */
+DECLARE
+    MAGIC$SQ$LO   LITERALLY '0FFH',   /* Squeeze: 76 FF */
+    MAGIC$SQ$HI   LITERALLY '076H',
+    MAGIC$CR$LO   LITERALLY '0FEH',   /* Crunch: 76 FE */
+    MAGIC$CR$HI   LITERALLY '076H',
+    MAGIC$LZH$LO  LITERALLY '0FDH',   /* CrLZH: 76 FD */
+    MAGIC$LZH$HI  LITERALLY '076H',
+    ARC$MARKER    LITERALLY '01AH',   /* ARC: 1A xx */
+    RLE$MARKER    LITERALLY '090H',   /* RLE escape byte */
+    CPM$EOF       LITERALLY '01AH';   /* CP/M EOF marker */
+
+/*========================================================
+ * Global Variables and Buffers
+ *========================================================*/
+
+/* File Control Block pointers */
+DECLARE FCB$PTR ADDRESS;
+DECLARE FCB BASED FCB$PTR (36) BYTE;
+DECLARE IFCB$PTR ADDRESS;
+DECLARE IFCB BASED IFCB$PTR (36) BYTE;
+DECLARE OFCB$PTR ADDRESS;
+DECLARE OFCB BASED OFCB$PTR (36) BYTE;
+
+/* DMA buffer for file I/O */
+DECLARE DMA$PTR ADDRESS;
+DECLARE DMA BASED DMA$PTR (128) BYTE;
+
+/* Large input buffer for decompression (4K) */
+DECLARE INBUF$PTR ADDRESS;
+DECLARE INBUF BASED INBUF$PTR (1) BYTE;  /* Access byte by byte */
+DECLARE INBUF$SIZE ADDRESS;
+DECLARE INBUF$POS ADDRESS;
+DECLARE INBUF$END ADDRESS;
+
+/* Output buffer */
+DECLARE OUTBUF$PTR ADDRESS;
+DECLARE OUTBUF BASED OUTBUF$PTR (1) BYTE;
+DECLARE OUTBUF$SIZE ADDRESS;
+DECLARE OUTBUF$POS ADDRESS;
+
+/* Bit reader state */
+DECLARE BIT$BUFFER ADDRESS;
+DECLARE BITS$LEFT BYTE;
+
+/* Huffman tree for squeeze (max 256 nodes, 4 bytes each = 1K) */
+DECLARE HUFF$TREE$PTR ADDRESS;
+DECLARE HUFF$TREE BASED HUFF$TREE$PTR (1) BYTE;
+DECLARE HUFF$NODES ADDRESS;
+
+/* LZW dictionary for crunch (4096 entries max) */
+/* Each entry: 2 bytes prefix code, 1 byte suffix = 3 bytes */
+/* Total: 12K - but we'll use a more compact representation */
+DECLARE LZW$PREFIX$PTR ADDRESS;
+DECLARE LZW$PREFIX BASED LZW$PREFIX$PTR (1) BYTE;  /* 8K for 4096 16-bit prefixes */
+DECLARE LZW$SUFFIX$PTR ADDRESS;
+DECLARE LZW$SUFFIX BASED LZW$SUFFIX$PTR (1) BYTE;  /* 4K for 4096 suffixes */
+DECLARE LZW$NEXT$CODE ADDRESS;
+DECLARE LZW$CODE$SIZE BYTE;
+DECLARE LZW$MAX$BITS BYTE;
+
+/* Ring buffer for CrLZH (4K) */
+DECLARE RING$PTR ADDRESS;
+DECLARE RING BASED RING$PTR (1) BYTE;
+DECLARE RING$POS ADDRESS;
+DECLARE RING$SIZE LITERALLY '4096';
+DECLARE RING$MASK LITERALLY '0FFFH';
+
+/* Work buffer for LZW string output */
+DECLARE WORK$PTR ADDRESS;
+DECLARE WORK BASED WORK$PTR (1) BYTE;
+DECLARE WORK$LEN ADDRESS;
+
+/* File count and status */
+DECLARE FILE$COUNT BYTE;
+DECLARE ERROR$FLAG BYTE;
+
 /*========================================================
  * Console Output
  *========================================================*/
@@ -54,38 +138,98 @@ PRINTSTR: PROCEDURE(S);
     CALL MON1(PRTSTR, S);
 END PRINTSTR;
 
+PRINTHEX: PROCEDURE(N);
+    DECLARE N BYTE;
+    DECLARE HEX DATA('0123456789ABCDEF');
+    CALL PRINTCHAR(HEX(SHR(N, 4)));
+    CALL PRINTCHAR(HEX(N AND 0FH));
+END PRINTHEX;
+
+PRINTNUM: PROCEDURE(N);
+    DECLARE N ADDRESS;
+    DECLARE (D, STARTED) BYTE;
+
+    STARTED = 0;
+
+    /* Ten thousands */
+    D = 0;
+    DO WHILE N >= 10000;
+        D = D + 1;
+        N = N - 10000;
+    END;
+    IF D > 0 THEN DO;
+        CALL PRINTCHAR('0' + D);
+        STARTED = 1;
+    END;
+
+    /* Thousands */
+    D = 0;
+    DO WHILE N >= 1000;
+        D = D + 1;
+        N = N - 1000;
+    END;
+    IF D > 0 OR STARTED THEN DO;
+        CALL PRINTCHAR('0' + D);
+        STARTED = 1;
+    END;
+
+    /* Hundreds */
+    D = 0;
+    DO WHILE N >= 100;
+        D = D + 1;
+        N = N - 100;
+    END;
+    IF D > 0 OR STARTED THEN DO;
+        CALL PRINTCHAR('0' + D);
+        STARTED = 1;
+    END;
+
+    /* Tens */
+    D = 0;
+    DO WHILE N >= 10;
+        D = D + 1;
+        N = N - 10;
+    END;
+    IF D > 0 OR STARTED THEN DO;
+        CALL PRINTCHAR('0' + D);
+    END;
+
+    /* Ones */
+    CALL PRINTCHAR('0' + N);
+END PRINTNUM;
+
 /*========================================================
  * File I/O Wrappers
  *========================================================*/
 
-OPENFILE: PROCEDURE(FCBPTR) BYTE;
-    DECLARE FCBPTR ADDRESS;
-    RETURN MON2(OPENF, FCBPTR);
+OPENFILE: PROCEDURE(FCBP) BYTE;
+    DECLARE FCBP ADDRESS;
+    RETURN MON2(OPENF, FCBP);
 END OPENFILE;
 
-CLOSEFILE: PROCEDURE(FCBPTR) BYTE;
-    DECLARE FCBPTR ADDRESS;
-    RETURN MON2(CLOSEF, FCBPTR);
+CLOSEFILE: PROCEDURE(FCBP) BYTE;
+    DECLARE FCBP ADDRESS;
+    RETURN MON2(CLOSEF, FCBP);
 END CLOSEFILE;
 
-READFILE: PROCEDURE(FCBPTR) BYTE;
-    DECLARE FCBPTR ADDRESS;
-    RETURN MON2(READF, FCBPTR);
+READFILE: PROCEDURE(FCBP) BYTE;
+    DECLARE FCBP ADDRESS;
+    RETURN MON2(READF, FCBP);
 END READFILE;
 
-WRITEFILE: PROCEDURE(FCBPTR) BYTE;
-    DECLARE FCBPTR ADDRESS;
-    RETURN MON2(WRITEF, FCBPTR);
+WRITEFILE: PROCEDURE(FCBP) BYTE;
+    DECLARE FCBP ADDRESS;
+    RETURN MON2(WRITEF, FCBP);
 END WRITEFILE;
 
-MAKEFILE: PROCEDURE(FCBPTR) BYTE;
-    DECLARE FCBPTR ADDRESS;
-    RETURN MON2(MAKEF, FCBPTR);
+MAKEFILE: PROCEDURE(FCBP) BYTE;
+    DECLARE FCBP ADDRESS;
+    RETURN MON2(MAKEF, FCBP);
 END MAKEFILE;
 
-DELETEFILE: PROCEDURE(FCBPTR);
-    DECLARE FCBPTR ADDRESS;
-    CALL MON1(DELETEF, FCBPTR);
+DELETEFILE: PROCEDURE(FCBP);
+    DECLARE FCBP ADDRESS;
+    CALL MON1(DELETEF, FCBP);
 END DELETEFILE;
 
 SETDMAADDR: PROCEDURE(ADDR);
@@ -94,12 +238,11 @@ SETDMAADDR: PROCEDURE(ADDR);
 END SETDMAADDR;
 
 /*========================================================
- * Memory Operations - using BASED pointers
+ * Memory Operations
  *========================================================*/
 
 COPYMEM: PROCEDURE(SRC, DST, CNT);
-    DECLARE (SRC, DST) ADDRESS;
-    DECLARE CNT BYTE;
+    DECLARE (SRC, DST, CNT) ADDRESS;
     DECLARE S BASED SRC BYTE;
     DECLARE D BASED DST BYTE;
     DO WHILE CNT > 0;
@@ -111,8 +254,8 @@ COPYMEM: PROCEDURE(SRC, DST, CNT);
 END COPYMEM;
 
 FILLMEM: PROCEDURE(DST, CNT, VAL);
-    DECLARE DST ADDRESS;
-    DECLARE (CNT, VAL) BYTE;
+    DECLARE (DST, CNT) ADDRESS;
+    DECLARE VAL BYTE;
     DECLARE D BASED DST BYTE;
     DO WHILE CNT > 0;
         D = VAL;
@@ -121,66 +264,1618 @@ FILLMEM: PROCEDURE(DST, CNT, VAL);
     END;
 END FILLMEM;
 
+/* Read a 16-bit little-endian value from memory */
+READWORD: PROCEDURE(ADDR) ADDRESS;
+    DECLARE ADDR ADDRESS;
+    DECLARE P BASED ADDR (2) BYTE;
+    RETURN P(0) + SHL(P(1), 8);
+END READWORD;
+
+/* Write a 16-bit little-endian value to memory */
+WRITEWORD: PROCEDURE(ADDR, VAL);
+    DECLARE (ADDR, VAL) ADDRESS;
+    DECLARE P BASED ADDR (2) BYTE;
+    P(0) = LOW(VAL);
+    P(1) = HIGH(VAL);
+END WRITEWORD;
+
+/*========================================================
+ * Buffered Input
+ *========================================================*/
+
+/* Fill input buffer from file */
+FILL$INBUF: PROCEDURE BYTE;
+    DECLARE (I, RESULT) BYTE;
+
+    INBUF$POS = 0;
+    INBUF$END = 0;
+
+    /* Read up to 32 sectors (4K) */
+    I = 0;
+    DO WHILE I < 32;
+        CALL SETDMAADDR(INBUF$PTR + SHL(I, 7));
+        RESULT = READFILE(IFCB$PTR);
+        IF RESULT <> 0 THEN
+            RETURN I > 0;  /* Return true if we read something */
+        I = I + 1;
+        INBUF$END = INBUF$END + 128;
+    END;
+
+    RETURN 1;  /* Success */
+END FILL$INBUF;
+
+/* Get next byte from input buffer */
+GETBYTE: PROCEDURE BYTE;
+    DECLARE B BYTE;
+    DECLARE P ADDRESS;
+
+    IF INBUF$POS >= INBUF$END THEN DO;
+        IF NOT FILL$INBUF THEN
+            RETURN CPM$EOF;
+    END;
+
+    P = INBUF$PTR + INBUF$POS;
+    INBUF$POS = INBUF$POS + 1;
+    RETURN INBUF(P - INBUF$PTR);
+END GETBYTE;
+
+/* Peek at current byte without consuming */
+PEEKBYTE: PROCEDURE BYTE;
+    DECLARE P ADDRESS;
+
+    IF INBUF$POS >= INBUF$END THEN DO;
+        IF NOT FILL$INBUF THEN
+            RETURN CPM$EOF;
+    END;
+
+    P = INBUF$PTR + INBUF$POS;
+    RETURN INBUF(P - INBUF$PTR);
+END PEEKBYTE;
+
+/* Check if more input available */
+INPUT$AVAIL: PROCEDURE BYTE;
+    IF INBUF$POS < INBUF$END THEN RETURN 1;
+    RETURN FILL$INBUF;
+END INPUT$AVAIL;
+
+/*========================================================
+ * Buffered Output
+ *========================================================*/
+
+/* Flush output buffer to file */
+FLUSH$OUTBUF: PROCEDURE BYTE;
+    DECLARE (I, SECTORS, RESULT) BYTE;
+    DECLARE REMAINING ADDRESS;
+
+    IF OUTBUF$POS = 0 THEN RETURN 1;
+
+    /* Calculate full sectors */
+    SECTORS = LOW(SHR(OUTBUF$POS, 7));
+    REMAINING = OUTBUF$POS AND 127;
+
+    /* Write full sectors */
+    I = 0;
+    DO WHILE I < SECTORS;
+        CALL SETDMAADDR(OUTBUF$PTR + SHL(I, 7));
+        RESULT = WRITEFILE(OFCB$PTR);
+        IF RESULT <> 0 THEN RETURN 0;
+        I = I + 1;
+    END;
+
+    /* Handle partial sector */
+    IF REMAINING > 0 THEN DO;
+        /* Pad with CP/M EOF */
+        CALL FILLMEM(OUTBUF$PTR + OUTBUF$POS, 128 - REMAINING, CPM$EOF);
+        CALL SETDMAADDR(OUTBUF$PTR + SHL(SECTORS, 7));
+        RESULT = WRITEFILE(OFCB$PTR);
+        IF RESULT <> 0 THEN RETURN 0;
+    END;
+
+    OUTBUF$POS = 0;
+    RETURN 1;
+END FLUSH$OUTBUF;
+
+/* Write byte to output buffer */
+PUTBYTE: PROCEDURE(B) BYTE;
+    DECLARE B BYTE;
+    DECLARE P ADDRESS;
+
+    P = OUTBUF$PTR + OUTBUF$POS;
+    OUTBUF(P - OUTBUF$PTR) = B;
+    OUTBUF$POS = OUTBUF$POS + 1;
+
+    /* Flush if buffer full (4K) */
+    IF OUTBUF$POS >= 4096 THEN
+        RETURN FLUSH$OUTBUF;
+
+    RETURN 1;
+END PUTBYTE;
+
+/*========================================================
+ * Bit Reader (LSB first, for CrLZH and ARC)
+ *========================================================*/
+
+INIT$BITS$LSB: PROCEDURE;
+    BIT$BUFFER = 0;
+    BITS$LEFT = 0;
+END INIT$BITS$LSB;
+
+READ$BIT$LSB: PROCEDURE BYTE;
+    DECLARE B BYTE;
+
+    IF BITS$LEFT = 0 THEN DO;
+        BIT$BUFFER = GETBYTE;
+        BITS$LEFT = 8;
+    END;
+
+    B = LOW(BIT$BUFFER) AND 1;
+    BIT$BUFFER = SHR(BIT$BUFFER, 1);
+    BITS$LEFT = BITS$LEFT - 1;
+    RETURN B;
+END READ$BIT$LSB;
+
+READ$BITS$LSB: PROCEDURE(COUNT) ADDRESS;
+    DECLARE COUNT BYTE;
+    DECLARE (RESULT, SHIFT) ADDRESS;
+
+    RESULT = 0;
+    SHIFT = 1;
+    DO WHILE COUNT > 0;
+        IF READ$BIT$LSB THEN
+            RESULT = RESULT + SHIFT;
+        SHIFT = SHL(SHIFT, 1);
+        COUNT = COUNT - 1;
+    END;
+    RETURN RESULT;
+END READ$BITS$LSB;
+
+/*========================================================
+ * Bit Reader (MSB first within bytes, for Squeeze Huffman)
+ * Reads bits from bit 7 down to bit 0 of each byte
+ *========================================================*/
+
+DECLARE SQ$BIT$BUFFER BYTE;
+DECLARE SQ$BIT$POS BYTE;
+
+INIT$BITS$SQ: PROCEDURE;
+    SQ$BIT$BUFFER = 0;
+    SQ$BIT$POS = 0;
+END INIT$BITS$SQ;
+
+READ$BIT$SQ: PROCEDURE BYTE;
+    DECLARE B BYTE;
+
+    IF SQ$BIT$POS = 0 THEN DO;
+        SQ$BIT$BUFFER = GETBYTE;
+        SQ$BIT$POS = 8;
+    END;
+
+    SQ$BIT$POS = SQ$BIT$POS - 1;
+    B = SHR(SQ$BIT$BUFFER, SQ$BIT$POS) AND 1;
+    RETURN B;
+END READ$BIT$SQ;
+
+/*========================================================
+ * Bit Reader (MSB first, for Crunch)
+ *========================================================*/
+
+DECLARE MSB$DBG$CNT BYTE;  /* Debug counter for MSB reader */
+
+INIT$BITS$MSB: PROCEDURE;
+    BIT$BUFFER = 0;
+    BITS$LEFT = 0;
+    MSB$DBG$CNT = 0;
+END INIT$BITS$MSB;
+
+/* Workaround for SHR/SHL bugs with shifts > 8 */
+/* Use division for right shift */
+SHR$SAFE: PROCEDURE(VAL, CNT) ADDRESS;
+    DECLARE VAL ADDRESS;
+    DECLARE CNT BYTE;
+    DO WHILE CNT > 0;
+        VAL = VAL / 2;
+        CNT = CNT - 1;
+    END;
+    RETURN VAL;
+END SHR$SAFE;
+
+/* Use multiplication for left shift */
+SHL$SAFE: PROCEDURE(VAL, CNT) ADDRESS;
+    DECLARE VAL ADDRESS;
+    DECLARE CNT BYTE;
+    DO WHILE CNT > 0;
+        VAL = VAL * 2;
+        CNT = CNT - 1;
+    END;
+    RETURN VAL;
+END SHL$SAFE;
+
+READ$CODE$MSB: PROCEDURE(BITS) ADDRESS;
+    DECLARE BITS BYTE;
+    DECLARE CODE ADDRESS;
+    DECLARE B BYTE;
+    DECLARE SHIFT$AMT BYTE;
+    DECLARE MASK ADDRESS;
+
+    /* Load bytes MSB first */
+    DO WHILE BITS$LEFT < BITS;
+        B = GETBYTE;
+        /* Shift buffer left by 8 using safe method */
+        BIT$BUFFER = SHL(BIT$BUFFER, 8) + B;  /* SHL by 8 works */
+        BITS$LEFT = BITS$LEFT + 8;
+    END;
+
+    /* Extract from MSB side */
+    SHIFT$AMT = BITS$LEFT - BITS;
+
+    /* Use safe shift for potentially large amounts */
+    CODE = SHR$SAFE(BIT$BUFFER, SHIFT$AMT);
+
+    /* Calculate mask using safe shift */
+    MASK = SHL$SAFE(1, BITS) - 1;
+    CODE = CODE AND MASK;
+
+    BITS$LEFT = BITS$LEFT - BITS;
+    IF BITS$LEFT > 0 THEN
+        BIT$BUFFER = BIT$BUFFER AND (SHL$SAFE(1, BITS$LEFT) - 1);
+    ELSE
+        BIT$BUFFER = 0;
+
+    RETURN CODE;
+END READ$CODE$MSB;
+
+/*========================================================
+ * RLE90 Decoder
+ *========================================================*/
+
+DECLARE RLE$PREV BYTE;
+DECLARE RLE$COUNT BYTE;
+DECLARE RLE$ACTIVE BYTE;
+
+INIT$RLE: PROCEDURE;
+    RLE$PREV = 0;
+    RLE$COUNT = 0;
+    RLE$ACTIVE = 0;
+END INIT$RLE;
+
+/* Decode one byte through RLE90 and output it */
+RLE$DECODE$BYTE: PROCEDURE(B) BYTE;
+    DECLARE B BYTE;
+    DECLARE CNT BYTE;
+
+    IF RLE$ACTIVE THEN DO;
+        /* We're processing a run */
+        IF B = 0 THEN DO;
+            /* Literal 0x90 */
+            RLE$ACTIVE = 0;
+            RLE$PREV = RLE$MARKER;
+            RETURN PUTBYTE(RLE$MARKER);
+        END;
+        ELSE DO;
+            /* Repeat previous byte B times */
+            RLE$ACTIVE = 0;
+            CNT = B;
+            DO WHILE CNT > 0;
+                IF NOT PUTBYTE(RLE$PREV) THEN RETURN 0;
+                CNT = CNT - 1;
+            END;
+            RETURN 1;
+        END;
+    END;
+
+    IF B = RLE$MARKER THEN DO;
+        RLE$ACTIVE = 1;
+        RETURN 1;
+    END;
+
+    RLE$PREV = B;
+    RETURN PUTBYTE(B);
+END RLE$DECODE$BYTE;
+
+/*========================================================
+ * Squeeze Decompression (Huffman + RLE)
+ *========================================================*/
+
+UNSQUEEZE: PROCEDURE BYTE;
+    DECLARE MSG$SQTREE DATA('Bad Huffman tree$');
+    DECLARE (B, I) BYTE;
+    DECLARE (NODE$COUNT, NODE, LEFT, SYMBOL) ADDRESS;
+    DECLARE P ADDRESS;
+    DECLARE DONE BYTE;
+    DECLARE (LO$BYTE, HI$BYTE) ADDRESS;  /* Use ADDRESS to avoid DOUBLE() bug */
+
+    /* Magic already verified, skip it */
+    B = GETBYTE;  /* 76 */
+    B = GETBYTE;  /* FF */
+
+    /* Skip original filename (null-terminated) */
+    DO WHILE (B := GETBYTE) <> 0 AND B <> CPM$EOF;
+    END;
+
+    /* Read checksum (ignored) - read as 16-bit LE */
+    /* Workaround: assign bytes to ADDRESS vars to avoid DOUBLE() bug */
+    LO$BYTE = GETBYTE;
+    HI$BYTE = GETBYTE;
+    /* CHECKSUM not used */
+
+    /* Read node count - read as 16-bit LE */
+    LO$BYTE = GETBYTE;
+    HI$BYTE = GETBYTE;
+    NODE$COUNT = LO$BYTE + SHL(HI$BYTE, 8);
+
+    IF NODE$COUNT > 256 THEN DO;
+        CALL PRINTSTR(.MSG$SQTREE);
+        CALL PRINTCHAR(' ');
+        CALL PRINTHEX(HIGH(NODE$COUNT));
+        CALL PRINTHEX(LOW(NODE$COUNT));
+        RETURN 0;
+    END;
+
+    /* Read Huffman tree nodes */
+    /* Each node: 2 signed 16-bit values (left, right) */
+    I = 0;
+    DO WHILE I < LOW(NODE$COUNT);
+        P = HUFF$TREE$PTR + SHL(I, 2);  /* 4 bytes per node */
+        /* Read left child */
+        HUFF$TREE(P - HUFF$TREE$PTR) = GETBYTE;
+        HUFF$TREE(P - HUFF$TREE$PTR + 1) = GETBYTE;
+        /* Read right child */
+        HUFF$TREE(P - HUFF$TREE$PTR + 2) = GETBYTE;
+        HUFF$TREE(P - HUFF$TREE$PTR + 3) = GETBYTE;
+        I = I + 1;
+    END;
+
+    HUFF$NODES = NODE$COUNT;
+
+    /* Initialize bit reader and RLE decoder */
+    CALL INIT$BITS$LSB;  /* Squeeze uses LSB-first bit order */
+    CALL INIT$RLE;
+
+    /* Decode symbols */
+    DONE = 0;
+    DO WHILE NOT DONE AND INPUT$AVAIL;
+        /* Traverse Huffman tree */
+        NODE = 0;
+        DO WHILE NODE < HUFF$NODES;
+            P = HUFF$TREE$PTR + SHL(LOW(NODE), 2);
+            IF READ$BIT$LSB THEN
+                /* Right child */
+                LEFT = READWORD(P + 2);
+            ELSE
+                /* Left child */
+                LEFT = READWORD(P);
+
+            /* Check if leaf (negative = leaf) */
+            IF (LEFT AND 8000H) <> 0 THEN DO;
+                /* Leaf: value is -(LEFT + 1) */
+                SYMBOL = (NOT LEFT);  /* -(LEFT + 1) = NOT LEFT */
+                IF SYMBOL = 256 THEN DO;
+                    /* EOF symbol */
+                    DONE = 1;
+                END;
+                ELSE DO;
+                    IF NOT RLE$DECODE$BYTE(LOW(SYMBOL)) THEN
+                        RETURN 0;
+                END;
+                NODE = HUFF$NODES;  /* Exit inner loop */
+            END;
+            ELSE DO;
+                NODE = LEFT;
+            END;
+        END;
+    END;
+
+    RETURN 1;
+END UNSQUEEZE;
+
+/*========================================================
+ * Crunch Decompression (LZW + RLE)
+ *========================================================*/
+
+/* Initialize LZW dictionary with single-byte entries */
+INIT$LZW: PROCEDURE;
+    DECLARE I ADDRESS;
+
+    /* First 256 entries are single bytes */
+    I = 0;
+    DO WHILE I < 256;
+        /* Prefix = 0xFFFF (none), Suffix = I */
+        CALL WRITEWORD(LZW$PREFIX$PTR + SHL(I, 1), 0FFFFH);
+        LZW$SUFFIX(LZW$SUFFIX$PTR - LZW$SUFFIX$PTR + I) = LOW(I);
+        I = I + 1;
+    END;
+
+    LZW$NEXT$CODE = 260;  /* First free code after special codes */
+END INIT$LZW;
+
+/* Output an LZW string by code, returns length */
+LZW$OUTPUT: PROCEDURE(CODE) ADDRESS;
+    DECLARE CODE ADDRESS;
+    DECLARE (PREFIX, LEN) ADDRESS;
+    DECLARE SUFFIX BYTE;
+    DECLARE P ADDRESS;
+
+    /* Build string in work buffer (backwards) */
+    LEN = 0;
+    DO WHILE CODE <> 0FFFFH AND LEN < 4096;
+        /* Get suffix */
+        SUFFIX = LZW$SUFFIX(CODE);
+        /* Store in work buffer */
+        WORK(LEN) = SUFFIX;
+        LEN = LEN + 1;
+        /* Get prefix */
+        PREFIX = READWORD(LZW$PREFIX$PTR + SHL(CODE, 1));
+        CODE = PREFIX;
+    END;
+
+    /* Output in reverse order (correct order) */
+    WORK$LEN = LEN;
+    DO WHILE LEN > 0;
+        LEN = LEN - 1;
+        IF NOT RLE$DECODE$BYTE(WORK(LEN)) THEN
+            RETURN 0;
+    END;
+
+    RETURN WORK$LEN;
+END LZW$OUTPUT;
+
+/* Get first byte of an LZW string */
+LZW$FIRST$BYTE: PROCEDURE(CODE) BYTE;
+    DECLARE CODE ADDRESS;
+    DECLARE PREFIX ADDRESS;
+
+    DO WHILE CODE >= 256;
+        PREFIX = READWORD(LZW$PREFIX$PTR + SHL(CODE, 1));
+        IF PREFIX = 0FFFFH THEN
+            RETURN LZW$SUFFIX(CODE);
+        CODE = PREFIX;
+    END;
+    RETURN LOW(CODE);
+END LZW$FIRST$BYTE;
+
+/* Add entry to LZW dictionary */
+LZW$ADD$ENTRY: PROCEDURE(PREFIX, SUFFIX);
+    DECLARE PREFIX ADDRESS;
+    DECLARE SUFFIX BYTE;
+
+    IF LZW$NEXT$CODE < 4096 THEN DO;
+        CALL WRITEWORD(LZW$PREFIX$PTR + SHL(LZW$NEXT$CODE, 1), PREFIX);
+        LZW$SUFFIX(LZW$NEXT$CODE) = SUFFIX;
+        LZW$NEXT$CODE = LZW$NEXT$CODE + 1;
+    END;
+END LZW$ADD$ENTRY;
+
+UNCRUNCH: PROCEDURE BYTE;
+    DECLARE (B, REFLEVEL, SPARE) BYTE;
+    DECLARE (SIGLEVEL, ERRDETECT) ADDRESS;  /* Use ADDRESS to prevent corruption */
+    DECLARE (IS$V2, FIRST$CODE$FLAG) BYTE;
+    DECLARE (CODE, PREV$CODE) ADDRESS;
+    DECLARE INITIAL$BITS BYTE;
+    DECLARE CHECKSUM ADDRESS;
+    DECLARE DONE BYTE;
+    DECLARE FB BYTE;
+    DECLARE MAX$CODE ADDRESS;
+
+    /* Magic already verified, skip it */
+    B = GETBYTE;  /* 76 */
+    B = GETBYTE;  /* FE */
+
+    /* Skip original filename (null-terminated) */
+    DO WHILE (B := GETBYTE) <> 0 AND B <> CPM$EOF;
+    END;
+
+    /* Read 4 info bytes */
+    REFLEVEL = GETBYTE;
+    SIGLEVEL = GETBYTE;
+    ERRDETECT = GETBYTE;
+    SPARE = GETBYTE;
+
+    /* Check version - SIGLEVEL >= 0x20 means V2 format */
+    IS$V2 = 0;
+    IF SIGLEVEL > 31 THEN IS$V2 = 1;
+    IF IS$V2 <> 0 THEN
+        INITIAL$BITS = 9;
+    ELSE
+        INITIAL$BITS = 12;
+
+    /* Read checksum if present */
+    IF ERRDETECT > 0 THEN DO;
+        CHECKSUM = GETBYTE;
+        CHECKSUM = CHECKSUM + SHL(GETBYTE, 8);
+    END;
+
+    /* Initialize LZW and bit reader */
+    CALL INIT$LZW;
+    CALL INIT$BITS$MSB;
+    CALL INIT$RLE;
+
+    LZW$CODE$SIZE = INITIAL$BITS;
+    LZW$MAX$BITS = 12;
+    PREV$CODE = 0FFFFH;
+    FIRST$CODE$FLAG = 1;
+    DONE = 0;
+
+    DO WHILE NOT DONE AND INPUT$AVAIL;
+        /* V2: Increase code size when needed */
+        IF IS$V2 <> 0 THEN DO;
+            MAX$CODE = SHL$SAFE(1, LZW$CODE$SIZE) - 1;
+            IF LZW$NEXT$CODE = MAX$CODE AND LZW$CODE$SIZE < LZW$MAX$BITS THEN
+                LZW$CODE$SIZE = LZW$CODE$SIZE + 1;
+        END;
+
+        CODE = READ$CODE$MSB(LZW$CODE$SIZE);
+
+        /* Skip filler codes 258, 259 */
+        DO WHILE CODE = 258 OR CODE = 259;
+            CODE = READ$CODE$MSB(LZW$CODE$SIZE);
+        END;
+
+        /* Handle special codes */
+        IF CODE = 256 THEN DO;
+            /* EOF */
+            DONE = 1;
+        END;
+        ELSE IF CODE = 257 THEN DO;
+            /* Reset dictionary */
+            CALL INIT$LZW;
+            LZW$CODE$SIZE = INITIAL$BITS;
+            PREV$CODE = 0FFFFH;
+            FIRST$CODE$FLAG = 1;
+        END;
+        ELSE DO;
+            /* Regular code */
+            IF CODE < 256 THEN DO;
+                /* Literal byte */
+                IF NOT RLE$DECODE$BYTE(LOW(CODE)) THEN RETURN 0;
+                FB = LOW(CODE);
+            END;
+            ELSE IF CODE < LZW$NEXT$CODE THEN DO;
+                /* Known dictionary entry */
+                FB = LZW$FIRST$BYTE(CODE);
+                IF LZW$OUTPUT(CODE) = 0 THEN RETURN 0;
+            END;
+            ELSE IF CODE = LZW$NEXT$CODE AND PREV$CODE <> 0FFFFH THEN DO;
+                /* Special case: code not yet in dictionary */
+                FB = LZW$FIRST$BYTE(PREV$CODE);
+                IF LZW$OUTPUT(PREV$CODE) = 0 THEN RETURN 0;
+                IF NOT RLE$DECODE$BYTE(FB) THEN RETURN 0;
+            END;
+            ELSE DO;
+                /* Unknown code - end of data */
+                DONE = 1;
+            END;
+
+            /* Add new dictionary entry */
+            IF NOT FIRST$CODE$FLAG AND PREV$CODE <> 0FFFFH AND NOT DONE THEN DO;
+                CALL LZW$ADD$ENTRY(PREV$CODE, FB);
+            END;
+
+            PREV$CODE = CODE;
+            FIRST$CODE$FLAG = 0;
+        END;
+    END;
+
+    RETURN 1;
+END UNCRUNCH;
+
+/*========================================================
+ * CrLZH Decompression (LZSS)
+ *========================================================*/
+
+UNCRLZH: PROCEDURE BYTE;
+    DECLARE MSG$LZHMAGIC DATA('Bad CrLZH magic$');
+    DECLARE (B, I) BYTE;
+    DECLARE (OFFSET, LENGTH) ADDRESS;
+    DECLARE DONE BYTE;
+    DECLARE RB BYTE;
+    DECLARE RP ADDRESS;
+
+    /* Magic already verified, skip it */
+    B = GETBYTE;  /* 76 */
+    B = GETBYTE;  /* FD */
+
+    /* Skip original filename (null-terminated) */
+    DO WHILE (B := GETBYTE) <> 0 AND B <> CPM$EOF;
+    END;
+
+    /* Initialize ring buffer and bit reader */
+    CALL FILLMEM(RING$PTR, RING$SIZE, ' ');
+    RING$POS = RING$SIZE - 18;  /* Standard initial position */
+    CALL INIT$BITS$LSB;
+
+    DONE = 0;
+    DO WHILE NOT DONE AND INPUT$AVAIL;
+        /* Read flag bit: 1 = literal, 0 = match */
+        IF READ$BIT$LSB THEN DO;
+            /* Literal byte */
+            B = LOW(READ$BITS$LSB(8));
+            IF NOT PUTBYTE(B) THEN RETURN 0;
+            RING(RING$POS) = B;
+            RING$POS = (RING$POS + 1) AND RING$MASK;
+        END;
+        ELSE DO;
+            /* Match: 12-bit offset, 4-bit length */
+            OFFSET = READ$BITS$LSB(12);
+            LENGTH = READ$BITS$LSB(4) + 3;
+
+            /* Check for end marker */
+            IF OFFSET = 0 AND LENGTH = 3 THEN DO;
+                DONE = 1;
+            END;
+            ELSE DO;
+                /* Copy from ring buffer */
+                I = 0;
+                DO WHILE I < LOW(LENGTH);
+                    RP = (OFFSET + I) AND RING$MASK;
+                    RB = RING(RP);
+                    IF NOT PUTBYTE(RB) THEN RETURN 0;
+                    RING(RING$POS) = RB;
+                    RING$POS = (RING$POS + 1) AND RING$MASK;
+                    I = I + 1;
+                END;
+            END;
+        END;
+    END;
+
+    RETURN 1;
+END UNCRLZH;
+
+/*========================================================
+ * ARC Archive Support
+ *========================================================*/
+
+/* ARC decompression method handlers */
+
+ARC$DECOMP$STORED: PROCEDURE(SIZE) BYTE;
+    DECLARE SIZE ADDRESS;
+    DECLARE B BYTE;
+
+    DO WHILE SIZE > 0;
+        B = GETBYTE;
+        IF NOT PUTBYTE(B) THEN RETURN 0;
+        SIZE = SIZE - 1;
+    END;
+    RETURN 1;
+END ARC$DECOMP$STORED;
+
+ARC$DECOMP$RLE: PROCEDURE(SIZE) BYTE;
+    DECLARE SIZE ADDRESS;
+    DECLARE (B, CNT, PREV) BYTE;
+
+    PREV = 0;
+    DO WHILE SIZE > 0;
+        B = GETBYTE;
+        SIZE = SIZE - 1;
+
+        IF B = RLE$MARKER THEN DO;
+            IF SIZE = 0 THEN DO;
+                IF NOT PUTBYTE(RLE$MARKER) THEN RETURN 0;
+            END;
+            ELSE DO;
+                CNT = GETBYTE;
+                SIZE = SIZE - 1;
+                IF CNT = 0 THEN DO;
+                    IF NOT PUTBYTE(RLE$MARKER) THEN RETURN 0;
+                    PREV = RLE$MARKER;
+                END;
+                ELSE DO;
+                    DO WHILE CNT > 0;
+                        IF NOT PUTBYTE(PREV) THEN RETURN 0;
+                        CNT = CNT - 1;
+                    END;
+                END;
+            END;
+        END;
+        ELSE DO;
+            IF NOT PUTBYTE(B) THEN RETURN 0;
+            PREV = B;
+        END;
+    END;
+    RETURN 1;
+END ARC$DECOMP$RLE;
+
+/* ARC method 4: Squeezed (Huffman + RLE) */
+ARC$DECOMP$SQUEEZED: PROCEDURE BYTE;
+    DECLARE (I, B) BYTE;
+    DECLARE (NODE$COUNT, NODE, LEFT, RIGHT, SYMBOL) ADDRESS;
+    DECLARE P ADDRESS;
+    DECLARE DONE BYTE;
+
+    /* Read node count */
+    NODE$COUNT = READ$BITS$LSB(16);
+    IF NODE$COUNT > 256 THEN RETURN 0;
+
+    /* Read Huffman tree */
+    I = 0;
+    DO WHILE I < LOW(NODE$COUNT);
+        P = HUFF$TREE$PTR + SHL(I, 2);
+        /* Read left (16 bits) and right (16 bits) as signed */
+        CALL WRITEWORD(P, READ$BITS$LSB(16));
+        CALL WRITEWORD(P + 2, READ$BITS$LSB(16));
+        I = I + 1;
+    END;
+
+    HUFF$NODES = NODE$COUNT;
+    CALL INIT$RLE;
+
+    /* Decode symbols */
+    DONE = 0;
+    DO WHILE NOT DONE AND INPUT$AVAIL;
+        NODE = 0;
+        DO WHILE NODE < HUFF$NODES;
+            P = HUFF$TREE$PTR + SHL(LOW(NODE), 2);
+            IF READ$BIT$LSB THEN
+                LEFT = READWORD(P + 2);
+            ELSE
+                LEFT = READWORD(P);
+
+            IF (LEFT AND 8000H) <> 0 THEN DO;
+                SYMBOL = NOT LEFT;
+                IF SYMBOL = 256 THEN
+                    DONE = 1;
+                ELSE DO;
+                    IF NOT RLE$DECODE$BYTE(LOW(SYMBOL)) THEN RETURN 0;
+                END;
+                NODE = HUFF$NODES;
+            END;
+            ELSE DO;
+                NODE = LEFT;
+            END;
+        END;
+    END;
+
+    RETURN 1;
+END ARC$DECOMP$SQUEEZED;
+
+/* ARC method 8: LZW with variable codes (LSB first) */
+ARC$DECOMP$LZW8: PROCEDURE BYTE;
+    DECLARE (CODE, PREV$CODE) ADDRESS;
+    DECLARE (FIRST$FLAG, DONE) BYTE;
+    DECLARE FB BYTE;
+    DECLARE MAX$CODE ADDRESS;
+
+    /* First byte is max bits */
+    LZW$MAX$BITS = GETBYTE;
+    IF LZW$MAX$BITS < 9 OR LZW$MAX$BITS > 16 THEN
+        LZW$MAX$BITS = 12;
+
+    CALL INIT$LZW;
+    LZW$NEXT$CODE = 257;  /* ARC uses 256 for clear, 257+ for dict */
+    LZW$CODE$SIZE = 9;
+    CALL INIT$BITS$LSB;
+    CALL INIT$RLE;
+
+    PREV$CODE = 0FFFFH;
+    FIRST$FLAG = 1;
+    DONE = 0;
+
+    DO WHILE NOT DONE AND INPUT$AVAIL;
+        CODE = READ$BITS$LSB(LZW$CODE$SIZE);
+
+        IF CODE = 256 THEN DO;
+            /* Clear code */
+            CALL INIT$LZW;
+            LZW$NEXT$CODE = 257;
+            LZW$CODE$SIZE = 9;
+            PREV$CODE = 0FFFFH;
+            FIRST$FLAG = 1;
+        END;
+        ELSE DO;
+            IF CODE < 256 THEN DO;
+                IF NOT RLE$DECODE$BYTE(LOW(CODE)) THEN RETURN 0;
+                FB = LOW(CODE);
+            END;
+            ELSE IF CODE < LZW$NEXT$CODE THEN DO;
+                FB = LZW$FIRST$BYTE(CODE);
+                IF LZW$OUTPUT(CODE) = 0 THEN RETURN 0;
+            END;
+            ELSE IF CODE = LZW$NEXT$CODE AND PREV$CODE <> 0FFFFH THEN DO;
+                FB = LZW$FIRST$BYTE(PREV$CODE);
+                IF LZW$OUTPUT(PREV$CODE) = 0 THEN RETURN 0;
+                IF NOT RLE$DECODE$BYTE(FB) THEN RETURN 0;
+            END;
+            ELSE DO;
+                DONE = 1;
+            END;
+
+            IF NOT FIRST$FLAG AND PREV$CODE <> 0FFFFH AND NOT DONE THEN DO;
+                IF LZW$NEXT$CODE < SHL(1, LZW$MAX$BITS) THEN DO;
+                    CALL LZW$ADD$ENTRY(PREV$CODE, FB);
+                    /* Increase code size when needed */
+                    MAX$CODE = SHL(1, LZW$CODE$SIZE) - 1;
+                    IF LZW$NEXT$CODE > MAX$CODE AND LZW$CODE$SIZE < LZW$MAX$BITS THEN
+                        LZW$CODE$SIZE = LZW$CODE$SIZE + 1;
+                END;
+            END;
+
+            PREV$CODE = CODE;
+            FIRST$FLAG = 0;
+        END;
+    END;
+
+    RETURN 1;
+END ARC$DECOMP$LZW8;
+
+/* ARC method 5/6: Old LZW (MSB first, 12-bit fixed) */
+ARC$DECOMP$LZW56: PROCEDURE(WITH$RLE) BYTE;
+    DECLARE WITH$RLE BYTE;
+    DECLARE (CODE, PREV$CODE) ADDRESS;
+    DECLARE (FIRST$FLAG, DONE) BYTE;
+    DECLARE FB BYTE;
+
+    CALL INIT$LZW;
+    LZW$NEXT$CODE = 256;  /* Old format starts at 256 */
+    CALL INIT$BITS$MSB;
+    IF WITH$RLE THEN CALL INIT$RLE;
+
+    PREV$CODE = 0FFFFH;
+    FIRST$FLAG = 1;
+    DONE = 0;
+
+    DO WHILE NOT DONE AND INPUT$AVAIL;
+        CODE = READ$CODE$MSB(12);
+
+        IF CODE < 256 THEN DO;
+            IF WITH$RLE THEN DO;
+                IF NOT RLE$DECODE$BYTE(LOW(CODE)) THEN RETURN 0;
+            END;
+            ELSE DO;
+                IF NOT PUTBYTE(LOW(CODE)) THEN RETURN 0;
+            END;
+            FB = LOW(CODE);
+        END;
+        ELSE IF CODE < LZW$NEXT$CODE THEN DO;
+            FB = LZW$FIRST$BYTE(CODE);
+            /* Output string - need special handling for non-RLE */
+            CALL LZW$OUTPUT(CODE);  /* This uses RLE internally, fix if needed */
+        END;
+        ELSE IF CODE = LZW$NEXT$CODE AND PREV$CODE <> 0FFFFH THEN DO;
+            FB = LZW$FIRST$BYTE(PREV$CODE);
+            CALL LZW$OUTPUT(PREV$CODE);
+            IF WITH$RLE THEN DO;
+                IF NOT RLE$DECODE$BYTE(FB) THEN RETURN 0;
+            END;
+            ELSE DO;
+                IF NOT PUTBYTE(FB) THEN RETURN 0;
+            END;
+        END;
+        ELSE DO;
+            DONE = 1;
+        END;
+
+        IF NOT FIRST$FLAG AND PREV$CODE <> 0FFFFH AND NOT DONE THEN DO;
+            IF LZW$NEXT$CODE < 4096 THEN
+                CALL LZW$ADD$ENTRY(PREV$CODE, FB);
+        END;
+
+        PREV$CODE = CODE;
+        FIRST$FLAG = 0;
+    END;
+
+    RETURN 1;
+END ARC$DECOMP$LZW56;
+
+/* ARC method 9: Squashed (13-bit LZW, LSB first, no RLE, no header) */
+ARC$DECOMP$SQUASHED: PROCEDURE BYTE;
+    DECLARE (CODE, PREV$CODE) ADDRESS;
+    DECLARE (FIRST$FLAG, DONE) BYTE;
+    DECLARE FB BYTE;
+    DECLARE MAX$CODE ADDRESS;
+
+    CALL INIT$LZW;
+    LZW$NEXT$CODE = 257;
+    LZW$CODE$SIZE = 9;
+    LZW$MAX$BITS = 13;
+    CALL INIT$BITS$LSB;
+
+    PREV$CODE = 0FFFFH;
+    FIRST$FLAG = 1;
+    DONE = 0;
+
+    DO WHILE NOT DONE AND INPUT$AVAIL;
+        CODE = READ$BITS$LSB(LZW$CODE$SIZE);
+
+        IF CODE = 256 THEN DO;
+            /* Clear */
+            CALL INIT$LZW;
+            LZW$NEXT$CODE = 257;
+            LZW$CODE$SIZE = 9;
+            PREV$CODE = 0FFFFH;
+            FIRST$FLAG = 1;
+        END;
+        ELSE DO;
+            IF CODE < 256 THEN DO;
+                IF NOT PUTBYTE(LOW(CODE)) THEN RETURN 0;
+                FB = LOW(CODE);
+            END;
+            ELSE IF CODE < LZW$NEXT$CODE THEN DO;
+                FB = LZW$FIRST$BYTE(CODE);
+                IF LZW$OUTPUT(CODE) = 0 THEN RETURN 0;
+            END;
+            ELSE IF CODE = LZW$NEXT$CODE AND PREV$CODE <> 0FFFFH THEN DO;
+                FB = LZW$FIRST$BYTE(PREV$CODE);
+                IF LZW$OUTPUT(PREV$CODE) = 0 THEN RETURN 0;
+                IF NOT PUTBYTE(FB) THEN RETURN 0;
+            END;
+            ELSE DO;
+                DONE = 1;
+            END;
+
+            IF NOT FIRST$FLAG AND PREV$CODE <> 0FFFFH AND NOT DONE THEN DO;
+                IF LZW$NEXT$CODE < 8192 THEN DO;
+                    CALL LZW$ADD$ENTRY(PREV$CODE, FB);
+                    MAX$CODE = SHL(1, LZW$CODE$SIZE) - 1;
+                    IF LZW$NEXT$CODE > MAX$CODE AND LZW$CODE$SIZE < 13 THEN
+                        LZW$CODE$SIZE = LZW$CODE$SIZE + 1;
+                END;
+            END;
+
+            PREV$CODE = CODE;
+            FIRST$FLAG = 0;
+        END;
+    END;
+
+    RETURN 1;
+END ARC$DECOMP$SQUASHED;
+
+/* Extract one ARC member */
+EXTRACT$ARC$MEMBER: PROCEDURE BYTE;
+    DECLARE MSG$METHOD DATA('Unsupported ARC method$');
+    DECLARE (I, METHOD) ADDRESS;  /* Use ADDRESS to prevent corruption */
+    DECLARE (COMP$SIZE, ORIG$SIZE) ADDRESS;
+    DECLARE FILENAME (14) BYTE;
+    DECLARE RESULT BYTE;
+
+    /* Read method byte */
+    METHOD = GETBYTE;
+    IF METHOD = 0 THEN RETURN 0;  /* End of archive */
+
+    /* Read filename (13 bytes) - unrolled to avoid loop variable corruption */
+    FILENAME(0) = GETBYTE;
+    FILENAME(1) = GETBYTE;
+    FILENAME(2) = GETBYTE;
+    FILENAME(3) = GETBYTE;
+    FILENAME(4) = GETBYTE;
+    FILENAME(5) = GETBYTE;
+    FILENAME(6) = GETBYTE;
+    FILENAME(7) = GETBYTE;
+    FILENAME(8) = GETBYTE;
+    FILENAME(9) = GETBYTE;
+    FILENAME(10) = GETBYTE;
+    FILENAME(11) = GETBYTE;
+    FILENAME(12) = GETBYTE;
+    FILENAME(13) = 0;
+
+    /* Read compressed size (4 bytes LE) */
+    COMP$SIZE = GETBYTE;
+    COMP$SIZE = COMP$SIZE + SHL(GETBYTE, 8);
+    I = GETBYTE;  /* High word, ignore for now */
+    I = GETBYTE;
+
+    /* Read date/time (4 bytes, skip) */
+    I = GETBYTE;
+    I = GETBYTE;
+    I = GETBYTE;
+    I = GETBYTE;
+
+    /* Read CRC (2 bytes, skip) */
+    I = GETBYTE;
+    I = GETBYTE;
+
+    /* Read original size (4 bytes LE) for method >= 2 */
+    IF METHOD >= 2 THEN DO;
+        ORIG$SIZE = GETBYTE;
+        ORIG$SIZE = ORIG$SIZE + SHL(GETBYTE, 8);
+        I = GETBYTE;
+        I = GETBYTE;
+    END;
+    ELSE DO;
+        ORIG$SIZE = COMP$SIZE;
+    END;
+
+    /* Print filename */
+    CALL PRINTCHAR(' ');
+    CALL PRINTCHAR(' ');
+    I = 0;
+    DO WHILE FILENAME(I) <> 0;
+        CALL PRINTCHAR(FILENAME(I));
+        I = I + 1;
+    END;
+
+    /* Set up output FCB */
+    CALL FILLMEM(OFCB$PTR, 36, 0);
+    I = 0;
+    DO WHILE I < 8 AND FILENAME(I) <> 0 AND FILENAME(I) <> '.';
+        OFCB(I + 1) = FILENAME(I);
+        I = I + 1;
+    END;
+    /* Pad filename with spaces */
+    DO WHILE I < 8;
+        OFCB(I + 1) = ' ';
+        I = I + 1;
+    END;
+    /* Find and copy extension */
+    I = 0;
+    DO WHILE FILENAME(I) <> 0 AND FILENAME(I) <> '.';
+        I = I + 1;
+    END;
+    IF FILENAME(I) = '.' THEN DO;
+        I = I + 1;  /* Skip dot */
+        OFCB(9) = FILENAME(I);
+        IF FILENAME(I) <> 0 THEN I = I + 1;
+        OFCB(10) = FILENAME(I);
+        IF FILENAME(I) <> 0 THEN I = I + 1;
+        OFCB(11) = FILENAME(I);
+    END;
+    ELSE DO;
+        OFCB(9) = ' ';
+        OFCB(10) = ' ';
+        OFCB(11) = ' ';
+    END;
+
+    /* Create output file */
+    CALL DELETEFILE(OFCB$PTR);
+    IF MAKEFILE(OFCB$PTR) = 0FFH THEN DO;
+        CALL PRINTSTR(.(13, 10, 'Cannot create file$'));
+        RETURN 2;  /* Skip but continue */
+    END;
+
+    OUTBUF$POS = 0;
+    RESULT = 1;
+
+    /* Decompress based on method */
+    IF METHOD = 1 OR METHOD = 2 THEN DO;
+        /* Stored */
+        RESULT = ARC$DECOMP$STORED(COMP$SIZE);
+    END;
+    ELSE IF METHOD = 3 THEN DO;
+        /* Packed (RLE) */
+        RESULT = ARC$DECOMP$RLE(COMP$SIZE);
+    END;
+    ELSE IF METHOD = 4 THEN DO;
+        /* Squeezed */
+        CALL INIT$BITS$LSB;
+        RESULT = ARC$DECOMP$SQUEEZED;
+    END;
+    ELSE IF METHOD = 5 THEN DO;
+        /* Old crunched (no RLE) */
+        RESULT = ARC$DECOMP$LZW56(0);
+    END;
+    ELSE IF METHOD = 6 THEN DO;
+        /* Old crunched + RLE */
+        RESULT = ARC$DECOMP$LZW56(1);
+    END;
+    ELSE IF METHOD = 7 OR METHOD = 8 THEN DO;
+        /* Crunched (newer LZW) */
+        RESULT = ARC$DECOMP$LZW8;
+    END;
+    ELSE IF METHOD = 9 THEN DO;
+        /* Squashed */
+        RESULT = ARC$DECOMP$SQUASHED;
+    END;
+    ELSE DO;
+        CALL PRINTSTR(.(13, 10, '  $'));
+        CALL PRINTSTR(.MSG$METHOD);
+        CALL PRINTCHAR(' ');
+        CALL PRINTHEX(METHOD);
+        /* Skip the compressed data */
+        DO WHILE COMP$SIZE > 0;
+            I = GETBYTE;
+            COMP$SIZE = COMP$SIZE - 1;
+        END;
+        CALL CLOSEFILE(OFCB$PTR);
+        RETURN 2;
+    END;
+
+    /* Flush and close output */
+    IF RESULT THEN
+        RESULT = FLUSH$OUTBUF;
+    CALL CLOSEFILE(OFCB$PTR);
+
+    IF RESULT THEN DO;
+        CALL PRINTSTR(.(' OK$'));
+        FILE$COUNT = FILE$COUNT + 1;
+    END;
+    ELSE DO;
+        CALL PRINTSTR(.(13, 10, '  Error$'));
+    END;
+    CALL CRLF;
+
+    RETURN RESULT;
+END EXTRACT$ARC$MEMBER;
+
+/* Extract all files from ARC archive */
+EXTRACT$ARC: PROCEDURE BYTE;
+    DECLARE RESULT BYTE;
+    DECLARE B BYTE;
+
+    FILE$COUNT = 0;
+    INBUF$POS = 0;
+    INBUF$END = 0;
+
+    DO WHILE INPUT$AVAIL;
+        /* Check for ARC marker */
+        B = PEEKBYTE;
+        IF B <> ARC$MARKER THEN
+            RETURN 1;  /* Done */
+
+        B = GETBYTE;  /* Consume marker */
+        B = PEEKBYTE; /* Check method */
+        IF B = 0 THEN
+            RETURN 1;  /* End of archive */
+
+        RESULT = EXTRACT$ARC$MEMBER;
+        IF RESULT = 0 THEN RETURN 0;  /* Error */
+        /* Result = 2 means skip but continue */
+    END;
+
+    RETURN 1;
+END EXTRACT$ARC;
+
+/*========================================================
+ * LBR Archive Support
+ *========================================================*/
+
+/* Extract files from LBR archive */
+EXTRACT$LBR: PROCEDURE BYTE;
+    DECLARE MSG$BADLBR DATA('Invalid LBR file$');
+    DECLARE MSG$NOCREAT DATA(' - cannot create$');
+    DECLARE MSG$OK DATA(' OK$');
+
+    DECLARE (I, J, RESULT) BYTE;
+    DECLARE DIR$SECTORS BYTE;
+    DECLARE ENTRY$NUM ADDRESS;
+    DECLARE MAX$ENTRIES ADDRESS;
+    DECLARE SECTORS$LEFT ADDRESS;
+    DECLARE MEMBER$INDEX ADDRESS;  /* Member start sector */
+    DECLARE MEMBER$LENGTH ADDRESS; /* Member length in sectors */
+
+    /* Pointers for LBR directory entries */
+    DECLARE ENT$PTR ADDRESS;
+    DECLARE ENT BASED ENT$PTR (32) BYTE;
+
+    /* Read and buffer the first sector */
+    INBUF$POS = 0;
+    INBUF$END = 0;
+    IF NOT FILL$INBUF THEN DO;
+        CALL PRINTSTR(.MSG$BADLBR);
+        RETURN 0;
+    END;
+
+    /* Check first entry (directory itself) */
+    ENT$PTR = INBUF$PTR;
+    IF ENT(0) <> 0 THEN DO;
+        CALL PRINTSTR(.MSG$BADLBR);
+        RETURN 0;
+    END;
+
+    /* Get directory size in sectors */
+    DIR$SECTORS = ENT(14);
+    IF DIR$SECTORS = 0 OR DIR$SECTORS > 32 THEN DO;
+        CALL PRINTSTR(.MSG$BADLBR);
+        RETURN 0;
+    END;
+
+    /* Calculate max entries (4 per 128-byte sector) */
+    MAX$ENTRIES = SHL(DIR$SECTORS, 2);
+
+    FILE$COUNT = 0;
+    ENTRY$NUM = 1;  /* Skip first entry (directory itself) */
+
+    DO WHILE ENTRY$NUM < MAX$ENTRIES;
+        /* Calculate entry offset in input buffer */
+        ENT$PTR = INBUF$PTR + SHL(ENTRY$NUM, 5);
+
+        /* Check if we need to read more directory sectors */
+        IF ENT$PTR >= INBUF$PTR + INBUF$END THEN DO;
+            /* Need to read more - but we already buffered 4K */
+            /* This handles up to 128 entries */
+            ENTRY$NUM = MAX$ENTRIES;  /* Exit loop */
+        END;
+        ELSE DO;
+            /* Check entry status */
+            IF ENT(0) = 0FFH THEN DO;
+                /* Unused entry - end of directory */
+                ENTRY$NUM = MAX$ENTRIES;
+            END;
+            ELSE IF ENT(0) = 0 THEN DO;
+                /* Active entry - extract file */
+                CALL PRINTCHAR(' ');
+                CALL PRINTCHAR(' ');
+
+                /* Print filename (bytes 1-8) */
+                J = 1;
+                DO WHILE J <= 8;
+                    IF (ENT(J) AND 07FH) <> ' ' THEN
+                        CALL PRINTCHAR(ENT(J) AND 07FH);
+                    J = J + 1;
+                END;
+
+                /* Print extension if present */
+                IF (ENT(9) AND 07FH) <> ' ' THEN DO;
+                    CALL PRINTCHAR('.');
+                    J = 9;
+                    DO WHILE J <= 11;
+                        IF (ENT(J) AND 07FH) <> ' ' THEN
+                            CALL PRINTCHAR(ENT(J) AND 07FH);
+                        J = J + 1;
+                    END;
+                END;
+
+                /* Check if member has any sectors */
+                /* Save member info BEFORE we overwrite the buffer */
+                MEMBER$INDEX = ENT(12) + SHL(ENT(13), 8);
+                MEMBER$LENGTH = ENT(14) + SHL(ENT(15), 8);
+
+                IF MEMBER$LENGTH <> 0 THEN DO;
+                    /* Set up output FCB */
+                    CALL FILLMEM(OFCB$PTR, 36, 0);
+                    J = 1;
+                    DO WHILE J <= 11;
+                        OFCB(J) = ENT(J) AND 07FH;
+                        J = J + 1;
+                    END;
+
+                    CALL DELETEFILE(OFCB$PTR);
+                    IF MAKEFILE(OFCB$PTR) = 0FFH THEN DO;
+                        CALL PRINTSTR(.MSG$NOCREAT);
+                        CALL CRLF;
+                    END;
+                    ELSE DO;
+                        /* Reset and reopen input file to seek to member */
+                        CALL CLOSEFILE(IFCB$PTR);
+                        CALL COPYMEM(FCB$PTR, IFCB$PTR, 36);
+                        IF OPENFILE(IFCB$PTR) = 0FFH THEN RETURN 0;
+
+                        /* Skip to member start */
+                        CALL SETDMAADDR(DMA$PTR);
+                        SECTORS$LEFT = MEMBER$INDEX;
+                        DO WHILE SECTORS$LEFT <> 0;
+                            RESULT = READFILE(IFCB$PTR);
+                            SECTORS$LEFT = SECTORS$LEFT - 1;
+                        END;
+
+                        /* Refill input buffer at member position */
+                        INBUF$POS = 0;
+                        INBUF$END = 0;
+                        IF NOT FILL$INBUF THEN DO;
+                            CALL CLOSEFILE(OFCB$PTR);
+                            CALL CRLF;
+                            ENTRY$NUM = ENTRY$NUM + 1;
+                            /* Continue to next entry */
+                        END;
+                        ELSE DO;
+                            /* Check for compression magic */
+                            IF INBUF(0) = MAGIC$SQ$HI AND INBUF(1) = MAGIC$SQ$LO THEN DO;
+                                /* Squeezed */
+                                OUTBUF$POS = 0;
+                                IF UNSQUEEZE THEN DO;
+                                    RESULT = FLUSH$OUTBUF;
+                                END;
+                            END;
+                            ELSE IF INBUF(0) = MAGIC$CR$HI AND INBUF(1) = MAGIC$CR$LO THEN DO;
+                                /* Crunched */
+                                OUTBUF$POS = 0;
+                                IF UNCRUNCH THEN DO;
+                                    RESULT = FLUSH$OUTBUF;
+                                END;
+                            END;
+                            ELSE IF INBUF(0) = MAGIC$LZH$HI AND INBUF(1) = MAGIC$LZH$LO THEN DO;
+                                /* CrLZH */
+                                OUTBUF$POS = 0;
+                                IF UNCRLZH THEN DO;
+                                    RESULT = FLUSH$OUTBUF;
+                                END;
+                            END;
+                            ELSE DO;
+                                /* Uncompressed - copy sectors */
+                                SECTORS$LEFT = MEMBER$LENGTH;
+                                /* Use direct sector copy for uncompressed */
+                                DO WHILE SECTORS$LEFT <> 0;
+                                    CALL SETDMAADDR(DMA$PTR);
+                                    IF INBUF$POS < INBUF$END THEN DO;
+                                        /* Copy from buffer */
+                                        CALL COPYMEM(INBUF$PTR + INBUF$POS, DMA$PTR, 128);
+                                        INBUF$POS = INBUF$POS + 128;
+                                    END;
+                                    ELSE DO;
+                                        RESULT = READFILE(IFCB$PTR);
+                                    END;
+                                    IF WRITEFILE(OFCB$PTR) <> 0 THEN
+                                        SECTORS$LEFT = 1;  /* Force exit */
+                                    SECTORS$LEFT = SECTORS$LEFT - 1;
+                                END;
+                            END;
+
+                            CALL CLOSEFILE(OFCB$PTR);
+                            FILE$COUNT = FILE$COUNT + 1;
+                            CALL PRINTSTR(.MSG$OK);
+                            CALL CRLF;
+
+                            /* Reopen and reposition for next entry */
+                            CALL CLOSEFILE(IFCB$PTR);
+                            CALL COPYMEM(FCB$PTR, IFCB$PTR, 36);
+                            IF OPENFILE(IFCB$PTR) = 0FFH THEN RETURN 0;
+                            INBUF$POS = 0;
+                            INBUF$END = 0;
+                            IF NOT FILL$INBUF THEN RETURN 0;
+                        END;
+                    END;
+                END;
+                ELSE DO;
+                    /* Empty member */
+                    CALL CRLF;
+                END;
+            END;
+            /* Else: deleted entry (0xFE), skip it */
+
+            ENTRY$NUM = ENTRY$NUM + 1;
+        END;
+    END;
+
+    RETURN 1;
+END EXTRACT$LBR;
+
+/*========================================================
+ * Single File Decompression
+ *========================================================*/
+
+DECOMPRESS$FILE: PROCEDURE BYTE;
+    DECLARE MSG$CREATING DATA('Creating: $');
+    DECLARE MSG$OK DATA(' OK$');
+    DECLARE MSG$ERR DATA(' Error$');
+    DECLARE (I, J, RESULT) BYTE;
+    DECLARE ORIG$NAME (13) BYTE;
+    DECLARE NAME$POS BYTE;
+
+    /* Read file into buffer */
+    INBUF$POS = 0;
+    INBUF$END = 0;
+    IF NOT FILL$INBUF THEN RETURN 0;
+
+    /* Detect compression type */
+    IF INBUF(0) = MAGIC$SQ$HI AND INBUF(1) = MAGIC$SQ$LO THEN DO;
+        /* Squeezed file - extract original name */
+        /* Skip magic, read name */
+        NAME$POS = 0;
+        I = 2;
+        DO WHILE INBUF(I) <> 0 AND NAME$POS < 12;
+            ORIG$NAME(NAME$POS) = INBUF(I);
+            NAME$POS = NAME$POS + 1;
+            I = I + 1;
+        END;
+        ORIG$NAME(NAME$POS) = 0;
+
+        /* Set up output FCB from original name */
+        CALL FILLMEM(OFCB$PTR, 36, 0);
+        I = 0;
+        J = 1;
+        DO WHILE ORIG$NAME(I) <> 0 AND ORIG$NAME(I) <> '.' AND J <= 8;
+            OFCB(J) = ORIG$NAME(I);
+            I = I + 1;
+            J = J + 1;
+        END;
+        DO WHILE J <= 8;
+            OFCB(J) = ' ';
+            J = J + 1;
+        END;
+        IF ORIG$NAME(I) = '.' THEN DO;
+            I = I + 1;
+            J = 9;
+            DO WHILE ORIG$NAME(I) <> 0 AND J <= 11;
+                OFCB(J) = ORIG$NAME(I);
+                I = I + 1;
+                J = J + 1;
+            END;
+        END;
+        DO WHILE J <= 11;
+            OFCB(J) = ' ';
+            J = J + 1;
+        END;
+
+        CALL PRINTSTR(.MSG$CREATING);
+        I = 0;
+        DO WHILE ORIG$NAME(I) <> 0;
+            CALL PRINTCHAR(ORIG$NAME(I));
+            I = I + 1;
+        END;
+
+        CALL DELETEFILE(OFCB$PTR);
+        IF MAKEFILE(OFCB$PTR) = 0FFH THEN DO;
+            CALL PRINTSTR(.(' - cannot create$'));
+            RETURN 0;
+        END;
+
+        OUTBUF$POS = 0;
+        RESULT = UNSQUEEZE;
+        IF RESULT THEN RESULT = FLUSH$OUTBUF;
+        CALL CLOSEFILE(OFCB$PTR);
+
+        IF RESULT THEN
+            CALL PRINTSTR(.MSG$OK);
+        ELSE
+            CALL PRINTSTR(.MSG$ERR);
+        CALL CRLF;
+        RETURN RESULT;
+    END;
+
+    IF INBUF(0) = MAGIC$CR$HI AND INBUF(1) = MAGIC$CR$LO THEN DO;
+        /* Crunched file - similar to squeeze */
+        NAME$POS = 0;
+        I = 2;
+        DO WHILE INBUF(I) <> 0 AND NAME$POS < 12;
+            ORIG$NAME(NAME$POS) = INBUF(I);
+            NAME$POS = NAME$POS + 1;
+            I = I + 1;
+        END;
+        ORIG$NAME(NAME$POS) = 0;
+
+        CALL FILLMEM(OFCB$PTR, 36, 0);
+        I = 0;
+        J = 1;
+        DO WHILE ORIG$NAME(I) <> 0 AND ORIG$NAME(I) <> '.' AND J <= 8;
+            OFCB(J) = ORIG$NAME(I);
+            I = I + 1;
+            J = J + 1;
+        END;
+        DO WHILE J <= 8;
+            OFCB(J) = ' ';
+            J = J + 1;
+        END;
+        IF ORIG$NAME(I) = '.' THEN DO;
+            I = I + 1;
+            J = 9;
+            DO WHILE ORIG$NAME(I) <> 0 AND J <= 11;
+                OFCB(J) = ORIG$NAME(I);
+                I = I + 1;
+                J = J + 1;
+            END;
+        END;
+        DO WHILE J <= 11;
+            OFCB(J) = ' ';
+            J = J + 1;
+        END;
+
+        CALL PRINTSTR(.MSG$CREATING);
+        I = 0;
+        DO WHILE ORIG$NAME(I) <> 0;
+            CALL PRINTCHAR(ORIG$NAME(I));
+            I = I + 1;
+        END;
+
+        CALL DELETEFILE(OFCB$PTR);
+        IF MAKEFILE(OFCB$PTR) = 0FFH THEN DO;
+            CALL PRINTSTR(.(' - cannot create$'));
+            RETURN 0;
+        END;
+
+        OUTBUF$POS = 0;
+        RESULT = UNCRUNCH;
+        IF RESULT THEN RESULT = FLUSH$OUTBUF;
+        CALL CLOSEFILE(OFCB$PTR);
+
+        IF RESULT THEN
+            CALL PRINTSTR(.MSG$OK);
+        ELSE
+            CALL PRINTSTR(.MSG$ERR);
+        CALL CRLF;
+        RETURN RESULT;
+    END;
+
+    IF INBUF(0) = MAGIC$LZH$HI AND INBUF(1) = MAGIC$LZH$LO THEN DO;
+        /* CrLZH file */
+        NAME$POS = 0;
+        I = 2;
+        DO WHILE INBUF(I) <> 0 AND NAME$POS < 12;
+            ORIG$NAME(NAME$POS) = INBUF(I);
+            NAME$POS = NAME$POS + 1;
+            I = I + 1;
+        END;
+        ORIG$NAME(NAME$POS) = 0;
+
+        CALL FILLMEM(OFCB$PTR, 36, 0);
+        I = 0;
+        J = 1;
+        DO WHILE ORIG$NAME(I) <> 0 AND ORIG$NAME(I) <> '.' AND J <= 8;
+            OFCB(J) = ORIG$NAME(I);
+            I = I + 1;
+            J = J + 1;
+        END;
+        DO WHILE J <= 8;
+            OFCB(J) = ' ';
+            J = J + 1;
+        END;
+        IF ORIG$NAME(I) = '.' THEN DO;
+            I = I + 1;
+            J = 9;
+            DO WHILE ORIG$NAME(I) <> 0 AND J <= 11;
+                OFCB(J) = ORIG$NAME(I);
+                I = I + 1;
+                J = J + 1;
+            END;
+        END;
+        DO WHILE J <= 11;
+            OFCB(J) = ' ';
+            J = J + 1;
+        END;
+
+        CALL PRINTSTR(.MSG$CREATING);
+        I = 0;
+        DO WHILE ORIG$NAME(I) <> 0;
+            CALL PRINTCHAR(ORIG$NAME(I));
+            I = I + 1;
+        END;
+
+        CALL DELETEFILE(OFCB$PTR);
+        IF MAKEFILE(OFCB$PTR) = 0FFH THEN DO;
+            CALL PRINTSTR(.(' - cannot create$'));
+            RETURN 0;
+        END;
+
+        OUTBUF$POS = 0;
+        RESULT = UNCRLZH;
+        IF RESULT THEN RESULT = FLUSH$OUTBUF;
+        CALL CLOSEFILE(OFCB$PTR);
+
+        IF RESULT THEN
+            CALL PRINTSTR(.MSG$OK);
+        ELSE
+            CALL PRINTSTR(.MSG$ERR);
+        CALL CRLF;
+        RETURN RESULT;
+    END;
+
+    /* Unknown format */
+    CALL PRINTSTR(.('Unknown compression format$'));
+    CALL CRLF;
+    RETURN 0;
+END DECOMPRESS$FILE;
+
 /*========================================================
  * Main Program
  *========================================================*/
 
 MAIN: PROCEDURE;
-    /* All DATA declarations inside MAIN to avoid address bugs */
-    DECLARE MSG$BANNER DATA('80UN - CP/M LBR Extractor v1.0$');
-    DECLARE MSG$USAGE DATA('Usage: 80UN filename.LBR$');
+    DECLARE MSG$BANNER DATA('80UN - CP/M Archive Unpacker v2.0$');
+    DECLARE MSG$USAGE DATA('Usage: 80UN filename$');
+    DECLARE MSG$FORMATS DATA('Supports: LBR, ARC, .?Q?, .?Z?, .?Y?$');
     DECLARE MSG$NOOPEN DATA('Cannot open input file$');
-    DECLARE MSG$NOREAD DATA('Cannot read LBR header$');
-    DECLARE MSG$BADLBR DATA('Invalid LBR file$');
-    DECLARE MSG$BADDIR DATA('Invalid directory size$');
-    DECLARE MSG$EXTRACT DATA('Extracting: $');
+    DECLARE MSG$EXTRACT DATA('Extracting:$');
     DECLARE MSG$DONE DATA(' file(s) extracted$');
-    DECLARE MSG$NOCREAT DATA(' - cannot create$');
-    DECLARE MSG$OK DATA(' OK$');
-    /* Hex lookup table for high nibble */
-    DECLARE HI$NIB DATA(
-        '0000000000000000',
-        '1111111111111111',
-        '2222222222222222',
-        '3333333333333333',
-        '4444444444444444',
-        '5555555555555555',
-        '6666666666666666',
-        '7777777777777777',
-        '8888888888888888',
-        '9999999999999999',
-        'AAAAAAAAAAAAAAAA',
-        'BBBBBBBBBBBBBBBB',
-        'CCCCCCCCCCCCCCCC',
-        'DDDDDDDDDDDDDDDD',
-        'EEEEEEEEEEEEEEEE',
-        'FFFFFFFFFFFFFFFF'
-    );
-    DECLARE LO$NIB DATA('0123456789ABCDEF');
+    DECLARE MSG$NOMEM DATA('Insufficient memory$');
 
-    DECLARE (I, J, RESULT) BYTE;
-    DECLARE (DIR$SECTORS, FILE$COUNT) BYTE;
-    DECLARE SECTORS$LEFT ADDRESS;  /* 16-bit sector counter */
-    DECLARE ENTRY$OFF ADDRESS;  /* Offset to current entry */
-
-    /* Use BASED pointers for memory access */
-    DECLARE FCB$PTR ADDRESS;
-    DECLARE FCB BASED FCB$PTR (36) BYTE;
-    DECLARE DMA$PTR ADDRESS;
-    DECLARE DMA BASED DMA$PTR (128) BYTE;
-    DECLARE IFCB$PTR ADDRESS;
-    DECLARE IFCB BASED IFCB$PTR (36) BYTE;
-    DECLARE OFCB$PTR ADDRESS;
-    DECLARE OFCB BASED OFCB$PTR (36) BYTE;
-    /* Pointer to current directory entry */
-    DECLARE ENT$PTR ADDRESS;
-    DECLARE ENT BASED ENT$PTR (32) BYTE;
+    DECLARE (I, RESULT) BYTE;
+    DECLARE EXT (4) BYTE;
+    DECLARE IS$LBR BYTE;
+    DECLARE IS$ARC BYTE;
+    DECLARE MAGIC (2) BYTE;
 
     /* Initialize pointers */
     FCB$PTR = 005CH;
     DMA$PTR = 0080H;
-    IFCB$PTR = 0E00H;   /* Use high memory for working FCBs */
+    IFCB$PTR = 0E00H;
     OFCB$PTR = 0E24H;
+
+    /* Allocate buffers in high memory */
+    /* Memory layout (from 0x0E48):
+     *   INBUF:     4096 bytes (0E48H - 1E47H)
+     *   OUTBUF:    4096 bytes (1E48H - 2E47H)
+     *   HUFF_TREE: 1024 bytes (2E48H - 3247H)
+     *   LZW_PREFIX:8192 bytes (3248H - 5247H)
+     *   LZW_SUFFIX:4096 bytes (5248H - 6247H)
+     *   RING:      4096 bytes (6248H - 7247H)
+     *   WORK:      4096 bytes (7248H - 8247H)
+     * Total: ~29K, leaving ~27K for TPA
+     */
+    INBUF$PTR = 0E48H;
+    INBUF$SIZE = 4096;
+    OUTBUF$PTR = 1E48H;
+    OUTBUF$SIZE = 4096;
+    HUFF$TREE$PTR = 2E48H;
+    LZW$PREFIX$PTR = 3248H;
+    LZW$SUFFIX$PTR = 5248H;
+    RING$PTR = 6248H;
+    WORK$PTR = 7248H;
 
     /* Print banner */
     CALL CRLF;
@@ -192,8 +1887,16 @@ MAIN: PROCEDURE;
         CALL CRLF;
         CALL PRINTSTR(.MSG$USAGE);
         CALL CRLF;
+        CALL PRINTSTR(.MSG$FORMATS);
+        CALL CRLF;
         RETURN;
     END;
+
+    /* Get extension for type detection */
+    EXT(0) = FCB(9) AND 07FH;
+    EXT(1) = FCB(10) AND 07FH;
+    EXT(2) = FCB(11) AND 07FH;
+    EXT(3) = 0;
 
     /* Copy FCB to working area */
     CALL COPYMEM(FCB$PTR, IFCB$PTR, 36);
@@ -208,30 +1911,34 @@ MAIN: PROCEDURE;
         RETURN;
     END;
 
-    /* Read first sector - directory header */
-    IF READFILE(IFCB$PTR) <> 0 THEN DO;
-        CALL CRLF;
-        CALL PRINTSTR(.MSG$NOREAD);
-        CALL CRLF;
+    /* Read first bytes to detect format */
+    INBUF$POS = 0;
+    INBUF$END = 0;
+    IF NOT FILL$INBUF THEN DO;
+        CALL CLOSEFILE(IFCB$PTR);
         RETURN;
     END;
 
-    /* Check first entry (directory itself) */
-    IF DMA(0) <> 0 THEN DO;
-        CALL CRLF;
-        CALL PRINTSTR(.MSG$BADLBR);
-        CALL CRLF;
-        RETURN;
-    END;
+    MAGIC(0) = INBUF(0);
+    MAGIC(1) = INBUF(1);
 
-    /* Get directory size in sectors */
-    DIR$SECTORS = DMA(14);
-    IF DIR$SECTORS = 0 OR DIR$SECTORS > 16 THEN DO;
-        CALL CRLF;
-        CALL PRINTSTR(.MSG$BADDIR);
-        CALL CRLF;
-        RETURN;
-    END;
+    /* Detect format by magic bytes */
+    IS$LBR = 0;
+    IS$ARC = 0;
+
+    /* LBR: First byte = 0x00 (active entry), followed by spaces */
+    IF MAGIC(0) = 0 AND INBUF(1) = ' ' THEN
+        IS$LBR = 1;
+
+    /* ARC: First byte = 0x1A, second = method (1-9) */
+    IF MAGIC(0) = ARC$MARKER AND MAGIC(1) >= 1 AND MAGIC(1) <= 9 THEN
+        IS$ARC = 1;
+
+    /* Also check extension */
+    IF EXT(0) = 'L' AND EXT(1) = 'B' AND EXT(2) = 'R' THEN
+        IS$LBR = 1;
+    IF EXT(0) = 'A' AND EXT(1) = 'R' AND EXT(2) = 'C' THEN
+        IS$ARC = 1;
 
     CALL CRLF;
     CALL PRINTSTR(.MSG$EXTRACT);
@@ -239,107 +1946,40 @@ MAIN: PROCEDURE;
 
     FILE$COUNT = 0;
 
-    /* Process directory entries (4 per sector, skip first) */
-    ENT$PTR = 00A0H;  /* Start at entry 1 = 0x80 + 32 */
-    I = 1;
-    DO WHILE I <= 3;
-
-        /* Check entry status */
-        IF ENT(0) = 0FFH THEN DO;
-            /* Unused entry - end of directory */
-            GO TO DONE;
-        END;
-
-        IF ENT(0) = 0 THEN DO;
-            /* Active entry - extract file */
-            CALL PRINTCHAR(' ');
-            CALL PRINTCHAR(' ');
-
-            /* Print filename (bytes 1-8) */
-            J = 1;
-            DO WHILE J <= 8;
-                IF (ENT(J) AND 07FH) <> ' ' THEN
-                    CALL PRINTCHAR(ENT(J) AND 07FH);
-                J = J + 1;
-            END;
-
-            /* Print extension if present */
-            IF (ENT(9) AND 07FH) <> ' ' THEN DO;
-                CALL PRINTCHAR('.');
-                J = 9;
-                DO WHILE J <= 11;
-                    IF (ENT(J) AND 07FH) <> ' ' THEN
-                        CALL PRINTCHAR(ENT(J) AND 07FH);
-                    J = J + 1;
-                END;
-            END;
-
-            /* Check if member has any sectors (bytes 14-15 = length) */
-            IF ENT(14) <> 0 OR ENT(15) <> 0 THEN DO;
-                /* Set up output FCB */
-                CALL FILLMEM(OFCB$PTR, 36, 0);
-                /* Copy name and extension from directory entry */
-                J = 1;
-                DO WHILE J <= 11;
-                    OFCB(J) = ENT(J) AND 07FH;
-                    J = J + 1;
-                END;
-
-                CALL DELETEFILE(OFCB$PTR);
-                IF MAKEFILE(OFCB$PTR) = 0FFH THEN DO;
-                    CALL PRINTSTR(.MSG$NOCREAT);
-                    CALL CRLF;
-                    GO TO NEXT$ENTRY;
-                END;
-
-                /* Reset and reopen input file */
-                CALL CLOSEFILE(IFCB$PTR);
-                CALL COPYMEM(FCB$PTR, IFCB$PTR, 36);
-                IF OPENFILE(IFCB$PTR) <> 0 THEN RETURN;
-
-                /* Skip to member start */
-                CALL SETDMAADDR(DMA$PTR);
-                SECTORS$LEFT = ENT(12) + SHL(ENT(13), 8);  /* 16-bit index */
-                DO WHILE SECTORS$LEFT <> 0;
-                    RESULT = READFILE(IFCB$PTR);
-                    SECTORS$LEFT = SECTORS$LEFT - 1;
-                END;
-
-                /* Read and write member data */
-                SECTORS$LEFT = ENT(14) + SHL(ENT(15), 8);  /* 16-bit length */
-                DO WHILE SECTORS$LEFT <> 0;
-                    CALL SETDMAADDR(DMA$PTR);
-                    RESULT = READFILE(IFCB$PTR);
-                    IF WRITEFILE(OFCB$PTR) <> 0 THEN
-                        GO TO CLOSE$OUT;
-                    SECTORS$LEFT = SECTORS$LEFT - 1;
-                END;
-
-                CLOSE$OUT:
-                CALL CLOSEFILE(OFCB$PTR);
-                FILE$COUNT = FILE$COUNT + 1;
-                CALL PRINTSTR(.MSG$OK);
-                CALL CRLF;
-
-                /* Reposition for next entry */
-                CALL CLOSEFILE(IFCB$PTR);
-                CALL COPYMEM(FCB$PTR, IFCB$PTR, 36);
-                IF OPENFILE(IFCB$PTR) <> 0 THEN RETURN;
-                CALL SETDMAADDR(DMA$PTR);
-                RESULT = READFILE(IFCB$PTR);
-            END;
-        END;
-        NEXT$ENTRY:
-        ENT$PTR = ENT$PTR + 32;  /* Move to next entry */
-        I = I + 1;
+    /* Close and reopen file to reset position */
+    CALL CLOSEFILE(IFCB$PTR);
+    CALL COPYMEM(FCB$PTR, IFCB$PTR, 36);
+    IF OPENFILE(IFCB$PTR) = 0FFH THEN DO;
+        CALL PRINTSTR(.MSG$NOOPEN);
+        CALL CRLF;
+        RETURN;
     END;
 
-    DONE:
+    IF IS$LBR THEN DO;
+        RESULT = EXTRACT$LBR;
+    END;
+    ELSE IF IS$ARC THEN DO;
+        /* Reset buffer position for ARC */
+        INBUF$POS = 0;
+        INBUF$END = 0;
+        RESULT = EXTRACT$ARC;
+    END;
+    ELSE IF MAGIC(0) = MAGIC$SQ$HI OR MAGIC(0) = MAGIC$CR$HI THEN DO;
+        /* Compressed single file - reread from beginning */
+        INBUF$POS = 0;
+        INBUF$END = 0;
+        RESULT = DECOMPRESS$FILE;
+        IF RESULT THEN FILE$COUNT = 1;
+    END;
+    ELSE DO;
+        /* Unknown format - try as LBR anyway */
+        RESULT = EXTRACT$LBR;
+    END;
+
     CALL CLOSEFILE(IFCB$PTR);
+
     CALL CRLF;
-    /* Print count using lookup table */
-    CALL PRINTCHAR(HI$NIB(FILE$COUNT));
-    CALL PRINTCHAR(LO$NIB(FILE$COUNT AND 0FH));
+    CALL PRINTNUM(FILE$COUNT);
     CALL PRINTSTR(.MSG$DONE);
     CALL CRLF;
 

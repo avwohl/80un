@@ -353,7 +353,7 @@ These compression formats were developed in the early 1980s for CP/M systems:
 
 ## License
 
-MIT License
+GPL v3 License
 
 ## Contributing
 
