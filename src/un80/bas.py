@@ -51,31 +51,31 @@ def unprotect(data: bytes) -> bytes:
     result = bytearray(len(data))
     result[0] = MBASIC_MAGIC  # Replace 0xFE with 0xFF
 
-    # Counters cycle: a_idx 13->1, b_idx 11->1 (1-indexed in original BASIC)
-    # We use 0-indexed here: a_idx 12->0, b_idx 10->0
-    a_idx = 12  # SINCON index (cycles 12 down to 0, resets to 12)
-    b_idx = 10  # ATNCON index (cycles 10 down to 0, resets to 10)
+    # Counters cycle: A 13->1, B 11->1 (1-indexed as in original BASIC)
+    # These are used both as counter values in arithmetic AND as array indices
+    A = 13  # SINCON counter/index (cycles 13 down to 1, resets to 13)
+    B = 11  # ATNCON counter/index (cycles 11 down to 1, resets to 11)
 
     for i in range(1, len(data)):
         x = data[i]
 
-        # Decryption: reverse of encryption
-        # h = (x - (b_idx+1) + 256) % 256
-        # h = h ^ (SINCON[a_idx] ^ ATNCON[b_idx])
-        # h = (h + (a_idx+1)) % 256
-        h = (x - (b_idx + 1) + 256) % 256
-        h = h ^ (SINCON[a_idx] ^ ATNCON[b_idx])
-        h = (h + (a_idx + 1)) % 256
+        # Decryption formula from UNPRO2.BAS:
+        # H% = (X% - B% + 256) MOD 256
+        # H% = H% XOR (SN%(A%) XOR AN%(B%))
+        # H% = (H% + A%) MOD 256
+        h = (x - B + 256) % 256
+        h = h ^ (SINCON[A] ^ ATNCON[B])
+        h = (h + A) % 256
 
         result[i] = h
 
-        # Decrement counters with wraparound
-        a_idx -= 1
-        if a_idx < 0:
-            a_idx = 12
-        b_idx -= 1
-        if b_idx < 0:
-            b_idx = 10
+        # Decrement counters with wraparound (13->1, 11->1)
+        A -= 1
+        if A == 0:
+            A = 13
+        B -= 1
+        if B == 0:
+            B = 11
 
     return bytes(result)
 

@@ -191,27 +191,30 @@ class TestBAS:
         unprotected += bytes([0x00, 0x00])
 
         # Now encrypt it to create a protected version
+        # Encryption is reverse of decryption:
+        # Decrypt: h = ((x - B) XOR key + A) % 256
+        # Encrypt: h = (((x - A) XOR key) + B) % 256
         from un80.bas import SINCON, ATNCON
 
         protected = bytearray(len(unprotected))
         protected[0] = 0xFE
 
-        a_idx = 12
-        b_idx = 10
+        A = 13  # Counter/index cycles 13->1
+        B = 11  # Counter/index cycles 11->1
         for i in range(1, len(unprotected)):
             h = unprotected[i]
-            # Encryption is reverse of decryption
-            h = (h - (a_idx + 1) + 256) % 256
-            h = h ^ (SINCON[a_idx] ^ ATNCON[b_idx])
-            h = (h + (b_idx + 1)) % 256
+            # Encryption formula (reverse of decryption)
+            h = (h - A + 256) % 256
+            h = h ^ (SINCON[A] ^ ATNCON[B])
+            h = (h + B) % 256
             protected[i] = h
 
-            a_idx -= 1
-            if a_idx < 0:
-                a_idx = 12
-            b_idx -= 1
-            if b_idx < 0:
-                b_idx = 10
+            A -= 1
+            if A == 0:
+                A = 13
+            B -= 1
+            if B == 0:
+                B = 11
 
         # Now detokenize should handle the protected file
         output = detokenize(bytes(protected))
