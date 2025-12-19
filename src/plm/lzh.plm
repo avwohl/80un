@@ -1,84 +1,441 @@
 /*
- * lzh.plm - CrLZH Decompression Stub
+ * lzh.plm - CrLZH Decompression
  *
- * NOTE: CrLZH uses adaptive Huffman coding which is too complex
- * to implement in PL/M-80 within reasonable memory constraints.
- * This stub provides basic LZSS decoding that may work for some
- * simple files but will likely fail for most CrLZH archives.
+ * CrLZH uses LZSS compression with adaptive Huffman coding,
+ * derived from LHA's lh1 method. Devised by Roger Warren for CP/M circa 1989.
  *
- * For reliable CrLZH decompression, use:
- * - The Python un80 package
- * - Original UCRLZH20.COM via CP/M emulator
+ * Key parameters:
+ * - N = 2048 byte sliding window (11-bit positions)
+ * - F = 60 max match length
+ * - THRESHOLD = 2 (minimum match length is 3)
+ * - N_CHAR = 315: 256 literals + 1 stop code + 58 lengths
+ * - Adaptive Huffman tree with frequency-based updates
  *
  * Magic: 0x76 0xFD (.?Y? files)
  */
 
-declare cpm$eof literally '01AH';
-declare ring$size literally '4096';
-declare ring$mask literally '0FFFH';
+/* Constants */
+declare lzh$n literally '2048';       /* Ring buffer size */
+declare lzh$n$mask literally '07FFH'; /* N - 1 */
+declare lzh$f literally '60';         /* Max match length */
+declare lzh$threshold literally '2';  /* Min match = threshold + 1 = 3 */
+declare n$char literally '315';       /* 256 + 1 + 58 */
+declare lzh$t literally '629';        /* N_CHAR * 2 - 1 */
+declare lzh$r literally '628';        /* T - 1, root node */
+declare max$freq literally '08000H';  /* Trigger tree reconstruction */
 
 /* External declarations */
-declare ring$ptr address external;
-declare ring based ring$ptr (1) byte;
-declare ring$pos address external;
-declare input$limit address external;
+declare inbuf$ptr address external;
+declare inbuf based inbuf$ptr (1) byte;
+declare inbuf$end address external;
+declare outbuf$ptr address external;
+declare outbuf based outbuf$ptr (1) byte;
+declare outbuf$pos address external;
 
-/* Procedures from common.plm and io.plm - visible when compiled together */
+/* Ring buffer - 2KB */
+declare lzh$ring (lzh$n) byte;
+declare lzh$ring$pos address;
+
+/* Huffman tree arrays */
+declare freq (630) address;    /* T + 1 */
+declare prnt (944) address;    /* T + N_CHAR */
+declare son (629) address;     /* T */
+
+/* Bit reader state (MSB first for CrLZH) */
+declare lzh$pos address;       /* Current input position */
+declare lzh$buf address;       /* Bit buffer (16-bit) */
+declare lzh$buf$len byte;      /* Bits available in buffer */
+
+/* Position decoding tables - initialized by init$lzh */
+declare d$code (256) byte;
+declare d$len (256) byte;
+
+/* Version flag */
+declare use$v2 byte;
 
 /*========================================================
- * CrLZH Decompression (LZSS)
+ * Initialization
+ *========================================================*/
+
+init$lzh$tables: procedure;
+    declare i byte;
+
+    /* D_CODE table: maps byte to upper bits of position */
+    do i = 0 to 31; d$code(i) = 0; end;
+    do i = 32 to 47; d$code(i) = 1; end;
+    do i = 48 to 63; d$code(i) = 2; end;
+    do i = 64 to 79; d$code(i) = 3; end;
+    do i = 80 to 87; d$code(i) = 4; end;
+    do i = 88 to 95; d$code(i) = 5; end;
+    do i = 96 to 103; d$code(i) = 6; end;
+    do i = 104 to 111; d$code(i) = 7; end;
+    do i = 112 to 119; d$code(i) = 8; end;
+    do i = 120 to 127; d$code(i) = 9; end;
+    do i = 128 to 135; d$code(i) = 0AH; end;
+    do i = 136 to 143; d$code(i) = 0BH; end;
+    do i = 144 to 147; d$code(i) = 0CH; end;
+    do i = 148 to 151; d$code(i) = 0DH; end;
+    do i = 152 to 155; d$code(i) = 0EH; end;
+    do i = 156 to 159; d$code(i) = 0FH; end;
+    do i = 160 to 163; d$code(i) = 10H; end;
+    do i = 164 to 167; d$code(i) = 11H; end;
+    do i = 168 to 171; d$code(i) = 12H; end;
+    do i = 172 to 175; d$code(i) = 13H; end;
+    do i = 176 to 179; d$code(i) = 14H; end;
+    do i = 180 to 183; d$code(i) = 15H; end;
+    do i = 184 to 187; d$code(i) = 16H; end;
+    do i = 188 to 191; d$code(i) = 17H; end;
+    d$code(192) = 18H; d$code(193) = 18H;
+    d$code(194) = 19H; d$code(195) = 19H;
+    d$code(196) = 1AH; d$code(197) = 1AH;
+    d$code(198) = 1BH; d$code(199) = 1BH;
+    d$code(200) = 1CH; d$code(201) = 1CH;
+    d$code(202) = 1DH; d$code(203) = 1DH;
+    d$code(204) = 1EH; d$code(205) = 1EH;
+    d$code(206) = 1FH; d$code(207) = 1FH;
+    d$code(208) = 20H; d$code(209) = 20H;
+    d$code(210) = 21H; d$code(211) = 21H;
+    d$code(212) = 22H; d$code(213) = 22H;
+    d$code(214) = 23H; d$code(215) = 23H;
+    d$code(216) = 24H; d$code(217) = 24H;
+    d$code(218) = 25H; d$code(219) = 25H;
+    d$code(220) = 26H; d$code(221) = 26H;
+    d$code(222) = 27H; d$code(223) = 27H;
+    d$code(224) = 28H; d$code(225) = 28H;
+    d$code(226) = 29H; d$code(227) = 29H;
+    d$code(228) = 2AH; d$code(229) = 2AH;
+    d$code(230) = 2BH; d$code(231) = 2BH;
+    d$code(232) = 2CH; d$code(233) = 2CH;
+    d$code(234) = 2DH; d$code(235) = 2DH;
+    d$code(236) = 2EH; d$code(237) = 2EH;
+    d$code(238) = 2FH; d$code(239) = 2FH;
+    do i = 240 to 255; d$code(i) = 30H + (i - 240); end;
+
+    /* D_LEN table: bits needed for each position value */
+    do i = 0 to 31; d$len(i) = 3; end;
+    do i = 32 to 79; d$len(i) = 4; end;
+    do i = 80 to 143; d$len(i) = 5; end;
+    do i = 144 to 191; d$len(i) = 6; end;
+    do i = 192 to 239; d$len(i) = 7; end;
+    do i = 240 to 255; d$len(i) = 8; end;
+end init$lzh$tables;
+
+init$tree: procedure;
+    declare (i, j) address;
+
+    /* Initialize leaf nodes */
+    do i = 0 to n$char - 1;
+        freq(i) = 1;
+        son(i) = i + lzh$t;
+        prnt(i + lzh$t) = i;
+    end;
+
+    /* Build internal nodes */
+    i = 0;
+    j = n$char;
+    do while j <= lzh$r;
+        freq(j) = freq(i) + freq(i + 1);
+        son(j) = i;
+        prnt(i) = j;
+        prnt(i + 1) = j;
+        i = i + 2;
+        j = j + 1;
+    end;
+
+    /* Sentinel */
+    freq(lzh$t) = 0FFFFH;
+    prnt(lzh$r) = 0;
+end init$tree;
+
+/*========================================================
+ * Bit Reader (MSB first)
+ *========================================================*/
+
+lzh$get$bit: procedure byte;
+    declare result byte;
+    declare b byte;
+
+    /* Ensure we have bits */
+    do while lzh$buf$len <= 8;
+        if lzh$pos < inbuf$end then do;
+            b = inbuf(lzh$pos);
+            lzh$pos = lzh$pos + 1;
+        end;
+        else b = 0;
+        lzh$buf = lzh$buf or shl(b, 8 - lzh$buf$len);
+        lzh$buf$len = lzh$buf$len + 8;
+    end;
+
+    /* Extract MSB */
+    result = 0;
+    if (lzh$buf and 8000H) <> 0 then result = 1;
+    lzh$buf = shl(lzh$buf, 1) and 0FFFFH;
+    lzh$buf$len = lzh$buf$len - 1;
+    return result;
+end lzh$get$bit;
+
+lzh$get$byte: procedure byte;
+    declare (result, i) byte;
+    result = 0;
+    do i = 0 to 7;
+        result = shl(result, 1) or lzh$get$bit;
+    end;
+    return result;
+end lzh$get$byte;
+
+/*========================================================
+ * Huffman Tree Operations
+ *========================================================*/
+
+reconst: procedure;
+    declare (i, j, k, l) address;
+    declare f address;
+
+    /* Collect leaf nodes and halve frequencies */
+    j = 0;
+    do i = 0 to lzh$t - 1;
+        if son(i) >= lzh$t then do;
+            freq(j) = (freq(i) + 1) / 2;
+            son(j) = son(i);
+            j = j + 1;
+        end;
+    end;
+
+    /* Rebuild tree by connecting sons */
+    i = 0;
+    j = n$char;
+    do while j < lzh$t;
+        f = freq(i) + freq(i + 1);
+        freq(j) = f;
+
+        /* Find insertion point */
+        k = j - 1;
+        do while k > 0 and f < freq(k);
+            k = k - 1;
+        end;
+        k = k + 1;
+
+        /* Shift arrays down */
+        l = j;
+        do while l > k;
+            freq(l) = freq(l - 1);
+            son(l) = son(l - 1);
+            l = l - 1;
+        end;
+        freq(k) = f;
+        son(k) = i;
+
+        i = i + 2;
+        j = j + 1;
+    end;
+
+    /* Reconnect parent pointers */
+    do i = 0 to lzh$t - 1;
+        k = son(i);
+        if k >= lzh$t then do;
+            prnt(k) = i;
+        end;
+        else do;
+            prnt(k) = i;
+            prnt(k + 1) = i;
+        end;
+    end;
+end reconst;
+
+update$tree: procedure(c);
+    declare c address;
+    declare (k, l, i, j) address;
+
+    if freq(lzh$r) = max$freq then call reconst;
+
+    c = prnt(c + lzh$t);
+    do while c <> 0;
+        freq(c) = freq(c) + 1;
+        k = freq(c);
+
+        /* Check if order is disturbed */
+        l = c + 1;
+        if k > freq(l) then do;
+            /* Find node to swap with */
+            do while k > freq(l + 1);
+                l = l + 1;
+            end;
+
+            /* Swap frequencies */
+            freq(c) = freq(l);
+            freq(l) = k;
+
+            /* Swap children and update parent pointers */
+            i = son(c);
+            prnt(i) = l;
+            if i < lzh$t then prnt(i + 1) = l;
+
+            j = son(l);
+            son(l) = i;
+            prnt(j) = c;
+            if j < lzh$t then prnt(j + 1) = c;
+            son(c) = j;
+
+            c = l;
+        end;
+
+        c = prnt(c);
+    end;
+end update$tree;
+
+decode$char: procedure address;
+    declare c address;
+
+    c = son(lzh$r);
+
+    /* Traverse from root to leaf */
+    do while c < lzh$t;
+        c = c + lzh$get$bit;
+        c = son(c);
+    end;
+
+    c = c - lzh$t;
+    call update$tree(c);
+    return c;
+end decode$char;
+
+/*========================================================
+ * Position Decoding
+ *========================================================*/
+
+decode$pos$v1: procedure address;
+    declare (i, c, j) address;
+
+    /* Read first byte */
+    i = lzh$get$byte;
+
+    /* Upper 6 bits from d_code table */
+    c = shl(d$code(i), 6);
+
+    /* Number of additional bits to read */
+    j = d$len(i) - 2;
+
+    /* Read lower bits */
+    do while j > 0;
+        j = j - 1;
+        i = shl(i, 1) or lzh$get$bit;
+    end;
+
+    /* Combine upper and lower 6 bits */
+    return c or (i and 3FH);
+end decode$pos$v1;
+
+decode$pos$v2: procedure address;
+    declare i byte;
+    declare (dc, dl, extra, accum) address;
+
+    /* Read initial 8-bit value */
+    i = lzh$get$byte;
+
+    /* Look up d_code and d_len */
+    dc = d$code(i);
+    dl = d$len(i);
+
+    /* Number of extra bits: d_len - 3 */
+    if dl > 3 then extra = dl - 3; else extra = 0;
+
+    /* Accumulate extra bits */
+    accum = i;
+    do while extra > 0;
+        accum = shl(accum, 1) or lzh$get$bit;
+        extra = extra - 1;
+    end;
+
+    /* Final position: d_code in upper bits, lower 5 bits */
+    return shl(dc, 5) or (accum and 1FH);
+end decode$pos$v2;
+
+/*========================================================
+ * Main Decompression
  *========================================================*/
 
 uncrlzh: procedure byte public;
-    declare (b, i) byte;
-    declare (offset, length) address;
-    declare done byte;
-    declare rb byte;
-    declare rp address;
+    declare (c, pos, match$len, src) address;
+    declare (i, ver1, ver2) byte;
+    declare b byte;
 
-    /* Magic already verified, skip it */
-    b = getbyte;  /* 76 */
-    b = getbyte;  /* FD */
+    /* Initialize tables */
+    call init$lzh$tables;
+
+    /* Skip magic bytes (already verified) */
+    lzh$pos = 2;
 
     /* Skip original filename (null-terminated) */
-    do while (b := getbyte) <> 0 and b <> cpm$eof;
+    do while lzh$pos < inbuf$end and inbuf(lzh$pos) <> 0;
+        lzh$pos = lzh$pos + 1;
     end;
+    lzh$pos = lzh$pos + 1;  /* Skip null */
 
-    /* Initialize ring buffer and bit reader */
-    call fillmem(ring$ptr, ring$size, ' ');
-    ring$pos = ring$size - 18;  /* Standard initial position */
-    call init$bits$lsb;
+    /* Initialize bit reader */
+    lzh$buf = 0;
+    lzh$buf$len = 0;
 
-    done = 0;
-    do while not done and input$avail;
-        /* Read flag bit: 1 = literal, 0 = match */
-        if read$bit$lsb then do;
+    /* Read version bytes */
+    ver1 = lzh$get$byte;
+    ver2 = lzh$get$byte;
+
+    /* Check version */
+    if ver1 >= 21H then return 0;  /* Unsupported */
+
+    /* Select position decoder */
+    use$v2 = 0;
+    if ver1 >= 20H then use$v2 = 1;
+
+    /* Skip 2 more header bytes */
+    b = lzh$get$byte;
+    b = lzh$get$byte;
+
+    /* Initialize Huffman tree */
+    call init$tree;
+
+    /* Initialize ring buffer with spaces */
+    call fillmem(.lzh$ring, lzh$n, ' ');
+
+    /* Initial position: N - F = 2048 - 60 = 1988 */
+    lzh$ring$pos = lzh$n - lzh$f;
+    outbuf$pos = 0;
+
+    /* Main decode loop */
+    do while 1;
+        c = decode$char;
+
+        if c < 256 then do;
             /* Literal byte */
-            b = low(read$bits$lsb(8));
-            if not putbyte(b) then return 0;
-            ring(ring$pos) = b;
-            ring$pos = (ring$pos + 1) and ring$mask;
+            outbuf(outbuf$pos) = low(c);
+            outbuf$pos = outbuf$pos + 1;
+            lzh$ring(lzh$ring$pos) = low(c);
+            lzh$ring$pos = (lzh$ring$pos + 1) and lzh$n$mask;
+        end;
+        else if c = 256 then do;
+            /* Stop code */
+            return 1;
         end;
         else do;
-            /* Match: 12-bit offset, 4-bit length */
-            offset = read$bits$lsb(12);
-            length = read$bits$lsb(4) + 3;
+            /* Match reference: length = c - 254 */
+            match$len = c - 254;
 
-            /* Check for end marker */
-            if offset = 0 and length = 3 then do;
-                done = 1;
-            end;
-            else do;
-                /* Copy from ring buffer */
-                i = 0;
-                do while i < low(length);
-                    rp = (offset + i) and ring$mask;
-                    rb = ring(rp);
-                    if not putbyte(rb) then return 0;
-                    ring(ring$pos) = rb;
-                    ring$pos = (ring$pos + 1) and ring$mask;
-                    i = i + 1;
-                end;
+            /* Decode position */
+            if use$v2 then
+                pos = decode$pos$v2;
+            else
+                pos = decode$pos$v1;
+
+            /* Calculate source position: (ring_pos - pos - 1) & mask */
+            src = (lzh$ring$pos - pos - 1) and lzh$n$mask;
+
+            /* Copy from ring buffer */
+            do i = 0 to low(match$len) - 1;
+                b = lzh$ring(src);
+                outbuf(outbuf$pos) = b;
+                outbuf$pos = outbuf$pos + 1;
+                lzh$ring(lzh$ring$pos) = b;
+                lzh$ring$pos = (lzh$ring$pos + 1) and lzh$n$mask;
+                src = (src + 1) and lzh$n$mask;
             end;
         end;
     end;
