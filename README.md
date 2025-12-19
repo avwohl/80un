@@ -54,7 +54,7 @@ Requires Python 3.8 or later. No external dependencies.
 |--------|------------|-------------|-------------|
 | **Squeeze** | `.?q?` | `76 FF` | Huffman coding with run-length encoding. Devised by Richard Greenlaw, 1981. |
 | **Crunch** | `.?z?` | `76 FE` | LZW compression similar to Unix compress. More efficient than squeeze. |
-| **CrLZH** | `.?y?` | `76 FD` | LZH compression (Lempel-Ziv + Huffman). Most efficient CP/M compression. |
+| **CrLZH** | `.?y?` | `76 FD` | LZH compression (Lempel-Ziv + Huffman). Most efficient CP/M compression. (Experimental) |
 
 ### CP/M File Naming Convention
 
@@ -334,6 +334,10 @@ The file may be corrupted, truncated, or not actually in the detected format. Tr
 2. Try a different format with `-f`
 3. Check if it's a different vintage format not yet supported
 
+### CrLZH decompression produces partial or garbled output
+
+CrLZH support is experimental. The exact position encoding algorithm used by CrLZH is not fully documented, and some files may not decompress correctly. The original CP/M utilities (UCRLZH20.COM) can be used as a fallback via an emulator.
+
 ### Files extract with wrong names
 
 Some very old archives don't store original filenames. The tool will use the archive member name with the compression indicator removed.
@@ -480,6 +484,13 @@ PL/M-80 source is in `src/plm/`:
 - Z80 processor
 
 ---
+
+## Test Files and Resources
+
+Sample archives for testing can be found at:
+
+- [Zimmers.net CP/M Archivers](https://www.zimmers.net/anonftp/pub/cpm/archivers/) - ARK, LBR, CrLZH tools and archives
+- [Chaos Cottage BBS CP/M Files](https://www.chiark.greenend.org.uk/~jacobn/cpm/cpmfiles.html) - Various CP/M archives including ARK and LZH samples
 
 ## See Also
 

@@ -1,16 +1,56 @@
 """
 CrLZH decompression for CP/M files.
 
-CrLZH uses LZH (Lempel-Ziv-Huffman) compression, combining
-LZ77 with Huffman coding. It superseded both squeeze and crunch.
+CrLZH uses LZSS compression with adaptive Huffman coding, similar to
+LHA's lh1 method. Devised by Roger Warren for CP/M circa 1989.
 
 File format:
 - Magic: 0x76 0xFD
-- Original filename: null-terminated string
-- Compressed data using LZSS + Huffman
+- Original filename (null-terminated, may include BBS stamp)
+- 4 bytes: padding/version info
+- Compressed data using LZSS + adaptive Huffman
+
+Key parameters:
+- 315 symbols: 256 literals + 1 stop code + 58 lengths (3-60)
+- Symbol 256 = stop code
+- Symbols 257-314 = match lengths (3-60 bytes)
+- Adaptive Huffman tree with frequency-based updates
+- 256-byte sliding window with 8-bit position encoding
+
+EXPERIMENTAL: CrLZH v2.0 uses a position encoding algorithm that differs
+from the standard LZHUF implementation. The original CrLZH source code
+(circa 1989-1991) is not fully accessible, and the exact algorithm is
+not documented. This implementation correctly handles the Huffman coding
+but may produce incorrect output for files with match references.
+
+For reliable decompression, use the original UCRLZH20.COM via a CP/M
+emulator (available on the Walnut Creek CP/M CD-ROM).
 """
 
 CRLZH_MAGIC = 0x76FD
+
+# Buffer size for sliding window
+# CrLZH v2.0 documentation mentions "file limit changed to 256"
+N = 256
+N_MASK = N - 1
+
+# Lookahead buffer size (max match length)
+F = 60
+
+# Minimum match length to encode as reference
+THRESHOLD = 2
+
+# Number of character codes: 256 literals + 1 stop + 58 lengths = 315
+N_CHAR = 256 + 1 + (F - THRESHOLD)  # 315
+
+# Huffman tree size
+T = N_CHAR * 2 - 1  # 629
+
+# Root of Huffman tree
+R = T - 1  # 628
+
+# Maximum frequency before tree reconstruction
+MAX_FREQ = 0x8000
 
 
 class CrLZHError(Exception):
@@ -18,96 +58,238 @@ class CrLZHError(Exception):
 
 
 class BitReader:
-    """Read bits from a byte stream, LSB first."""
+    """Read bits from a byte stream, MSB first."""
 
     def __init__(self, data: bytes, offset: int = 0):
         self.data = data
         self.pos = offset
-        self.bit_buffer = 0
-        self.bits_in_buffer = 0
+        self.buf = 0
+        self.buf_len = 0
 
-    def read_bits(self, count: int) -> int:
-        """Read specified number of bits."""
-        while self.bits_in_buffer < count:
-            if self.pos >= len(self.data):
-                raise CrLZHError("Unexpected end of data")
-            self.bit_buffer |= self.data[self.pos] << self.bits_in_buffer
-            self.pos += 1
-            self.bits_in_buffer += 8
+    def get_bit(self) -> int:
+        """Get one bit."""
+        while self.buf_len <= 8:
+            if self.pos < len(self.data):
+                byte = self.data[self.pos]
+                self.pos += 1
+            else:
+                byte = 0
+            self.buf |= byte << (8 - self.buf_len)
+            self.buf_len += 8
 
-        result = self.bit_buffer & ((1 << count) - 1)
-        self.bit_buffer >>= count
-        self.bits_in_buffer -= count
+        result = 1 if self.buf & 0x8000 else 0
+        self.buf = (self.buf << 1) & 0xFFFF
+        self.buf_len -= 1
         return result
 
-    def read_bit(self) -> int:
-        return self.read_bits(1)
+    def get_bits(self, count: int) -> int:
+        """Get multiple bits MSB first."""
+        result = 0
+        for _ in range(count):
+            result = (result << 1) | self.get_bit()
+        return result
+
+    def get_byte(self) -> int:
+        """Get 8 bits as a byte."""
+        return self.get_bits(8)
 
 
-def decode_huffman_table(bits: BitReader, count: int) -> list[int]:
+def decode_position(bits: BitReader) -> int:
     """
-    Decode a Huffman code length table.
+    Decode position for CrLZH.
 
-    Returns list of code lengths for each symbol.
+    With N=256, uses simple 8-bit position encoding.
     """
-    lengths = []
-    i = 0
-    while i < count:
-        code_len = bits.read_bits(4)
-        if code_len == 15:
-            # Run of zeros
-            run = bits.read_bits(4) + 1
-            lengths.extend([0] * run)
-            i += run
-        else:
-            lengths.append(code_len)
-            i += 1
-    return lengths[:count]
+    return bits.get_byte()
 
 
-def build_huffman_decoder(lengths: list[int]) -> dict[tuple[int, int], int]:
+class HuffmanTree:
+    """Adaptive Huffman tree for CrLZH decompression."""
+
+    def __init__(self):
+        # Frequency table for each node
+        self.freq = [0] * (T + 1)
+
+        # Parent pointers: prnt[T..T+N_CHAR-1] map codes to leaf positions
+        self.prnt = [0] * (T + N_CHAR)
+
+        # Child pointers: son[i] and son[i]+1 are children of node i
+        self.son = [0] * T
+
+        self._init_tree()
+
+    def _init_tree(self):
+        """Initialize tree with uniform frequencies."""
+        # Initialize leaf nodes
+        for i in range(N_CHAR):
+            self.freq[i] = 1
+            self.son[i] = i + T
+            self.prnt[i + T] = i
+
+        # Build internal nodes
+        i = 0
+        j = N_CHAR
+        while j <= R:
+            self.freq[j] = self.freq[i] + self.freq[i + 1]
+            self.son[j] = i
+            self.prnt[i] = self.prnt[i + 1] = j
+            i += 2
+            j += 1
+
+        # Sentinel
+        self.freq[T] = 0xFFFF
+        self.prnt[R] = 0
+
+    def _reconst(self):
+        """Reconstruct tree when frequency counter saturates."""
+        # Collect leaf nodes and halve frequencies
+        j = 0
+        for i in range(T):
+            if self.son[i] >= T:
+                self.freq[j] = (self.freq[i] + 1) // 2
+                self.son[j] = self.son[i]
+                j += 1
+
+        # Rebuild tree by connecting sons
+        i = 0
+        j = N_CHAR
+        while j < T:
+            k = i + 1
+            f = self.freq[j] = self.freq[i] + self.freq[k]
+
+            # Find insertion point
+            k = j - 1
+            while f < self.freq[k]:
+                k -= 1
+            k += 1
+
+            # Shift arrays
+            l = j - k
+            self.freq[k + 1:j + 1] = self.freq[k:j]
+            self.freq[k] = f
+            self.son[k + 1:j + 1] = self.son[k:j]
+            self.son[k] = i
+
+            i += 2
+            j += 1
+
+        # Reconnect parent pointers
+        for i in range(T):
+            k = self.son[i]
+            if k >= T:
+                self.prnt[k] = i
+            else:
+                self.prnt[k] = self.prnt[k + 1] = i
+
+    def update(self, c: int):
+        """Increment frequency of given code and update tree."""
+        if self.freq[R] == MAX_FREQ:
+            self._reconst()
+
+        c = self.prnt[c + T]
+        while True:
+            self.freq[c] += 1
+            k = self.freq[c]
+
+            # Check if order is disturbed
+            l = c + 1
+            if k > self.freq[l]:
+                # Find node to swap with
+                while k > self.freq[l + 1]:
+                    l += 1
+
+                # Swap frequencies
+                self.freq[c] = self.freq[l]
+                self.freq[l] = k
+
+                # Swap children and update parent pointers
+                i = self.son[c]
+                self.prnt[i] = l
+                if i < T:
+                    self.prnt[i + 1] = l
+
+                j = self.son[l]
+                self.son[l] = i
+                self.prnt[j] = c
+                if j < T:
+                    self.prnt[j + 1] = c
+                self.son[c] = j
+
+                c = l
+
+            c = self.prnt[c]
+            if c == 0:
+                break
+
+    def decode_char(self, bits: BitReader) -> int:
+        """Decode one character from bit stream."""
+        c = self.son[R]
+
+        # Traverse from root to leaf
+        while c < T:
+            c += bits.get_bit()
+            c = self.son[c]
+
+        c -= T
+        self.update(c)
+        return c
+
+
+def parse_header(data: bytes) -> tuple[str | None, int]:
     """
-    Build a Huffman decoder from code lengths.
+    Parse CrLZH header and return (filename, data_offset).
 
-    Returns a dict mapping (code, length) to symbol.
+    Header format:
+    - 0x76 0xFD magic
+    - Filename (null-terminated, may include BBS stamp)
+    - 4 bytes padding/version
+    - Compressed data
     """
-    if not lengths or max(lengths) == 0:
-        return {}
+    if len(data) < 4:
+        raise CrLZHError("Data too short")
 
-    max_len = max(lengths)
-    decoder = {}
+    # Check magic
+    if data[0] != 0x76 or data[1] != 0xFD:
+        raise CrLZHError(f"Invalid magic: 0x{data[0]:02X}{data[1]:02X}")
 
-    # Count codes of each length
-    bl_count = [0] * (max_len + 1)
-    for length in lengths:
-        if length > 0:
-            bl_count[length] += 1
+    # Find null terminator for filename
+    pos = 2
+    filename_end = pos
+    while pos < len(data) and data[pos] != 0:
+        # Check for high bit marking end of original filename
+        if data[pos] & 0x80:
+            if filename_end == 2:  # First high-bit char is end of filename
+                filename_end = pos + 1
+        pos += 1
 
-    # Calculate starting codes for each length
-    code = 0
-    next_code = [0] * (max_len + 1)
-    for bits in range(1, max_len + 1):
-        code = (code + bl_count[bits - 1]) << 1
-        next_code[bits] = code
+    if pos >= len(data):
+        raise CrLZHError("No null terminator in header")
 
-    # Assign codes to symbols
-    for symbol, length in enumerate(lengths):
-        if length > 0:
-            decoder[(next_code[length], length)] = symbol
-            next_code[length] += 1
+    # Extract filename (strip BBS stamp if present)
+    filename_bytes = data[2:filename_end] if filename_end > 2 else data[2:pos]
 
-    return decoder
+    # Clear high bit on last character if set
+    if filename_bytes and filename_bytes[-1] & 0x80:
+        filename_bytes = filename_bytes[:-1] + bytes([filename_bytes[-1] & 0x7F])
 
+    try:
+        filename = filename_bytes.decode('ascii').strip()
+        # Remove any BBS stamp in brackets
+        if '[' in filename:
+            filename = filename[:filename.index('[')].strip()
+    except (UnicodeDecodeError, ValueError):
+        filename = None
 
-def decode_symbol(bits: BitReader, decoder: dict[tuple[int, int], int], max_len: int) -> int:
-    """Decode one symbol using Huffman decoder."""
-    code = 0
-    for length in range(1, max_len + 1):
-        code = (code << 1) | bits.read_bit()
-        if (code, length) in decoder:
-            return decoder[(code, length)]
+    # Skip null terminator
+    pos += 1
 
-    raise CrLZHError("Invalid Huffman code")
+    # Skip 4 bytes of padding/version info if present
+    if pos + 4 <= len(data):
+        # Check if this looks like padding (spaces or low bytes)
+        if all(b < 0x20 or b == 0x20 for b in data[pos:pos + 4]):
+            pos += 4
+
+    return filename, pos
 
 
 def uncrlzh(data: bytes) -> bytes:
@@ -123,65 +305,50 @@ def uncrlzh(data: bytes) -> bytes:
     Raises:
         CrLZHError: If decompression fails
     """
-    if len(data) < 4:
-        raise CrLZHError("Data too short")
+    filename, data_offset = parse_header(data)
 
-    # Check magic
-    magic = (data[0] << 8) | data[1]
-    if magic != CRLZH_MAGIC:
-        raise CrLZHError(f"Invalid magic: 0x{magic:04X}, expected 0x{CRLZH_MAGIC:04X}")
-
-    pos = 2
-
-    # Skip original filename (null-terminated)
-    while pos < len(data) and data[pos] != 0:
-        pos += 1
-    pos += 1  # Skip null terminator
-
-    if pos >= len(data):
-        raise CrLZHError("No data after filename")
-
-    # CrLZH uses LZSS with Huffman coding
-    # The exact format varies between implementations
-
-    bits = BitReader(data, pos)
+    # Initialize
+    bits = BitReader(data, data_offset)
+    tree = HuffmanTree()
     result = bytearray()
 
-    # Ring buffer for LZSS back-references
-    RING_SIZE = 4096
-    RING_MASK = RING_SIZE - 1
-    ring = bytearray(RING_SIZE)
-    ring_pos = RING_SIZE - 18  # Typical initial position
+    # Sliding window buffer, initialized to spaces (like CP/M)
+    text_buf = bytearray(b' ' * N)
+    r = N - F  # Current position in buffer
 
-    try:
-        while True:
-            # Read flag bit: 1 = literal, 0 = match
-            if bits.read_bit():
-                # Literal byte
-                byte = bits.read_bits(8)
-                result.append(byte)
-                ring[ring_pos] = byte
-                ring_pos = (ring_pos + 1) & RING_MASK
-            else:
-                # Match: read offset and length
-                # Offset is typically 12 bits, length 4 bits
-                offset = bits.read_bits(12)
-                length = bits.read_bits(4) + 3  # Minimum match length is 3
+    # Main decode loop
+    while True:
+        c = tree.decode_char(bits)
 
-                # Copy from ring buffer
-                for _ in range(length):
-                    byte = ring[(offset + _) & RING_MASK]
-                    result.append(byte)
-                    ring[ring_pos] = byte
-                    ring_pos = (ring_pos + 1) & RING_MASK
+        if c < 256:
+            # Literal byte
+            result.append(c)
+            text_buf[r] = c
+            r = (r + 1) & N_MASK
 
-                # Check for end marker (offset 0, length 0)
-                if offset == 0 and length == 3:
-                    break
+        elif c == 256:
+            # Stop code
+            break
 
-    except CrLZHError:
-        # End of data
-        pass
+        else:
+            # Match reference: c encodes length
+            # Length = c - 256 + THRESHOLD + 1 = c - 254
+            # (symbols 257-314 encode lengths 3-60)
+            match_len = c - 254
+
+            # Decode position using LZHUF-style encoding
+            pos = decode_position(bits)
+
+            # Calculate source position in ring buffer
+            i = (r - pos - 1) & N_MASK
+
+            # Copy from buffer
+            for _ in range(match_len):
+                c = text_buf[i]
+                result.append(c)
+                text_buf[r] = c
+                r = (r + 1) & N_MASK
+                i = (i + 1) & N_MASK
 
     return bytes(result)
 
@@ -196,22 +363,8 @@ def get_crlzh_filename(data: bytes) -> str | None:
     Returns:
         Original filename or None if not valid
     """
-    if len(data) < 4:
-        return None
-
-    magic = (data[0] << 8) | data[1]
-    if magic != CRLZH_MAGIC:
-        return None
-
-    pos = 2
-    end = pos
-    while end < len(data) and data[end] != 0:
-        end += 1
-
-    if end == pos or end >= len(data):
-        return None
-
     try:
-        return data[pos:end].decode('ascii')
-    except UnicodeDecodeError:
+        filename, _ = parse_header(data)
+        return filename if filename else None
+    except CrLZHError:
         return None
