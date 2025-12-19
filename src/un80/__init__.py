@@ -9,7 +9,7 @@ Supports:
 - .?y? - CrLZH files (LZH)
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from .squeeze import unsqueeze
 from .crunch import uncrunch
