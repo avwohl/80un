@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "80un"
-version = "0.2.1"
+version = "0.2.2"
 description = "Unpacker for CP/M compression and packing formats"
 readme = "README.md"
 license = {text = "MIT"}
