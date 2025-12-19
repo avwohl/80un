@@ -398,7 +398,7 @@ make clean      # Remove build artifacts
 
 ### Source Files
 
-The PL/M-80 source is split into modules:
+PL/M-80 source is in `src/plm/`:
 
 | File | Purpose |
 |------|---------|

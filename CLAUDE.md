@@ -12,16 +12,16 @@ All tools are sister projects in ~/src/:
 ## Build Instructions
 
 ```bash
-uplm80 80un.plm -o 80un.mac
-um80 80un.mac -o 80un.rel
-ul80 -o 80un.com 80un.rel
+make          # Build 80un.com
+make test     # Test with LBR archive
+make test-arc # Test with ARC archive
+make clean    # Remove intermediate files
 ```
 
-## Testing
+## Source Layout
 
-```bash
-~/src/cpmemu/src/cpmemu 80un.com test.lbr
-```
+- `src/plm/` - PL/M-80 source files
+- `src/un80/` - Python package
 
 ## Documentation
 

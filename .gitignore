@@ -6,6 +6,10 @@
 # Test binaries (but not 80un.com which we distribute)
 tests/*.com
 
+# Python
+__pycache__/
+*.pyc
+
 # Editor backups
 *~
 *.bak
