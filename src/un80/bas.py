@@ -109,6 +109,10 @@ def _needs_space_before(token: str, prev_token: str) -> bool:
     if not prev_token:
         return False
 
+    # If previous token was a space, don't add another
+    if prev_token == ' ':
+        return False
+
     operators = {'+', '-', '*', '/', '^', '\\', '=', '<', '>', '(', ')', ',', ';', ':', '$', '%', '!', '#'}
 
     if token == "ARK" and prev_token == "REM":
