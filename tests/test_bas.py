@@ -1,7 +1,10 @@
 """Tests for tokenized BASIC file handling."""
 
 import pytest
-from un80.bas import is_tokenized_basic, detokenize, detokenize_bytes, MBASIC_MAGIC
+from un80.bas import (
+    is_tokenized_basic, is_protected_basic, unprotect,
+    detokenize, detokenize_bytes, MBASIC_MAGIC, MBASIC_PROTECTED_MAGIC
+)
 
 
 class TestBAS:
@@ -131,3 +134,86 @@ class TestBAS:
         data = b'10 PRINT "HELLO"\n20 END\n'
         output = detokenize(data)
         assert output == data.decode('latin-1')
+
+    def test_protected_magic_constant(self):
+        """Verify protected MBASIC magic constant."""
+        assert MBASIC_PROTECTED_MAGIC == 0xFE
+
+    def test_is_protected_basic_true(self):
+        """Test detection of protected BASIC file."""
+        data = bytes([0xFE, 0x00, 0x00])
+        assert is_protected_basic(data) is True
+        assert is_tokenized_basic(data) is True  # Should also be detected as tokenized
+
+    def test_is_protected_basic_false(self):
+        """Test that unprotected files are not detected as protected."""
+        data = bytes([0xFF, 0x00, 0x00])
+        assert is_protected_basic(data) is False
+        assert is_tokenized_basic(data) is True
+
+    def test_unprotect_already_unprotected(self):
+        """Test that unprotect passes through unprotected files."""
+        data = bytes([0xFF, 0x01, 0x02, 0x03])
+        result = unprotect(data)
+        assert result == data
+
+    def test_unprotect_changes_magic(self):
+        """Test that unprotect changes 0xFE to 0xFF."""
+        # Create a minimal protected file
+        data = bytes([0xFE, 0x00, 0x00])
+        result = unprotect(data)
+        assert result[0] == 0xFF
+
+    def test_unprotect_143_byte_cycle(self):
+        """Test that the unprotect algorithm has a 143-byte cycle (11 * 13)."""
+        # The XOR pattern repeats every 143 bytes
+        # Create a file with repeated 0x00 bytes after the magic
+        data = bytes([0xFE]) + bytes(286)  # 2 full cycles
+        result = unprotect(data)
+
+        # After decryption, positions 1 and 144 should have the same transformation
+        # (since 143 is the cycle length)
+        # We verify by checking the pattern repeats
+        cycle1 = result[1:144]
+        cycle2 = result[144:287]
+        assert cycle1 == cycle2
+
+    def test_detokenize_protected_file(self):
+        """Test that detokenize automatically handles protected files."""
+        import struct
+
+        # Build an unprotected program first
+        unprotected = bytes([0xFF])
+        line_tokens = bytes([0x81, 0x00])  # END
+        line_num = struct.pack('<H', 10)
+        line_link = struct.pack('<H', 0x101 + 2 + 2 + len(line_tokens))
+        unprotected += line_link + line_num + line_tokens
+        unprotected += bytes([0x00, 0x00])
+
+        # Now encrypt it to create a protected version
+        from un80.bas import SINCON, ATNCON
+
+        protected = bytearray(len(unprotected))
+        protected[0] = 0xFE
+
+        a_idx = 12
+        b_idx = 10
+        for i in range(1, len(unprotected)):
+            h = unprotected[i]
+            # Encryption is reverse of decryption
+            h = (h - (a_idx + 1) + 256) % 256
+            h = h ^ (SINCON[a_idx] ^ ATNCON[b_idx])
+            h = (h + (b_idx + 1)) % 256
+            protected[i] = h
+
+            a_idx -= 1
+            if a_idx < 0:
+                a_idx = 12
+            b_idx -= 1
+            if b_idx < 0:
+                b_idx = 10
+
+        # Now detokenize should handle the protected file
+        output = detokenize(bytes(protected))
+        assert '10' in output
+        assert 'END' in output

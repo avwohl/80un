@@ -2,21 +2,82 @@
 MBASIC tokenized BASIC file detokenizer.
 
 This module converts tokenized MBASIC-80 programs (.BAS files starting with 0xFF)
-back to ASCII text format.
+back to ASCII text format. Also handles protected/encrypted files (0xFE magic).
 
 Based on the MBASIC 5.21 token tables.
+Protected file decryption based on w4jbm/MBASIC-Protect research.
 """
 
 from io import StringIO
 from typing import Dict
 
-# Magic byte for tokenized MBASIC files
+# Magic bytes for tokenized MBASIC files
 MBASIC_MAGIC = 0xFF
+MBASIC_PROTECTED_MAGIC = 0xFE
+
+# SINCON and ATNCON tables from MBASIC ROM (used for protection XOR)
+# These are the sine and arctangent coefficient tables reused as encryption keys
+SINCON = [5, 251, 215, 30, 134, 101, 38, 153, 135, 88, 52, 35, 135, 225, 93, 165]
+ATNCON = [9, 74, 215, 59, 120, 2, 110, 132, 123, 254, 193, 47, 124, 116, 49, 154]
 
 
 def is_tokenized_basic(data: bytes) -> bool:
-    """Check if data is a tokenized MBASIC file."""
-    return len(data) > 0 and data[0] == MBASIC_MAGIC
+    """Check if data is a tokenized MBASIC file (protected or unprotected)."""
+    return len(data) > 0 and data[0] in (MBASIC_MAGIC, MBASIC_PROTECTED_MAGIC)
+
+
+def is_protected_basic(data: bytes) -> bool:
+    """Check if data is a protected/encrypted MBASIC file."""
+    return len(data) > 0 and data[0] == MBASIC_PROTECTED_MAGIC
+
+
+def unprotect(data: bytes) -> bytes:
+    """
+    Decrypt a protected MBASIC file.
+
+    MBASIC's SAVE "file",P command encrypts the program using a 143-byte
+    repeating XOR pattern derived from the SINCON (13 values) and ATNCON
+    (11 values) tables in the BASIC ROM.
+
+    Args:
+        data: Protected file data (starting with 0xFE)
+
+    Returns:
+        Decrypted data (with 0xFF magic byte)
+    """
+    if not is_protected_basic(data):
+        return data  # Not protected, return as-is
+
+    result = bytearray(len(data))
+    result[0] = MBASIC_MAGIC  # Replace 0xFE with 0xFF
+
+    # Counters cycle: a_idx 13->1, b_idx 11->1 (1-indexed in original BASIC)
+    # We use 0-indexed here: a_idx 12->0, b_idx 10->0
+    a_idx = 12  # SINCON index (cycles 12 down to 0, resets to 12)
+    b_idx = 10  # ATNCON index (cycles 10 down to 0, resets to 10)
+
+    for i in range(1, len(data)):
+        x = data[i]
+
+        # Decryption: reverse of encryption
+        # h = (x - (b_idx+1) + 256) % 256
+        # h = h ^ (SINCON[a_idx] ^ ATNCON[b_idx])
+        # h = (h + (a_idx+1)) % 256
+        h = (x - (b_idx + 1) + 256) % 256
+        h = h ^ (SINCON[a_idx] ^ ATNCON[b_idx])
+        h = (h + (a_idx + 1)) % 256
+
+        result[i] = h
+
+        # Decrement counters with wraparound
+        a_idx -= 1
+        if a_idx < 0:
+            a_idx = 12
+        b_idx -= 1
+        if b_idx < 0:
+            b_idx = 10
+
+    return bytes(result)
 
 
 def two_neg_power32(exponent: int) -> float:
@@ -501,8 +562,10 @@ def detokenize(data: bytes) -> str:
     """
     Detokenize a complete MBASIC program.
 
+    Automatically handles protected files (0xFE magic) by decrypting first.
+
     Args:
-        data: The tokenized BASIC file data (including 0xFF header)
+        data: The tokenized BASIC file data (including 0xFF or 0xFE header)
 
     Returns:
         The ASCII text of the BASIC program
@@ -510,6 +573,10 @@ def detokenize(data: bytes) -> str:
     if not is_tokenized_basic(data):
         # Not a tokenized file, return as-is
         return data.decode('latin-1')
+
+    # Decrypt protected files first
+    if is_protected_basic(data):
+        data = unprotect(data)
 
     table, table2 = _build_tables()
 
