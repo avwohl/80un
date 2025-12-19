@@ -1,6 +1,6 @@
 # 80un
 
-Unpack and decompress archive and compression formats used on the CP/M operating system for 8080/Z80 computers.
+Unpack and decompress archive and compression formats used on the CP/M operating system for Z80 computers.
 
 Two implementations are provided:
 
@@ -417,7 +417,7 @@ PL/M-80 source is in `src/plm/`:
 
 - CP/M 2.2 or compatible (MP/M, ZCPR, etc.)
 - ~40KB TPA (Transient Program Area)
-- Z80 or 8080 processor
+- Z80 processor
 
 ---
 
