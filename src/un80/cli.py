@@ -7,6 +7,7 @@ Usage:
     80un file.arc -o output/      # Extract to directory
     80un file.lbr --list          # List contents
     80un file.tqt                 # Decompress single file
+    80un file.bas                 # Detokenize MBASIC file
     80un file.txt --text          # Convert text file endings
 """
 
@@ -21,6 +22,7 @@ from .arc import list_arc, extract_arc
 from .squeeze import unsqueeze, get_squeezed_filename
 from .crunch import uncrunch, get_crunched_filename
 from .crlzh import uncrlzh, get_crlzh_filename
+from .bas import is_tokenized_basic, detokenize_bytes
 
 
 def detect_format(path: Path) -> str | None:
@@ -32,8 +34,12 @@ def detect_format(path: Path) -> str | None:
     if compression:
         return compression
 
-    # Fall back to extension
+    # Check for tokenized BASIC (0xFF magic byte with .bas extension)
     ext = path.suffix.lower()
+    if ext == '.bas' and is_tokenized_basic(header):
+        return 'bas'
+
+    # Fall back to extension
     if ext in ('.lbr', '.lqr', '.lzr'):
         return 'lbr'
     if ext in ('.arc', '.ark'):
@@ -254,6 +260,29 @@ def cmd_extract(
         else:
             print(f"  {out_name} ({len(result)} bytes)")
 
+    elif format_type == 'bas':
+        # Detokenize MBASIC file
+        with open(path, 'rb') as f:
+            data = f.read()
+
+        result = detokenize_bytes(data)
+
+        # Output keeps same name (still .bas, but now ASCII)
+        out_name = path.name
+        if output_dir:
+            out_path = output_dir / out_name
+        else:
+            out_path = path.parent / out_name
+
+        actual_path, status = safe_write(out_path, result, no_clobber)
+
+        if status == 'skipped':
+            print(f"  {out_name} (skipped, already exists)")
+        elif status == 'overwrote':
+            print(f"  {out_name} (detokenized, {len(result)} bytes, overwrote)")
+        else:
+            print(f"  {out_name} (detokenized, {len(result)} bytes)")
+
     else:
         print(f"Unknown format: {format_type}", file=sys.stderr)
         return 1
@@ -310,7 +339,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         '-f', '--format',
-        choices=['lbr', 'arc', 'squeeze', 'crunch', 'crlzh'],
+        choices=['lbr', 'arc', 'squeeze', 'crunch', 'crlzh', 'bas'],
         help='Force file format (auto-detected by default)',
     )
     parser.add_argument(
