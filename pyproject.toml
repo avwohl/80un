@@ -7,7 +7,7 @@ name = "80un"
 version = "0.2.2"
 description = "Unpacker for CP/M compression and packing formats"
 readme = "README.md"
-license = {text = "MIT"}
+license = "GPL-3.0-or-later"
 authors = [
     {name = "avwohl"}
 ]
@@ -16,7 +16,6 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
