@@ -151,59 +151,145 @@ emit$oct: procedure(n);
     call emit('0' + d);
 end emit$oct;
 
-/* Output a space if needed before keyword */
-emit$space$maybe: procedure;
-    if prev$tok >= 'A' and prev$tok <= 'Z' then call emit(' ');
-    if prev$tok >= 'a' and prev$tok <= 'z' then call emit(' ');
-    if prev$tok >= '0' and prev$tok <= '9' then call emit(' ');
-    if prev$tok = ')' then call emit(' ');
-end emit$space$maybe;
+/* Check if we need space before a keyword (not operator) */
+need$space$before$kw: procedure byte;
+    /* Need space after alphanumeric or ) */
+    if prev$tok >= 'A' and prev$tok <= 'Z' then return 1;
+    if prev$tok >= 'a' and prev$tok <= 'z' then return 1;
+    if prev$tok >= '0' and prev$tok <= '9' then return 1;
+    if prev$tok = ')' then return 1;
+    if prev$tok = '$' then return 1;
+    if prev$tok = '%' then return 1;
+    if prev$tok = '!' then return 1;
+    if prev$tok = '#' then return 1;
+    return 0;
+end need$space$before$kw;
 
 /* Output a single-byte token (0x81-0xFD) */
 emit$token: procedure(tok);
     declare tok byte;
+    declare need$sp byte;
 
-    call emit$space$maybe;
+    /* Check if we need space before this token */
+    need$sp = need$space$before$kw;
 
+    /* Symbol operators: no space before, set prev$tok to operator */
+    if tok = 0EFH then do; call emit('>'); prev$tok = '>'; return; end;
+    if tok = 0F0H then do; call emit('='); prev$tok = '='; return; end;
+    if tok = 0F1H then do; call emit('<'); prev$tok = '<'; return; end;
+    if tok = 0F2H then do; call emit('+'); prev$tok = '+'; return; end;
+    if tok = 0F3H then do; call emit('-'); prev$tok = '-'; return; end;
+    if tok = 0F4H then do; call emit('*'); prev$tok = '*'; return; end;
+    if tok = 0F5H then do; call emit('/'); prev$tok = '/'; return; end;
+    if tok = 0F6H then do; call emit('^'); prev$tok = '^'; return; end;
+    if tok = 0FCH then do; call emit('\'); prev$tok = '\'; return; end;
+
+    /* Word operators: space before AND after (numeric tokens don't store spaces) */
+    if tok = 0F7H then do; /* AND */
+        if need$sp then call emit(' ');
+        call emit('A'); call emit('N'); call emit('D'); call emit(' ');
+        prev$tok = ' '; return;
+    end;
+    if tok = 0F8H then do; /* OR */
+        if need$sp then call emit(' ');
+        call emit('O'); call emit('R'); call emit(' ');
+        prev$tok = ' '; return;
+    end;
+    if tok = 0F9H then do; /* XOR */
+        if need$sp then call emit(' ');
+        call emit('X'); call emit('O'); call emit('R'); call emit(' ');
+        prev$tok = ' '; return;
+    end;
+    if tok = 0FAH then do; /* EQV */
+        if need$sp then call emit(' ');
+        call emit('E'); call emit('Q'); call emit('V'); call emit(' ');
+        prev$tok = ' '; return;
+    end;
+    if tok = 0FBH then do; /* IMP */
+        if need$sp then call emit(' ');
+        call emit('I'); call emit('M'); call emit('P'); call emit(' ');
+        prev$tok = ' '; return;
+    end;
+    if tok = 0FDH then do; /* MOD */
+        if need$sp then call emit(' ');
+        call emit('M'); call emit('O'); call emit('D'); call emit(' ');
+        prev$tok = ' '; return;
+    end;
+
+    /* TO, THEN, STEP, ELSE, USING - conditional leading space, no trailing space */
+    if tok = 0CEH then do;
+        if prev$tok <> ' ' then call emit(' ');
+        call emit('T'); call emit('O');
+        prev$tok = 'O'; return;
+    end;
+    if tok = 0CFH then do;
+        if prev$tok <> ' ' then call emit(' ');
+        call emit('T'); call emit('H'); call emit('E'); call emit('N');
+        prev$tok = 'N'; return;
+    end;
+    if tok = 0D1H then do;
+        if prev$tok <> ' ' then call emit(' ');
+        call emit('S'); call emit('T'); call emit('E'); call emit('P');
+        prev$tok = 'P'; return;
+    end;
+    if tok = 0A2H then do;
+        if prev$tok <> ' ' then call emit(' ');
+        call emit('E'); call emit('L'); call emit('S'); call emit('E');
+        prev$tok = 'E'; return;
+    end;
+    if tok = 0D9H then do;
+        if prev$tok <> ' ' then call emit(' ');
+        call emit('U'); call emit('S'); call emit('I'); call emit('N'); call emit('G');
+        prev$tok = 'G'; return;
+    end;
+
+    /* Keywords with trailing space - need conditional leading space */
+    if need$sp then call emit(' ');
+
+    /* Keywords - no trailing space, let file provide spacing */
+    if tok = 082H then do; call emit('F'); call emit('O'); call emit('R'); prev$tok = 'R'; return; end;
+    if tok = 08BH then do; call emit('I'); call emit('F'); prev$tok = 'F'; return; end;
+    if tok = 08DH then do; call emit('G'); call emit('O'); call emit('S'); call emit('U'); call emit('B'); prev$tok = 'B'; return; end;
+    if tok = 089H then do; call emit('G'); call emit('O'); call emit('T'); call emit('O'); prev$tok = 'O'; return; end;
+    if tok = 088H then do; call emit('L'); call emit('E'); call emit('T'); prev$tok = 'T'; return; end;
+    if tok = 091H then do; call emit('P'); call emit('R'); call emit('I'); call emit('N'); call emit('T'); prev$tok = 'T'; return; end;
+    if tok = 085H then do; call emit('I'); call emit('N'); call emit('P'); call emit('U'); call emit('T'); prev$tok = 'T'; return; end;
+    if tok = 086H then do; call emit('D'); call emit('I'); call emit('M'); prev$tok = 'M'; return; end;
+    if tok = 087H then do; call emit('R'); call emit('E'); call emit('A'); call emit('D'); prev$tok = 'D'; return; end;
+    if tok = 084H then do; call emit('D'); call emit('A'); call emit('T'); call emit('A'); prev$tok = 'A'; return; end;
+    if tok = 0D5H then do; call emit('N'); call emit('O'); call emit('T'); prev$tok = 'T'; return; end;
+    if tok = 095H then do; call emit('O'); call emit('N'); prev$tok = 'N'; return; end;
+    if tok = 0B4H then do; call emit('W'); call emit('H'); call emit('I'); call emit('L'); call emit('E'); prev$tok = 'E'; return; end;
+    if tok = 098H then do; call emit('D'); call emit('E'); call emit('F'); prev$tok = 'F'; return; end;
+    if tok = 099H then do; call emit('P'); call emit('O'); call emit('K'); call emit('E'); prev$tok = 'E'; return; end;
+    if tok = 097H then do; call emit('W'); call emit('A'); call emit('I'); call emit('T'); prev$tok = 'T'; return; end;
+    if tok = 09DH then do; call emit('O'); call emit('U'); call emit('T'); prev$tok = 'T'; return; end;
+    if tok = 0B6H then do; call emit('C'); call emit('A'); call emit('L'); call emit('L'); prev$tok = 'L'; return; end;
+    if tok = 0A8H then do; call emit('E'); call emit('R'); call emit('R'); call emit('O'); call emit('R'); prev$tok = 'R'; return; end;
+    if tok = 0A9H then do; call emit('R'); call emit('E'); call emit('S'); call emit('U'); call emit('M'); call emit('E'); prev$tok = 'E'; return; end;
+
+    /* Regular keywords (no trailing space) */
     if tok = 081H then do; call emit('E'); call emit('N'); call emit('D'); end;
-    else if tok = 082H then do; call emit('F'); call emit('O'); call emit('R'); end;
     else if tok = 083H then do; call emit('N'); call emit('E'); call emit('X'); call emit('T'); end;
-    else if tok = 084H then do; call emit('D'); call emit('A'); call emit('T'); call emit('A'); end;
-    else if tok = 085H then do; call emit('I'); call emit('N'); call emit('P'); call emit('U'); call emit('T'); end;
-    else if tok = 086H then do; call emit('D'); call emit('I'); call emit('M'); end;
-    else if tok = 087H then do; call emit('R'); call emit('E'); call emit('A'); call emit('D'); end;
-    else if tok = 088H then do; call emit('L'); call emit('E'); call emit('T'); end;
-    else if tok = 089H then do; call emit('G'); call emit('O'); call emit('T'); call emit('O'); end;
     else if tok = 08AH then do; call emit('R'); call emit('U'); call emit('N'); end;
-    else if tok = 08BH then do; call emit('I'); call emit('F'); end;
     else if tok = 08CH then do; call emit('R'); call emit('E'); call emit('S'); call emit('T'); call emit('O'); call emit('R'); call emit('E'); end;
-    else if tok = 08DH then do; call emit('G'); call emit('O'); call emit('S'); call emit('U'); call emit('B'); end;
     else if tok = 08EH then do; call emit('R'); call emit('E'); call emit('T'); call emit('U'); call emit('R'); call emit('N'); end;
     else if tok = 08FH then do; call emit('R'); call emit('E'); call emit('M'); end;
     else if tok = 090H then do; call emit('S'); call emit('T'); call emit('O'); call emit('P'); end;
-    else if tok = 091H then do; call emit('P'); call emit('R'); call emit('I'); call emit('N'); call emit('T'); end;
     else if tok = 092H then do; call emit('C'); call emit('L'); call emit('E'); call emit('A'); call emit('R'); end;
     else if tok = 093H then do; call emit('L'); call emit('I'); call emit('S'); call emit('T'); end;
     else if tok = 094H then do; call emit('N'); call emit('E'); call emit('W'); end;
-    else if tok = 095H then do; call emit('O'); call emit('N'); end;
     else if tok = 096H then do; call emit('N'); call emit('U'); call emit('L'); call emit('L'); end;
-    else if tok = 097H then do; call emit('W'); call emit('A'); call emit('I'); call emit('T'); end;
-    else if tok = 098H then do; call emit('D'); call emit('E'); call emit('F'); end;
-    else if tok = 099H then do; call emit('P'); call emit('O'); call emit('K'); call emit('E'); end;
     else if tok = 09AH then do; call emit('C'); call emit('O'); call emit('N'); call emit('T'); end;
     else if tok = 09BH then do; call emit('L'); call emit('P'); call emit('R'); call emit('I'); call emit('N'); call emit('T'); end;
-    else if tok = 09DH then do; call emit('O'); call emit('U'); call emit('T'); end;
     else if tok = 09FH then do; call emit('L'); call emit('L'); call emit('I'); call emit('S'); call emit('T'); end;
     else if tok = 0A0H then do; call emit('N'); call emit('O'); call emit('T'); call emit('R'); call emit('A'); call emit('C'); call emit('E'); end;
     else if tok = 0A1H then do; call emit('W'); call emit('I'); call emit('D'); call emit('T'); call emit('H'); end;
-    else if tok = 0A2H then do; call emit('E'); call emit('L'); call emit('S'); call emit('E'); end;
     else if tok = 0A3H then do; call emit('T'); call emit('R'); call emit('O'); call emit('N'); end;
     else if tok = 0A4H then do; call emit('T'); call emit('R'); call emit('O'); call emit('F'); call emit('F'); end;
     else if tok = 0A5H then do; call emit('S'); call emit('W'); call emit('A'); call emit('P'); end;
     else if tok = 0A6H then do; call emit('E'); call emit('R'); call emit('A'); call emit('S'); call emit('E'); end;
     else if tok = 0A7H then do; call emit('E'); call emit('D'); call emit('I'); call emit('T'); end;
-    else if tok = 0A8H then do; call emit('E'); call emit('R'); call emit('R'); call emit('O'); call emit('R'); end;
-    else if tok = 0A9H then do; call emit('R'); call emit('E'); call emit('S'); call emit('U'); call emit('M'); call emit('E'); end;
     else if tok = 0AAH then do; call emit('D'); call emit('E'); call emit('L'); call emit('E'); call emit('T'); call emit('E'); end;
     else if tok = 0ABH then do; call emit('A'); call emit('U'); call emit('T'); call emit('O'); end;
     else if tok = 0ACH then do; call emit('R'); call emit('E'); call emit('N'); call emit('U'); call emit('M'); end;
@@ -214,9 +300,7 @@ emit$token: procedure(tok);
     else if tok = 0B1H then do; call emit('L'); call emit('I'); call emit('N'); call emit('E'); end;
     else if tok = 0B2H then do; call emit('W'); call emit('R'); call emit('I'); call emit('T'); call emit('E'); end;
     else if tok = 0B3H then do; call emit('C'); call emit('O'); call emit('M'); call emit('M'); call emit('O'); call emit('N'); end;
-    else if tok = 0B4H then do; call emit('W'); call emit('H'); call emit('I'); call emit('L'); call emit('E'); end;
     else if tok = 0B5H then do; call emit('W'); call emit('E'); call emit('N'); call emit('D'); end;
-    else if tok = 0B6H then do; call emit('C'); call emit('A'); call emit('L'); call emit('L'); end;
     else if tok = 0B7H then do; call emit('W'); call emit('R'); call emit('I'); call emit('T'); call emit('E'); end;
     else if tok = 0B8H then do; call emit('C'); call emit('O'); call emit('M'); call emit('M'); call emit('O'); call emit('N'); end;
     else if tok = 0B9H then do; call emit('C'); call emit('H'); call emit('A'); call emit('I'); call emit('N'); end;
@@ -238,38 +322,17 @@ emit$token: procedure(tok);
     else if tok = 0CAH then do; call emit('R'); call emit('S'); call emit('E'); call emit('T'); end;
     else if tok = 0CBH then do; call emit('S'); call emit('A'); call emit('V'); call emit('E'); end;
     else if tok = 0CCH then do; call emit('R'); call emit('E'); call emit('S'); call emit('E'); call emit('T'); end;
-    else if tok = 0CEH then do; call emit('T'); call emit('O'); end;
-    else if tok = 0CFH then do; call emit('T'); call emit('H'); call emit('E'); call emit('N'); end;
     else if tok = 0D0H then do; call emit('T'); call emit('A'); call emit('B'); call emit('('); end;
-    else if tok = 0D1H then do; call emit('S'); call emit('T'); call emit('E'); call emit('P'); end;
     else if tok = 0D2H then do; call emit('U'); call emit('S'); call emit('R'); end;
     else if tok = 0D3H then do; call emit('F'); call emit('N'); end;
     else if tok = 0D4H then do; call emit('S'); call emit('P'); call emit('C'); call emit('('); end;
-    else if tok = 0D5H then do; call emit('N'); call emit('O'); call emit('T'); end;
     else if tok = 0D6H then do; call emit('E'); call emit('R'); call emit('L'); end;
     else if tok = 0D7H then do; call emit('E'); call emit('R'); call emit('R'); end;
     else if tok = 0D8H then do; call emit('S'); call emit('T'); call emit('R'); call emit('I'); call emit('N'); call emit('G'); call emit('$'); end;
-    else if tok = 0D9H then do; call emit('U'); call emit('S'); call emit('I'); call emit('N'); call emit('G'); end;
     else if tok = 0DAH then do; call emit('I'); call emit('N'); call emit('S'); call emit('T'); call emit('R'); end;
     else if tok = 0DBH then do; call emit('A'); call emit('R'); call emit('K'); end;
     else if tok = 0DCH then do; call emit('V'); call emit('A'); call emit('R'); call emit('P'); call emit('T'); call emit('R'); end;
     else if tok = 0DDH then do; call emit('I'); call emit('N'); call emit('K'); call emit('E'); call emit('Y'); call emit('$'); end;
-    /* Operators */
-    else if tok = 0EFH then call emit('>');
-    else if tok = 0F0H then call emit('=');
-    else if tok = 0F1H then call emit('<');
-    else if tok = 0F2H then call emit('+');
-    else if tok = 0F3H then call emit('-');
-    else if tok = 0F4H then call emit('*');
-    else if tok = 0F5H then call emit('/');
-    else if tok = 0F6H then call emit('^');
-    else if tok = 0F7H then do; call emit('A'); call emit('N'); call emit('D'); end;
-    else if tok = 0F8H then do; call emit('O'); call emit('R'); end;
-    else if tok = 0F9H then do; call emit('X'); call emit('O'); call emit('R'); end;
-    else if tok = 0FAH then do; call emit('E'); call emit('Q'); call emit('V'); end;
-    else if tok = 0FBH then do; call emit('I'); call emit('M'); call emit('P'); end;
-    else if tok = 0FCH then call emit('\');
-    else if tok = 0FDH then do; call emit('M'); call emit('O'); call emit('D'); end;
     else do;
         /* Unknown token - output as [XX] */
         call emit('[');
@@ -284,7 +347,8 @@ end emit$token;
 emit$token2: procedure(tok);
     declare tok byte;
 
-    call emit$space$maybe;
+    /* Functions: space before if after alphanumeric */
+    if need$space$before$kw then call emit(' ');
 
     if tok = 081H then do; call emit('L'); call emit('E'); call emit('F'); call emit('T'); call emit('$'); end;
     else if tok = 082H then do; call emit('R'); call emit('I'); call emit('G'); call emit('H'); call emit('T'); call emit('$'); end;
@@ -388,9 +452,14 @@ detok$line: procedure;
             done = 1;
         end;
         else if b >= 020H and b <= 07FH then do;
-            /* Plain ASCII character */
-            call emit(b);
-            prev$tok = b;
+            /* Plain ASCII character - skip duplicate spaces */
+            if b = ' ' and prev$tok = ' ' then do;
+                /* Skip duplicate space */
+            end;
+            else do;
+                call emit(b);
+                prev$tok = b;
+            end;
         end;
         else if b = 0FFH then do;
             /* Two-byte token */
