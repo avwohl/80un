@@ -1,0 +1,65 @@
+10 REM Test file containing all MBASIC function tokens
+20 REM Numeric functions
+30 A=ABS(-5)
+40 B=SGN(-5)
+50 C=INT(3.7)
+60 D=FIX(-3.7)
+70 E=SQR(16)
+80 F=RND(1)
+90 REM Trigonometric functions
+100 A=SIN(1)
+110 B=COS(1)
+120 C=TAN(1)
+130 D=ATN(1)
+140 REM Logarithmic functions
+150 A=LOG(10)
+160 B=EXP(1)
+170 REM Type conversion
+180 A=CINT(3.7)
+190 B=CSNG(3)
+200 C=CDBL(3)
+210 REM String functions
+220 A=LEN("TEST")
+230 B=ASC("A")
+240 C$=CHR$(65)
+250 D$=LEFT$("HELLO",2)
+260 E$=RIGHT$("HELLO",2)
+270 F$=MID$("HELLO",2,3)
+280 G$=STR$(123)
+290 H=VAL("123")
+300 I$=STRING$(5,"*")
+310 J$=SPACE$(10)
+320 K=INSTR("HELLO","LL")
+330 L$=HEX$(255)
+340 M$=OCT$(255)
+350 REM I/O functions
+360 A=POS(0)
+370 B=LPOS(0)
+380 C$=INKEY$
+390 REM Memory functions
+400 A=PEEK(1000)
+410 B=FRE(0)
+420 C=VARPTR(A)
+430 D=USR(0)
+440 E=INP(255)
+450 REM File functions
+460 A=EOF(1)
+470 B=LOC(1)
+480 C=LOF(1)
+490 REM Disk I/O conversion
+500 A=CVI(A$)
+510 B=CVS(B$)
+520 C=CVD(C$)
+530 D$=MKI$(1)
+540 E$=MKS$(1.5)
+550 F$=MKD$(1.5)
+560 REM Error functions
+570 A=ERR
+580 B=ERL
+590 REM User function
+600 DEF FNA(X)=X*X
+610 A=FNA(5)
+620 REM Special functions
+630 PRINT TAB(10);"TABBED"
+640 PRINT SPC(5);"SPACED"
+999 END
