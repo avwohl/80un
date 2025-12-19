@@ -13,7 +13,7 @@ PLMDIR = src/plm
 # Source files (order matters - startup first, main last)
 SRCS = $(PLMDIR)/startup.plm $(PLMDIR)/common.plm $(PLMDIR)/io.plm \
        $(PLMDIR)/squeeze.plm $(PLMDIR)/crunch.plm $(PLMDIR)/lzh.plm \
-       $(PLMDIR)/arc.plm $(PLMDIR)/lbr.plm $(PLMDIR)/main.plm
+       $(PLMDIR)/arc.plm $(PLMDIR)/lbr.plm $(PLMDIR)/bas.plm $(PLMDIR)/main.plm
 
 # Target
 TARGET = 80un.com

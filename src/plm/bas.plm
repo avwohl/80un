@@ -1,0 +1,510 @@
+/*
+ * bas.plm - MBASIC Tokenized BASIC File Detokenizer
+ *
+ * Converts tokenized MBASIC-80 programs (.BAS files starting with 0xFF)
+ * back to ASCII text format. Also handles protected files (0xFE magic).
+ */
+
+declare
+    mbasic$magic    literally '0FFH',
+    mbasic$protect  literally '0FEH';
+
+declare inbuf$ptr address external;
+declare inbuf based inbuf$ptr (1) byte;
+declare inbuf$end address external;
+declare outbuf$ptr address external;
+declare outbuf based outbuf$ptr (1) byte;
+declare outbuf$pos address external;
+
+/* Protection key arrays - filled by init$bas */
+declare sincon (14) byte;
+declare atncon (12) byte;
+
+/* Working variables */
+declare bas$pos address;  /* Current position in input */
+declare prev$tok byte;    /* Previous token for spacing */
+
+init$bas: procedure public;
+    /* SINCON: 13 values at indices 1-13 (index 0 unused) */
+    sincon(0) = 0;
+    sincon(1) = 251;   /* 0xFB */
+    sincon(2) = 215;   /* 0xD7 */
+    sincon(3) = 30;    /* 0x1E */
+    sincon(4) = 134;   /* 0x86 */
+    sincon(5) = 101;   /* 0x65 */
+    sincon(6) = 38;    /* 0x26 */
+    sincon(7) = 153;   /* 0x99 */
+    sincon(8) = 135;   /* 0x87 */
+    sincon(9) = 88;    /* 0x58 */
+    sincon(10) = 52;   /* 0x34 */
+    sincon(11) = 35;   /* 0x23 */
+    sincon(12) = 135;  /* 0x87 */
+    sincon(13) = 225;  /* 0xE1 */
+
+    /* ATNCON: 11 values at indices 1-11 (index 0 unused) */
+    atncon(0) = 0;
+    atncon(1) = 74;    /* 0x4A */
+    atncon(2) = 215;   /* 0xD7 */
+    atncon(3) = 59;    /* 0x3B */
+    atncon(4) = 120;   /* 0x78 */
+    atncon(5) = 2;     /* 0x02 */
+    atncon(6) = 110;   /* 0x6E */
+    atncon(7) = 132;   /* 0x84 */
+    atncon(8) = 123;   /* 0x7B */
+    atncon(9) = 254;   /* 0xFE */
+    atncon(10) = 193;  /* 0xC1 */
+    atncon(11) = 47;   /* 0x2F */
+end init$bas;
+
+is$tokenized$basic: procedure byte public;
+    if inbuf$end = 0 then return 0;
+    if inbuf(0) = mbasic$magic or inbuf(0) = mbasic$protect then return 1;
+    return 0;
+end is$tokenized$basic;
+
+/* Output a single character */
+emit: procedure(ch);
+    declare ch byte;
+    outbuf(outbuf$pos) = ch;
+    outbuf$pos = outbuf$pos + 1;
+end emit;
+
+/* Output CR LF */
+emit$crlf: procedure;
+    call emit(13);
+    call emit(10);
+end emit$crlf;
+
+/* Output a single hex byte for debug */
+emit$hexbyte: procedure(b);
+    declare b byte;
+    declare hex data('0123456789ABCDEF');
+    call emit(hex(shr(b, 4)));
+    call emit(hex(b and 0FH));
+end emit$hexbyte;
+
+/* Output a decimal number */
+emit$num: procedure(n);
+    declare n address;
+    declare (d, started) byte;
+    declare divisor address;
+
+    if n = 0 then do;
+        call emit('0');
+        return;
+    end;
+
+    started = 0;
+    divisor = 10000;
+    do while divisor > 0;
+        d = n / divisor;
+        if d > 0 or started then do;
+            call emit('0' + d);
+            started = 1;
+        end;
+        n = n mod divisor;
+        divisor = divisor / 10;
+    end;
+end emit$num;
+
+/* Output hex number with &H prefix */
+emit$hex: procedure(n);
+    declare n address;
+    declare (d, i) byte;
+    declare hex data('0123456789ABCDEF');
+
+    call emit('&');
+    call emit('H');
+
+    /* Output 4 hex digits, skip leading zeros */
+    d = shr(n, 12) and 0FH;
+    if d > 0 then call emit(hex(d));
+    d = shr(n, 8) and 0FH;
+    if d > 0 or shr(n, 12) > 0 then call emit(hex(d));
+    d = shr(n, 4) and 0FH;
+    if d > 0 or shr(n, 8) > 0 then call emit(hex(d));
+    d = n and 0FH;
+    call emit(hex(d));
+end emit$hex;
+
+/* Output octal number with &O prefix */
+emit$oct: procedure(n);
+    declare n address;
+    declare (d, started) byte;
+
+    call emit('&');
+    call emit('O');
+
+    /* Output octal digits */
+    started = 0;
+    d = shr(n, 15) and 1;
+    if d > 0 then do; call emit('0' + d); started = 1; end;
+    d = shr(n, 12) and 7;
+    if d > 0 or started then do; call emit('0' + d); started = 1; end;
+    d = shr(n, 9) and 7;
+    if d > 0 or started then do; call emit('0' + d); started = 1; end;
+    d = shr(n, 6) and 7;
+    if d > 0 or started then do; call emit('0' + d); started = 1; end;
+    d = shr(n, 3) and 7;
+    if d > 0 or started then do; call emit('0' + d); started = 1; end;
+    d = n and 7;
+    call emit('0' + d);
+end emit$oct;
+
+/* Output a space if needed before keyword */
+emit$space$maybe: procedure;
+    if prev$tok >= 'A' and prev$tok <= 'Z' then call emit(' ');
+    if prev$tok >= 'a' and prev$tok <= 'z' then call emit(' ');
+    if prev$tok >= '0' and prev$tok <= '9' then call emit(' ');
+    if prev$tok = ')' then call emit(' ');
+end emit$space$maybe;
+
+/* Output a single-byte token (0x81-0xFD) */
+emit$token: procedure(tok);
+    declare tok byte;
+
+    call emit$space$maybe;
+
+    if tok = 081H then do; call emit('E'); call emit('N'); call emit('D'); end;
+    else if tok = 082H then do; call emit('F'); call emit('O'); call emit('R'); end;
+    else if tok = 083H then do; call emit('N'); call emit('E'); call emit('X'); call emit('T'); end;
+    else if tok = 084H then do; call emit('D'); call emit('A'); call emit('T'); call emit('A'); end;
+    else if tok = 085H then do; call emit('I'); call emit('N'); call emit('P'); call emit('U'); call emit('T'); end;
+    else if tok = 086H then do; call emit('D'); call emit('I'); call emit('M'); end;
+    else if tok = 087H then do; call emit('R'); call emit('E'); call emit('A'); call emit('D'); end;
+    else if tok = 088H then do; call emit('L'); call emit('E'); call emit('T'); end;
+    else if tok = 089H then do; call emit('G'); call emit('O'); call emit('T'); call emit('O'); end;
+    else if tok = 08AH then do; call emit('R'); call emit('U'); call emit('N'); end;
+    else if tok = 08BH then do; call emit('I'); call emit('F'); end;
+    else if tok = 08CH then do; call emit('R'); call emit('E'); call emit('S'); call emit('T'); call emit('O'); call emit('R'); call emit('E'); end;
+    else if tok = 08DH then do; call emit('G'); call emit('O'); call emit('S'); call emit('U'); call emit('B'); end;
+    else if tok = 08EH then do; call emit('R'); call emit('E'); call emit('T'); call emit('U'); call emit('R'); call emit('N'); end;
+    else if tok = 08FH then do; call emit('R'); call emit('E'); call emit('M'); end;
+    else if tok = 090H then do; call emit('S'); call emit('T'); call emit('O'); call emit('P'); end;
+    else if tok = 091H then do; call emit('P'); call emit('R'); call emit('I'); call emit('N'); call emit('T'); end;
+    else if tok = 092H then do; call emit('C'); call emit('L'); call emit('E'); call emit('A'); call emit('R'); end;
+    else if tok = 093H then do; call emit('L'); call emit('I'); call emit('S'); call emit('T'); end;
+    else if tok = 094H then do; call emit('N'); call emit('E'); call emit('W'); end;
+    else if tok = 095H then do; call emit('O'); call emit('N'); end;
+    else if tok = 096H then do; call emit('N'); call emit('U'); call emit('L'); call emit('L'); end;
+    else if tok = 097H then do; call emit('W'); call emit('A'); call emit('I'); call emit('T'); end;
+    else if tok = 098H then do; call emit('D'); call emit('E'); call emit('F'); end;
+    else if tok = 099H then do; call emit('P'); call emit('O'); call emit('K'); call emit('E'); end;
+    else if tok = 09AH then do; call emit('C'); call emit('O'); call emit('N'); call emit('T'); end;
+    else if tok = 09BH then do; call emit('L'); call emit('P'); call emit('R'); call emit('I'); call emit('N'); call emit('T'); end;
+    else if tok = 09DH then do; call emit('O'); call emit('U'); call emit('T'); end;
+    else if tok = 09FH then do; call emit('L'); call emit('L'); call emit('I'); call emit('S'); call emit('T'); end;
+    else if tok = 0A0H then do; call emit('N'); call emit('O'); call emit('T'); call emit('R'); call emit('A'); call emit('C'); call emit('E'); end;
+    else if tok = 0A1H then do; call emit('W'); call emit('I'); call emit('D'); call emit('T'); call emit('H'); end;
+    else if tok = 0A2H then do; call emit('E'); call emit('L'); call emit('S'); call emit('E'); end;
+    else if tok = 0A3H then do; call emit('T'); call emit('R'); call emit('O'); call emit('N'); end;
+    else if tok = 0A4H then do; call emit('T'); call emit('R'); call emit('O'); call emit('F'); call emit('F'); end;
+    else if tok = 0A5H then do; call emit('S'); call emit('W'); call emit('A'); call emit('P'); end;
+    else if tok = 0A6H then do; call emit('E'); call emit('R'); call emit('A'); call emit('S'); call emit('E'); end;
+    else if tok = 0A7H then do; call emit('E'); call emit('D'); call emit('I'); call emit('T'); end;
+    else if tok = 0A8H then do; call emit('E'); call emit('R'); call emit('R'); call emit('O'); call emit('R'); end;
+    else if tok = 0A9H then do; call emit('R'); call emit('E'); call emit('S'); call emit('U'); call emit('M'); call emit('E'); end;
+    else if tok = 0AAH then do; call emit('D'); call emit('E'); call emit('L'); call emit('E'); call emit('T'); call emit('E'); end;
+    else if tok = 0ABH then do; call emit('A'); call emit('U'); call emit('T'); call emit('O'); end;
+    else if tok = 0ACH then do; call emit('R'); call emit('E'); call emit('N'); call emit('U'); call emit('M'); end;
+    else if tok = 0ADH then do; call emit('D'); call emit('E'); call emit('F'); call emit('S'); call emit('T'); call emit('R'); end;
+    else if tok = 0AEH then do; call emit('D'); call emit('E'); call emit('F'); call emit('I'); call emit('N'); call emit('T'); end;
+    else if tok = 0AFH then do; call emit('D'); call emit('E'); call emit('F'); call emit('S'); call emit('N'); call emit('G'); end;
+    else if tok = 0B0H then do; call emit('D'); call emit('E'); call emit('F'); call emit('D'); call emit('B'); call emit('L'); end;
+    else if tok = 0B1H then do; call emit('L'); call emit('I'); call emit('N'); call emit('E'); end;
+    else if tok = 0B2H then do; call emit('W'); call emit('R'); call emit('I'); call emit('T'); call emit('E'); end;
+    else if tok = 0B3H then do; call emit('C'); call emit('O'); call emit('M'); call emit('M'); call emit('O'); call emit('N'); end;
+    else if tok = 0B4H then do; call emit('W'); call emit('H'); call emit('I'); call emit('L'); call emit('E'); end;
+    else if tok = 0B5H then do; call emit('W'); call emit('E'); call emit('N'); call emit('D'); end;
+    else if tok = 0B6H then do; call emit('C'); call emit('A'); call emit('L'); call emit('L'); end;
+    else if tok = 0B7H then do; call emit('W'); call emit('R'); call emit('I'); call emit('T'); call emit('E'); end;
+    else if tok = 0B8H then do; call emit('C'); call emit('O'); call emit('M'); call emit('M'); call emit('O'); call emit('N'); end;
+    else if tok = 0B9H then do; call emit('C'); call emit('H'); call emit('A'); call emit('I'); call emit('N'); end;
+    else if tok = 0BAH then do; call emit('O'); call emit('P'); call emit('T'); call emit('I'); call emit('O'); call emit('N'); end;
+    else if tok = 0BBH then do; call emit('R'); call emit('A'); call emit('N'); call emit('D'); call emit('O'); call emit('M'); call emit('I'); call emit('Z'); call emit('E'); end;
+    else if tok = 0BDH then do; call emit('S'); call emit('Y'); call emit('S'); call emit('T'); call emit('E'); call emit('M'); end;
+    else if tok = 0BEH then do; call emit('M'); call emit('E'); call emit('R'); call emit('G'); call emit('E'); end;
+    else if tok = 0BFH then do; call emit('O'); call emit('P'); call emit('E'); call emit('N'); end;
+    else if tok = 0C0H then do; call emit('F'); call emit('I'); call emit('E'); call emit('L'); call emit('D'); end;
+    else if tok = 0C1H then do; call emit('G'); call emit('E'); call emit('T'); end;
+    else if tok = 0C2H then do; call emit('P'); call emit('U'); call emit('T'); end;
+    else if tok = 0C3H then do; call emit('C'); call emit('L'); call emit('O'); call emit('S'); call emit('E'); end;
+    else if tok = 0C4H then do; call emit('L'); call emit('O'); call emit('A'); call emit('D'); end;
+    else if tok = 0C5H then do; call emit('M'); call emit('E'); call emit('R'); call emit('G'); call emit('E'); end;
+    else if tok = 0C6H then do; call emit('F'); call emit('I'); call emit('L'); call emit('E'); call emit('S'); end;
+    else if tok = 0C7H then do; call emit('N'); call emit('A'); call emit('M'); call emit('E'); end;
+    else if tok = 0C8H then do; call emit('K'); call emit('I'); call emit('L'); call emit('L'); end;
+    else if tok = 0C9H then do; call emit('L'); call emit('S'); call emit('E'); call emit('T'); end;
+    else if tok = 0CAH then do; call emit('R'); call emit('S'); call emit('E'); call emit('T'); end;
+    else if tok = 0CBH then do; call emit('S'); call emit('A'); call emit('V'); call emit('E'); end;
+    else if tok = 0CCH then do; call emit('R'); call emit('E'); call emit('S'); call emit('E'); call emit('T'); end;
+    else if tok = 0CEH then do; call emit('T'); call emit('O'); end;
+    else if tok = 0CFH then do; call emit('T'); call emit('H'); call emit('E'); call emit('N'); end;
+    else if tok = 0D0H then do; call emit('T'); call emit('A'); call emit('B'); call emit('('); end;
+    else if tok = 0D1H then do; call emit('S'); call emit('T'); call emit('E'); call emit('P'); end;
+    else if tok = 0D2H then do; call emit('U'); call emit('S'); call emit('R'); end;
+    else if tok = 0D3H then do; call emit('F'); call emit('N'); end;
+    else if tok = 0D4H then do; call emit('S'); call emit('P'); call emit('C'); call emit('('); end;
+    else if tok = 0D5H then do; call emit('N'); call emit('O'); call emit('T'); end;
+    else if tok = 0D6H then do; call emit('E'); call emit('R'); call emit('L'); end;
+    else if tok = 0D7H then do; call emit('E'); call emit('R'); call emit('R'); end;
+    else if tok = 0D8H then do; call emit('S'); call emit('T'); call emit('R'); call emit('I'); call emit('N'); call emit('G'); call emit('$'); end;
+    else if tok = 0D9H then do; call emit('U'); call emit('S'); call emit('I'); call emit('N'); call emit('G'); end;
+    else if tok = 0DAH then do; call emit('I'); call emit('N'); call emit('S'); call emit('T'); call emit('R'); end;
+    else if tok = 0DBH then do; call emit('A'); call emit('R'); call emit('K'); end;
+    else if tok = 0DCH then do; call emit('V'); call emit('A'); call emit('R'); call emit('P'); call emit('T'); call emit('R'); end;
+    else if tok = 0DDH then do; call emit('I'); call emit('N'); call emit('K'); call emit('E'); call emit('Y'); call emit('$'); end;
+    /* Operators */
+    else if tok = 0EFH then call emit('>');
+    else if tok = 0F0H then call emit('=');
+    else if tok = 0F1H then call emit('<');
+    else if tok = 0F2H then call emit('+');
+    else if tok = 0F3H then call emit('-');
+    else if tok = 0F4H then call emit('*');
+    else if tok = 0F5H then call emit('/');
+    else if tok = 0F6H then call emit('^');
+    else if tok = 0F7H then do; call emit('A'); call emit('N'); call emit('D'); end;
+    else if tok = 0F8H then do; call emit('O'); call emit('R'); end;
+    else if tok = 0F9H then do; call emit('X'); call emit('O'); call emit('R'); end;
+    else if tok = 0FAH then do; call emit('E'); call emit('Q'); call emit('V'); end;
+    else if tok = 0FBH then do; call emit('I'); call emit('M'); call emit('P'); end;
+    else if tok = 0FCH then call emit('\');
+    else if tok = 0FDH then do; call emit('M'); call emit('O'); call emit('D'); end;
+    else do;
+        /* Unknown token - output as [XX] */
+        call emit('[');
+        call emit$hex(tok);
+        call emit(']');
+    end;
+
+    prev$tok = 'A';  /* Mark as keyword */
+end emit$token;
+
+/* Output a two-byte token (0xFF prefix) */
+emit$token2: procedure(tok);
+    declare tok byte;
+
+    call emit$space$maybe;
+
+    if tok = 081H then do; call emit('L'); call emit('E'); call emit('F'); call emit('T'); call emit('$'); end;
+    else if tok = 082H then do; call emit('R'); call emit('I'); call emit('G'); call emit('H'); call emit('T'); call emit('$'); end;
+    else if tok = 083H then do; call emit('M'); call emit('I'); call emit('D'); call emit('$'); end;
+    else if tok = 084H then do; call emit('S'); call emit('G'); call emit('N'); end;
+    else if tok = 085H then do; call emit('I'); call emit('N'); call emit('T'); end;
+    else if tok = 086H then do; call emit('A'); call emit('B'); call emit('S'); end;
+    else if tok = 087H then do; call emit('S'); call emit('Q'); call emit('R'); end;
+    else if tok = 088H then do; call emit('R'); call emit('N'); call emit('D'); end;
+    else if tok = 089H then do; call emit('S'); call emit('I'); call emit('N'); end;
+    else if tok = 08AH then do; call emit('L'); call emit('O'); call emit('G'); end;
+    else if tok = 08BH then do; call emit('E'); call emit('X'); call emit('P'); end;
+    else if tok = 08CH then do; call emit('C'); call emit('O'); call emit('S'); end;
+    else if tok = 08DH then do; call emit('T'); call emit('A'); call emit('N'); end;
+    else if tok = 08EH then do; call emit('A'); call emit('T'); call emit('N'); end;
+    else if tok = 08FH then do; call emit('F'); call emit('R'); call emit('E'); end;
+    else if tok = 090H then do; call emit('I'); call emit('N'); call emit('P'); end;
+    else if tok = 091H then do; call emit('P'); call emit('O'); call emit('S'); end;
+    else if tok = 092H then do; call emit('L'); call emit('E'); call emit('N'); end;
+    else if tok = 093H then do; call emit('S'); call emit('T'); call emit('R'); call emit('$'); end;
+    else if tok = 094H then do; call emit('V'); call emit('A'); call emit('L'); end;
+    else if tok = 095H then do; call emit('A'); call emit('S'); call emit('C'); end;
+    else if tok = 096H then do; call emit('C'); call emit('H'); call emit('R'); call emit('$'); end;
+    else if tok = 097H then do; call emit('P'); call emit('E'); call emit('E'); call emit('K'); end;
+    else if tok = 098H then do; call emit('S'); call emit('P'); call emit('A'); call emit('C'); call emit('E'); call emit('$'); end;
+    else if tok = 099H then do; call emit('O'); call emit('C'); call emit('T'); call emit('$'); end;
+    else if tok = 09AH then do; call emit('H'); call emit('E'); call emit('X'); call emit('$'); end;
+    else if tok = 09BH then do; call emit('L'); call emit('P'); call emit('O'); call emit('S'); end;
+    else if tok = 09CH then do; call emit('C'); call emit('I'); call emit('N'); call emit('T'); end;
+    else if tok = 09DH then do; call emit('C'); call emit('S'); call emit('N'); call emit('G'); end;
+    else if tok = 09EH then do; call emit('C'); call emit('D'); call emit('B'); call emit('L'); end;
+    else if tok = 09FH then do; call emit('F'); call emit('I'); call emit('X'); end;
+    else if tok = 0ABH then do; call emit('C'); call emit('V'); call emit('I'); end;
+    else if tok = 0ACH then do; call emit('C'); call emit('V'); call emit('S'); end;
+    else if tok = 0ADH then do; call emit('C'); call emit('V'); call emit('D'); end;
+    else if tok = 0AEH then do; call emit('E'); call emit('O'); call emit('F'); end;
+    else if tok = 0B0H then do; call emit('L'); call emit('O'); call emit('C'); end;
+    else if tok = 0B1H then do; call emit('L'); call emit('O'); call emit('F'); end;
+    else if tok = 0B2H then do; call emit('M'); call emit('K'); call emit('I'); call emit('$'); end;
+    else if tok = 0B3H then do; call emit('M'); call emit('K'); call emit('S'); call emit('$'); end;
+    else if tok = 0B4H then do; call emit('M'); call emit('K'); call emit('D'); call emit('$'); end;
+    else do;
+        /* Unknown 2-byte token */
+        call emit('['); call emit('F'); call emit('F'); call emit(']');
+        call emit('[');
+        call emit$hex(tok);
+        call emit(']');
+    end;
+
+    prev$tok = 'A';
+end emit$token2;
+
+/* Unprotect a protected file in-place */
+unprotect: procedure;
+    declare pos address;
+    declare (x, h, a, b) byte;
+    declare (sval, aval, xorval) byte;
+
+    /* Change magic from 0xFE to 0xFF */
+    inbuf(0) = mbasic$magic;
+
+    a = 13;
+    b = 11;
+
+    pos = 1;
+    do while pos < inbuf$end;
+        x = inbuf(pos);
+
+        /* Decrypt: h = ((x - b) xor (sincon(a) xor atncon(b)) + a) mod 256 */
+        /* Use intermediate variables to avoid PL/M expression evaluation issues */
+        sval = sincon(a);
+        aval = atncon(b);
+        xorval = sval xor aval;
+        h = (x - b);
+        h = h xor xorval;
+        h = h + a;
+
+        inbuf(pos) = h;
+
+        /* Decrement counters with wraparound */
+        a = a - 1;
+        if a = 0 then a = 13;
+        b = b - 1;
+        if b = 0 then b = 11;
+
+        pos = pos + 1;
+    end;
+end unprotect;
+
+/* Detokenize a line of BASIC */
+detok$line: procedure;
+    declare (b, done) byte;
+    declare n address;
+
+    done = 0;
+    do while not done and bas$pos < inbuf$end;
+        b = inbuf(bas$pos);
+
+        if b = 0 then do;
+            /* End of line */
+            done = 1;
+        end;
+        else if b >= 020H and b <= 07FH then do;
+            /* Plain ASCII character */
+            call emit(b);
+            prev$tok = b;
+        end;
+        else if b = 0FFH then do;
+            /* Two-byte token */
+            bas$pos = bas$pos + 1;
+            if bas$pos < inbuf$end then
+                call emit$token2(inbuf(bas$pos));
+        end;
+        else if b >= 080H and b <= 0FEH then do;
+            /* One-byte token */
+            call emit$token(b);
+        end;
+        else if b = 00FH then do;
+            /* 1-byte integer constant */
+            bas$pos = bas$pos + 1;
+            if bas$pos < inbuf$end then
+                call emit$num(inbuf(bas$pos));
+            prev$tok = '0';
+        end;
+        else if b = 00EH or b = 01CH then do;
+            /* 2-byte integer constant */
+            n = inbuf(bas$pos + 1) + shl(inbuf(bas$pos + 2), 8);
+            call emit$num(n);
+            bas$pos = bas$pos + 2;
+            prev$tok = '0';
+        end;
+        else if b = 00CH then do;
+            /* 2-byte hex constant */
+            n = inbuf(bas$pos + 1) + shl(inbuf(bas$pos + 2), 8);
+            call emit$hex(n);
+            bas$pos = bas$pos + 2;
+            prev$tok = '0';
+        end;
+        else if b = 00BH then do;
+            /* 2-byte octal constant */
+            n = inbuf(bas$pos + 1) + shl(inbuf(bas$pos + 2), 8);
+            call emit$oct(n);
+            bas$pos = bas$pos + 2;
+            prev$tok = '0';
+        end;
+        else if b = 01DH then do;
+            /* 4-byte float - skip and output placeholder */
+            call emit('?'); call emit('F'); call emit('4'); call emit('?');
+            bas$pos = bas$pos + 4;
+            prev$tok = '0';
+        end;
+        else if b = 01FH then do;
+            /* 8-byte float - skip and output placeholder */
+            call emit('?'); call emit('F'); call emit('8'); call emit('?');
+            bas$pos = bas$pos + 8;
+            prev$tok = '0';
+        end;
+        else if b >= 011H and b <= 01AH then do;
+            /* Short integer 0-9 */
+            call emit$num(b - 011H);
+            prev$tok = '0';
+        end;
+        else do;
+            /* Unknown byte - skip */
+        end;
+
+        bas$pos = bas$pos + 1;
+    end;
+end detok$line;
+
+detokenize$basic: procedure byte public;
+    declare link address;
+    declare linenum address;
+
+    /* Initialize tables */
+    call init$bas;
+
+    /* If protected, decrypt first */
+    if inbuf(0) = mbasic$protect then
+        call unprotect;
+
+    /* Skip magic byte */
+    bas$pos = 1;
+    outbuf$pos = 0;
+
+    /* Process each line */
+    do while bas$pos + 4 < inbuf$end;
+        /* Read link pointer (2 bytes, little endian) */
+        link = inbuf(bas$pos) + shl(inbuf(bas$pos + 1), 8);
+        if link = 0 then do;
+            /* End of program */
+            call emit$crlf;
+            return 1;
+        end;
+
+        /* Read line number (2 bytes, little endian) */
+        linenum = inbuf(bas$pos + 2) + shl(inbuf(bas$pos + 3), 8);
+        if linenum = 0 then do;
+            call emit$crlf;
+            return 1;
+        end;
+
+        /* Output line number */
+        call emit$num(linenum);
+        call emit(' ');
+        prev$tok = ' ';
+
+        /* Move past header to line content */
+        bas$pos = bas$pos + 4;
+
+        /* Detokenize the line */
+        call detok$line;
+
+        /* Output line ending */
+        call emit$crlf;
+
+        /* Note: detok$line already advanced past the null terminator */
+    end;
+
+    return 1;
+end detokenize$basic;
+
+eof
