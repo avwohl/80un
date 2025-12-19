@@ -10,15 +10,11 @@ File format:
 - Compressed data using LZSS + Huffman
 """
 
-import struct
-from typing import Iterator
-
 CRLZH_MAGIC = 0x76FD
 
 
 class CrLZHError(Exception):
     """Error during CrLZH decompression."""
-    pass
 
 
 class BitReader:

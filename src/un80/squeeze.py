@@ -34,7 +34,6 @@ EOF_VALUE = 256  # Special EOF marker in Huffman tree
 
 class SqueezeError(Exception):
     """Error during squeeze decompression."""
-    pass
 
 
 class BitReader:
@@ -165,7 +164,7 @@ def unsqueeze(data: bytes) -> bytes:
     # Read checksum (comes BEFORE filename per original USQ format)
     if pos + 2 > len(data):
         raise SqueezeError("Data too short for checksum")
-    checksum = struct.unpack('<H', data[pos:pos+2])[0]
+    _ = struct.unpack('<H', data[pos:pos+2])[0]  # checksum (unused)
     pos += 2
 
     # Skip original filename (null-terminated)

@@ -38,7 +38,6 @@ TABLE_SIZE = 4096
 
 class CrunchError(Exception):
     """Error during crunch decompression."""
-    pass
 
 
 @dataclass

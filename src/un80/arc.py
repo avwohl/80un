@@ -40,7 +40,6 @@ ARC_MARKER = 0x1A
 
 class ArcError(Exception):
     """Error during ARC processing."""
-    pass
 
 
 @dataclass
@@ -127,7 +126,10 @@ def parse_header(f: BinaryIO) -> ArcEntry | None:
     compressed_size = struct.unpack('<I', header[13:17])[0]
     datetime = struct.unpack('<I', header[17:21])[0]
     crc = struct.unpack('<H', header[21:23])[0]
-    original_size = struct.unpack('<I', original_size_bytes)[0] if original_size_bytes else compressed_size
+    if original_size_bytes:
+        original_size = struct.unpack('<I', original_size_bytes)[0]
+    else:
+        original_size = compressed_size
 
     data_offset = f.tell()
 
@@ -533,7 +535,7 @@ def extract_arc(
             # Decompress
             try:
                 data = decompress_member(entry, compressed_data)
-            except ArcError as e:
+            except ArcError:
                 # Store raw data if decompression fails
                 data = compressed_data
 

@@ -42,3 +42,6 @@ Repository = "https://github.com/avwohl/80un"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pylint.messages_control]
+disable = ["C0103"]

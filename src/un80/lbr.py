@@ -149,7 +149,7 @@ def read_directory(f: BinaryIO) -> list[LbrEntry]:
                 entries.append(entry)
 
     # Read remaining directory sectors
-    for sector_num in range(1, dir_sectors):
+    for _ in range(1, dir_sectors):
         sector = f.read(SECTOR_SIZE)
         if len(sector) < SECTOR_SIZE:
             break

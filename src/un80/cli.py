@@ -34,9 +34,9 @@ def detect_format(path: Path) -> str | None:
 
     # Fall back to extension
     ext = path.suffix.lower()
-    if ext == '.lbr' or ext == '.lqr' or ext == '.lzr':
+    if ext in ('.lbr', '.lqr', '.lzr'):
         return 'lbr'
-    if ext == '.arc' or ext == '.ark':
+    if ext in ('.arc', '.ark'):
         return 'arc'
 
     # Check for squeezed/crunched by middle letter
@@ -78,7 +78,7 @@ def get_output_filename(path: Path, compression: str) -> str:
     if len(ext) == 4 and ext[2] in 'qzy':
         # .tqt -> .txt, etc.
         new_ext = ext[1] + ext[1] + ext[3]
-        if ext == '.qqq' or ext == '.zzz' or ext == '.yyy':
+        if ext in ('.qqq', '.zzz', '.yyy'):
             return stem  # No extension
         return stem + '.' + new_ext
 
