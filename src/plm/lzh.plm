@@ -27,6 +27,7 @@ declare max$freq literally '08000H';  /* Trigger tree reconstruction */
 /* External declarations */
 declare inbuf$ptr address external;
 declare inbuf based inbuf$ptr (1) byte;
+declare inbuf$pos address external;
 declare inbuf$end address external;
 declare outbuf$ptr address external;
 declare outbuf based outbuf$ptr (1) byte;
@@ -58,7 +59,7 @@ declare use$v2 byte;
  *========================================================*/
 
 init$lzh$tables: procedure;
-    declare i byte;
+    declare i address;  /* Must be address, not byte - loops go to 255 */
 
     /* D_CODE table: maps byte to upper bits of position */
     do i = 0 to 31; d$code(i) = 0; end;
@@ -157,11 +158,7 @@ lzh$get$bit: procedure byte;
 
     /* Ensure we have bits */
     do while lzh$buf$len <= 8;
-        if lzh$pos < inbuf$end then do;
-            b = inbuf(lzh$pos);
-            lzh$pos = lzh$pos + 1;
-        end;
-        else b = 0;
+        b = getbyte;  /* Uses buffered I/O with auto-refill */
         lzh$buf = lzh$buf or shl(b, 8 - lzh$buf$len);
         lzh$buf$len = lzh$buf$len + 8;
     end;
@@ -249,7 +246,11 @@ update$tree: procedure(c);
     if freq(lzh$r) = max$freq then call reconst;
 
     c = prnt(c + lzh$t);
-    do while c <> 0;
+
+    /* Loop must run at least once, then check exit condition.
+       Python: while True: ... if c == 0: break
+       This is important because prnt[c + T] can be 0 for some characters. */
+    do while 1;
         freq(c) = freq(c) + 1;
         k = freq(c);
 
@@ -280,6 +281,7 @@ update$tree: procedure(c);
         end;
 
         c = prnt(c);
+        if c = 0 then return;
     end;
 end update$tree;
 
@@ -371,6 +373,9 @@ uncrlzh: procedure byte public;
     end;
     lzh$pos = lzh$pos + 1;  /* Skip null */
 
+    /* Sync inbuf$pos with lzh$pos for getbyte() to work */
+    inbuf$pos = lzh$pos;
+
     /* Initialize bit reader */
     lzh$buf = 0;
     lzh$buf$len = 0;
@@ -406,8 +411,7 @@ uncrlzh: procedure byte public;
 
         if c < 256 then do;
             /* Literal byte */
-            outbuf(outbuf$pos) = low(c);
-            outbuf$pos = outbuf$pos + 1;
+            if not putbyte(low(c)) then return 0;
             lzh$ring(lzh$ring$pos) = low(c);
             lzh$ring$pos = (lzh$ring$pos + 1) and lzh$n$mask;
         end;
@@ -431,8 +435,7 @@ uncrlzh: procedure byte public;
             /* Copy from ring buffer */
             do i = 0 to low(match$len) - 1;
                 b = lzh$ring(src);
-                outbuf(outbuf$pos) = b;
-                outbuf$pos = outbuf$pos + 1;
+                if not putbyte(b) then return 0;
                 lzh$ring(lzh$ring$pos) = b;
                 lzh$ring$pos = (lzh$ring$pos + 1) and lzh$n$mask;
                 src = (src + 1) and lzh$n$mask;

@@ -217,13 +217,18 @@ decompress$file: procedure byte;
     end;
 
     if inbuf(0) = magic$lzh$hi and inbuf(1) = magic$lzh$lo then do;
-        /* CrLZH file */
+        /* CrLZH file - filename ends at null or high-bit char */
         name$pos = 0;
         i = 2;
-        do while inbuf(i) <> 0 and name$pos < 12;
+        do while inbuf(i) <> 0 and (inbuf(i) and 80h) = 0 and name$pos < 12;
             orig$name(name$pos) = inbuf(i);
             name$pos = name$pos + 1;
             i = i + 1;
+        end;
+        /* If high bit set, include that char (with high bit cleared) */
+        if (inbuf(i) and 80h) <> 0 and name$pos < 12 then do;
+            orig$name(name$pos) = inbuf(i) and 7fh;
+            name$pos = name$pos + 1;
         end;
         orig$name(name$pos) = 0;
 
