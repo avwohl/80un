@@ -1,7 +1,16 @@
 /*
- * lzh.plm - CrLZH Decompression (LZSS)
+ * lzh.plm - CrLZH Decompression Stub
  *
- * Decompresses .?Y? files (CrLZH format)
+ * NOTE: CrLZH uses adaptive Huffman coding which is too complex
+ * to implement in PL/M-80 within reasonable memory constraints.
+ * This stub provides basic LZSS decoding that may work for some
+ * simple files but will likely fail for most CrLZH archives.
+ *
+ * For reliable CrLZH decompression, use:
+ * - The Python un80 package
+ * - Original UCRLZH20.COM via CP/M emulator
+ *
+ * Magic: 0x76 0xFD (.?Y? files)
  */
 
 declare cpm$eof literally '01AH';
