@@ -1,9 +1,4 @@
-"""Tests for Crunch decompression.
-
-Note: Crunch sample files needed for full test coverage.
-Crunch files use magic 0x76 0xFE and have .?Z? extensions
-(e.g., .TZT for crunched .TXT, .CZM for crunched .COM).
-"""
+"""Tests for Crunch decompression."""
 
 import pytest
 from pathlib import Path
@@ -16,11 +11,39 @@ SAMPLES_DIR = Path(__file__).parent / "samples" / "crunch"
 class TestCrunch:
     """Tests for Crunch decompression."""
 
-    @pytest.mark.skip(reason="No crunch samples available yet")
-    def test_decompress_sample(self):
-        """Test decompression of a crunched file."""
-        # TODO: Add actual crunch sample files
-        pass
+    def test_decompress_czm(self):
+        """Test decompression of CRUNCH.CZM (crunched .COM)."""
+        sample = SAMPLES_DIR / "CRUNCH.CZM"
+        if not sample.exists():
+            pytest.skip("CRUNCH.CZM sample not available")
+
+        data = sample.read_bytes()
+
+        # Verify magic
+        assert data[:2] == b'\x76\xfe', "Not a crunched file"
+
+        result = uncrunch(data)
+
+        # Should decompress to a COM file
+        assert len(result) > 0
+        # COM file should start with valid Z80 opcode
+        assert result[0] in (0xC3, 0xC9, 0x00, 0x31, 0x21, 0x3E, 0xF3)
+
+    def test_decompress_nzt(self):
+        """Test decompression of -SOURCE.NZT (crunched .NOT)."""
+        sample = SAMPLES_DIR / "-SOURCE.NZT"
+        if not sample.exists():
+            pytest.skip("-SOURCE.NZT sample not available")
+
+        data = sample.read_bytes()
+
+        # Verify magic
+        assert data[:2] == b'\x76\xfe', "Not a crunched file"
+
+        result = uncrunch(data)
+
+        # Should decompress to text
+        assert len(result) > 0
 
     def test_invalid_magic(self):
         """Test that invalid magic raises error."""
