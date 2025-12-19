@@ -376,15 +376,75 @@ Bug reports and pull requests welcome at https://github.com/avwohl/80un
 
 A native CP/M program written in PL/M-80 that runs on real vintage hardware or emulators.
 
-### Usage
+### Getting 80un.com
 
+Download `80un.com` directly from this repository, or build from source (see below).
+
+Transfer to your CP/M system via:
+- XMODEM/YMODEM from a terminal program
+- Write to a disk image and mount it
+- Your emulator's file import feature
+
+### Usage on CP/M
+
+Extract an LBR archive:
 ```
-A>80UN ARCHIVE.LBR
-A>80UN DOCUMENT.TQT
-A>80UN PROGRAM.ARC
+A>80UN MYLIB.LBR
+
+80UN - CP/M Archive Unpacker v2.1
+
+Extracting:
+  README.TXT OK
+  PROGRAM.COM OK
+  SOURCE.ASM OK
+
+3 file(s) extracted
 ```
 
-Files are extracted to the current drive and user area.
+Extract an ARC archive:
+```
+A>80UN SOFTWARE.ARC
+
+80UN - CP/M Archive Unpacker v2.1
+
+Extracting:
+  INSTALL.DOC OK
+  PROG.COM OK
+  CONFIG.DAT OK
+
+3 file(s) extracted
+```
+
+Decompress a squeezed file:
+```
+A>80UN MANUAL.TQT
+
+80UN - CP/M Archive Unpacker v2.1
+
+Extracting:
+Creating: MANUAL.TXT OK
+
+1 file(s) extracted
+```
+
+Decompress a crunched file:
+```
+A>80UN SOURCE.AZM
+
+80UN - CP/M Archive Unpacker v2.1
+
+Extracting:
+Creating: SOURCE.ASM OK
+
+1 file(s) extracted
+```
+
+### Notes
+
+- Files extract to current drive/user area
+- Existing files are overwritten without warning
+- Original filenames are restored from compressed file headers
+- Nested compression is handled (e.g., crunched files inside LBR)
 
 ### Building from Source
 
