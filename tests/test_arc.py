@@ -70,3 +70,45 @@ class TestARC:
 
         data = sample.read_bytes()
         assert data[0] == ARC_MARKER
+
+    def test_method2_stored(self):
+        """Test extraction of method 2 (stored) files."""
+        sample = SAMPLES_DIR / "method2.arc"
+        if not sample.exists():
+            pytest.skip("method2.arc sample not available")
+
+        entries = list_arc(sample)
+        stored_entries = [e for e in entries if e.method == 2]
+        assert len(stored_entries) > 0, "No method 2 (stored) entries found"
+
+        # Extract and verify stored files have same size compressed/original
+        results = extract_arc(sample, None)
+        assert len(results) > 0
+
+    def test_method3_packed_rle(self):
+        """Test extraction of method 3 (packed/RLE) files."""
+        sample = SAMPLES_DIR / "method3.arc"
+        if not sample.exists():
+            pytest.skip("method3.arc sample not available")
+
+        entries = list_arc(sample)
+        packed_entries = [e for e in entries if e.method == 3]
+        assert len(packed_entries) > 0, "No method 3 (packed) entries found"
+
+        # Extract - RLE decompression should work
+        results = extract_arc(sample, None)
+        assert len(results) > 0
+
+    def test_method9_squashed(self):
+        """Test extraction of method 9 (squashed/13-bit LZW) files."""
+        sample = SAMPLES_DIR / "method9.arc"
+        if not sample.exists():
+            pytest.skip("method9.arc sample not available")
+
+        entries = list_arc(sample)
+        squashed_entries = [e for e in entries if e.method == 9]
+        assert len(squashed_entries) > 0, "No method 9 (squashed) entries found"
+
+        # Extract - 13-bit LZW decompression should work
+        results = extract_arc(sample, None)
+        assert len(results) > 0

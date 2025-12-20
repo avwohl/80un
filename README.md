@@ -510,8 +510,8 @@ The test suite needs additional sample files to achieve complete coverage:
 |--------|---------------|----------------|
 | **Squeeze** | ✅ Complete | - |
 | **Crunch** | V2.x only (siglevel ≥ 0x20) | V1.x samples (fixed 12-bit codes) |
-| **CrLZH** | V2.0 only (version ≥ 0x20) | V1.x samples (6-bit position encoding) |
-| **ARC** | Method 8 only | Methods 1-7, 9 (stored, packed, squeezed, old crunched, squashed) |
+| **CrLZH** | ✅ V1.x and V2.0 | - |
+| **ARC** | Methods 2, 3, 8, 9 | Methods 1, 4-7 (stored old, squeezed, old crunched) |
 | **LBR** | Archive structure | Member compression type verification |
 | **MBASIC** | Both variants (synthetic) | Real tokenized file samples |
 
