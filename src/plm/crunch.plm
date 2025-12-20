@@ -65,6 +65,32 @@ lzw$output: procedure(code) address public;
     return work$len;
 end lzw$output;
 
+/* Output an LZW string by code without RLE, returns length */
+lzw$output$raw: procedure(code) address public;
+    declare code address;
+    declare (prefix, len) address;
+    declare suffix byte;
+    declare p address;
+
+    len = 0;
+    do while code <> 0ffffh and len < 4096;
+        suffix = lzw$suffix(code);
+        work(len) = suffix;
+        len = len + 1;
+        prefix = readword(lzw$prefix$ptr + shl(code, 1));
+        code = prefix;
+    end;
+
+    work$len = len;
+    do while len > 0;
+        len = len - 1;
+        if not putbyte(work(len)) then
+            return 0;
+    end;
+
+    return work$len;
+end lzw$output$raw;
+
 /* Get first byte of an LZW string */
 lzw$first$byte: procedure(code) byte public;
     declare code address;
@@ -79,7 +105,7 @@ lzw$first$byte: procedure(code) byte public;
     return low(code);
 end lzw$first$byte;
 
-/* Add entry to LZW dictionary */
+/* Add entry to LZW dictionary (12-bit max, 4096 codes) */
 lzw$add$entry: procedure(prefix, suffix) public;
     declare prefix address;
     declare suffix byte;

@@ -25,20 +25,45 @@ declare lzw$max$bits byte external;
 
 /* Procedures from earlier modules - visible when compiled together */
 
+/* Raw LZW output without RLE (for method 9) */
+lzw$output$raw: procedure(code) address external;
+    declare code address;
+end lzw$output$raw;
+
 /*========================================================
  * ARC Decompression Methods
  *========================================================*/
 
-/* ARC method 1/2: Stored (no compression) */
-arc$decomp$stored: procedure(size) byte;
-    declare size address;
+/* ARC method 1/2: Stored (no compression)
+ * Handles 32-bit sizes using two 16-bit words.
+ * Total bytes = size$hi * 65536 + size$lo */
+arc$decomp$stored: procedure(size$lo, size$hi) byte;
+    declare (size$lo, size$hi) address;
     declare b byte;
+    declare i address;
 
-    do while size > 0;
+    /* First process size$lo bytes */
+    do while size$lo <> 0;
         b = getbyte;
         if not putbyte(b) then return 0;
-        size = size - 1;
+        size$lo = size$lo - 1;
     end;
+
+    /* Then process size$hi * 65536 bytes (one 64KB chunk per iteration) */
+    do while size$hi <> 0;
+        /* Process 65536 bytes using wrap-around counter */
+        i = 1;  /* Start at 1 so we can check for wrap to 0 */
+        do while i <> 0;
+            b = getbyte;
+            if not putbyte(b) then return 0;
+            i = i + 1;  /* Wraps from 0xFFFF to 0 after 65535 iterations */
+        end;
+        /* Process one more byte to complete 65536 */
+        b = getbyte;
+        if not putbyte(b) then return 0;
+        size$hi = size$hi - 1;
+    end;
+
     return 1;
 end arc$decomp$stored;
 
@@ -295,11 +320,11 @@ arc$decomp$squashed: procedure byte;
             end;
             else if code < lzw$next$code then do;
                 fb = lzw$first$byte(code);
-                if lzw$output(code) = 0 then return 0;
+                if lzw$output$raw(code) = 0 then return 0;
             end;
             else if code = lzw$next$code and prev$code <> 0ffffh then do;
                 fb = lzw$first$byte(prev$code);
-                if lzw$output(prev$code) = 0 then return 0;
+                if lzw$output$raw(prev$code) = 0 then return 0;
                 if not putbyte(fb) then return 0;
             end;
             else do;
@@ -307,7 +332,8 @@ arc$decomp$squashed: procedure byte;
             end;
 
             if not first$flag and prev$code <> 0ffffh and not done then do;
-                if lzw$next$code < 8192 then do;
+                /* Limit to 4096 entries due to memory constraints */
+                if lzw$next$code < 4096 then do;
                     call lzw$add$entry(prev$code, fb);
                     max$code = shl(1, lzw$code$size) - 1;
                     if lzw$next$code > max$code and lzw$code$size < 13 then
@@ -332,6 +358,7 @@ extract$arc$member: procedure byte public;
     declare msg$method data('Unsupported ARC method$');
     declare (i, method) byte;
     declare (comp$size, orig$size) address;
+    declare (comp$size$hi, orig$size$hi) address;  /* High words for 32-bit sizes */
     declare filename (14) byte;
     declare result byte;
 
@@ -347,11 +374,11 @@ extract$arc$member: procedure byte public;
     end;
     filename(13) = 0;
 
-    /* Read compressed size (4 bytes LE) */
+    /* Read compressed size (4 bytes LE) - full 32-bit value */
     comp$size = getbyte;
     comp$size = comp$size + shl(getbyte, 8);
-    i = getbyte;  /* High word, ignore for now */
-    i = getbyte;
+    comp$size$hi = getbyte;
+    comp$size$hi = comp$size$hi + shl(getbyte, 8);
 
     /* Read date/time (4 bytes, skip) */
     i = getbyte;
@@ -367,11 +394,12 @@ extract$arc$member: procedure byte public;
     if method >= 2 then do;
         orig$size = getbyte;
         orig$size = orig$size + shl(getbyte, 8);
-        i = getbyte;
-        i = getbyte;
+        orig$size$hi = getbyte;
+        orig$size$hi = orig$size$hi + shl(getbyte, 8);
     end;
     else do;
         orig$size = comp$size;
+        orig$size$hi = comp$size$hi;
     end;
 
     /* Print filename */
@@ -424,13 +452,17 @@ extract$arc$member: procedure byte public;
     outbuf$pos = 0;
     result = 1;
 
-    /* Set input byte limit for compressed methods */
-    input$limit = comp$size;
+    /* Set input byte limit for compressed methods (16-bit limit) */
+    /* For stored files > 64KB, arc$decomp$stored handles its own count */
+    if (method = 1 or method = 2) and comp$size$hi > 0 then
+        input$limit = 0ffffh;  /* Stored handles its own count for large files */
+    else
+        input$limit = comp$size;
 
     /* Decompress based on method */
     if method = 1 or method = 2 then do;
-        /* Stored */
-        result = arc$decomp$stored(comp$size);
+        /* Stored - pass full 32-bit size */
+        result = arc$decomp$stored(comp$size, comp$size$hi);
     end;
     else if method = 3 then do;
         /* Packed (RLE) */
