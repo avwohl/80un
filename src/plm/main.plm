@@ -80,6 +80,8 @@ decompress$file: procedure byte;
     declare (i, j, result) byte;
     declare orig$name (13) byte;
     declare name$pos byte;
+    declare siglevel byte;  /* Crunch version level */
+    declare ver1 byte;      /* CrLZH version byte */
 
     /* Read file into buffer */
     inbuf$pos = 0;
@@ -163,6 +165,8 @@ decompress$file: procedure byte;
             i = i + 1;
         end;
         orig$name(name$pos) = 0;
+        /* i now points to null terminator, siglevel is at i+2 */
+        siglevel = inbuf(i + 2);
 
         call fillmem(ofcb$ptr, 36, 0);
         i = 0;
@@ -196,6 +200,11 @@ decompress$file: procedure byte;
             call printchar(orig$name(i));
             i = i + 1;
         end;
+        /* Show version info */
+        if siglevel >= 20h then
+            call printstr(.(' [Crunch V2]$'));
+        else
+            call printstr(.(' [Crunch V1]$'));
 
         call deletefile(ofcb$ptr);
         if makefile(ofcb$ptr) = 0ffh then do;
@@ -229,8 +238,14 @@ decompress$file: procedure byte;
         if (inbuf(i) and 80h) <> 0 and name$pos < 12 then do;
             orig$name(name$pos) = inbuf(i) and 7fh;
             name$pos = name$pos + 1;
+            i = i + 1;  /* Skip past high-bit char */
         end;
         orig$name(name$pos) = 0;
+        /* Skip to null terminator and get version byte after it */
+        do while inbuf(i) <> 0;
+            i = i + 1;
+        end;
+        ver1 = inbuf(i + 1);  /* Version byte is after null */
 
         call fillmem(ofcb$ptr, 36, 0);
         i = 0;
@@ -264,6 +279,11 @@ decompress$file: procedure byte;
             call printchar(orig$name(i));
             i = i + 1;
         end;
+        /* Show version info */
+        if ver1 >= 20h then
+            call printstr(.(' [CrLZH V2.0]$'));
+        else
+            call printstr(.(' [CrLZH V1.x]$'));
 
         call deletefile(ofcb$ptr);
         if makefile(ofcb$ptr) = 0ffh then do;

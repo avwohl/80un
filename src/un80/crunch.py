@@ -297,3 +297,27 @@ def get_crunched_filename(data: bytes) -> str | None:
         return header.filename
     except CrunchError:
         return None
+
+
+def get_crunch_info(data: bytes) -> dict | None:
+    """
+    Get detailed info about a crunched file.
+
+    Args:
+        data: Crunched file data
+
+    Returns:
+        Dictionary with version info, or None if not valid
+    """
+    try:
+        header = parse_header(data)
+        version = 2 if header.is_v2 else 1
+        return {
+            'filename': header.filename,
+            'version': version,
+            'siglevel': header.siglevel,
+            'bits': f"{header.initial_bits}-12" if header.is_v2 else "12 (fixed)",
+            'description': f"V{version}.x ({'variable' if header.is_v2 else 'fixed'} codes)",
+        }
+    except CrunchError:
+        return None

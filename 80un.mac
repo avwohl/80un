@@ -56,6 +56,7 @@
 	extrn	WORKLEN
 	extrn	INPUTLIMIT
 	extrn	INBUFPTR
+	extrn	INBUFPOS
 	extrn	INBUFEND
 	extrn	OUTBUFPTR
 	extrn	OUTBUFPOS
@@ -1062,7 +1063,7 @@ READBITSQ:
 	ld	h,0
 	push	hl
 	ld	a,(SQBITPOS)
-	ld	c,l
+	ld	c,a
 	pop	hl
 ??SHR0073:
 	dec	c
@@ -1141,7 +1142,7 @@ READCODEMSB:
 	ld	hl,(BITBUFFER)
 	push	hl
 	ld	a,(??AUTO+145)
-	ld	c,l
+	ld	c,a
 	pop	hl
 ??SHR0077:
 	dec	c
@@ -1159,7 +1160,7 @@ READCODEMSB:
 	ld	hl,1
 	push	hl
 	ld	a,(??AUTO+141)
-	ld	c,l
+	ld	c,a
 	pop	hl
 ??SHL0079:
 	dec	c
@@ -1191,7 +1192,7 @@ READCODEMSB:
 	ld	hl,1
 	push	hl
 	ld	a,(BITSLEFT)
-	ld	c,l
+	ld	c,a
 	pop	hl
 ??SHL0083:
 	dec	c
@@ -1842,7 +1843,7 @@ UNCRUNCH:
 	ld	hl,1
 	push	hl
 	ld	a,(LZWCODESIZE)
-	ld	c,l
+	ld	c,a
 	pop	hl
 ??SHL0139:
 	dec	c
@@ -2058,527 +2059,557 @@ UNCRUNCH:
 
 ; Procedure INITLZHTABLES
 INITLZHTABLES:
-	ld	b,20H
+	ld	hl,0
+	ld	(??AUTO+135),hl
+	JR ??TEST0167
 ??FOR0166:
-	push	bc
 	xor	a
 	ld	b,a
-	ld	a,(??AUTO+135)
-	ld	l,a
-	ld	h,0
-	ld	de,DCODE
+	ld	hl,DCODE
+	push	hl
+	ld	hl,(??AUTO+135)
+	pop	de
 	add	hl,de
 	ld	(hl),b
-	pop	bc
 ??INCR0168:
-	dec	b
-	jp	nz,??FOR0166
+	ld	hl,(??AUTO+135)
+	inc	hl
+	ld	(??AUTO+135),hl
+??TEST0167:
+	ld	hl,(??AUTO+135)
+	ex	de,hl
+	ld	hl,1FH
+	call	??subde
+	jp	nc,??FOR0166
 ??NEXT0169:
 	ld	hl,20H
-	ld	a,l
-	ld	(??AUTO+135),a
+	ld	(??AUTO+135),hl
 	JR ??TEST0171
 ??FOR0170:
 	ld	a,1
 	ld	b,a
-	ld	a,(??AUTO+135)
-	ld	l,a
-	ld	h,0
-	ld	de,DCODE
+	ld	hl,DCODE
+	push	hl
+	ld	hl,(??AUTO+135)
+	pop	de
 	add	hl,de
 	ld	(hl),b
 ??INCR0172:
-	ld	a,(??AUTO+135)
-	inc	a
-	ld	(??AUTO+135),a
+	ld	hl,(??AUTO+135)
+	inc	hl
+	ld	(??AUTO+135),hl
 ??TEST0171:
-	ld	a,(??AUTO+135)
-	cp	30H
-	jr	C,??FOR0170
+	ld	hl,(??AUTO+135)
+	ex	de,hl
+	ld	hl,2FH
+	call	??subde
+	jp	nc,??FOR0170
 ??NEXT0173:
 	ld	hl,30H
-	ld	a,l
-	ld	(??AUTO+135),a
+	ld	(??AUTO+135),hl
 	JR ??TEST0175
 ??FOR0174:
 	ld	a,2
 	ld	b,a
-	ld	a,(??AUTO+135)
-	ld	l,a
-	ld	h,0
-	ld	de,DCODE
+	ld	hl,DCODE
+	push	hl
+	ld	hl,(??AUTO+135)
+	pop	de
 	add	hl,de
 	ld	(hl),b
 ??INCR0176:
-	ld	a,(??AUTO+135)
-	inc	a
-	ld	(??AUTO+135),a
+	ld	hl,(??AUTO+135)
+	inc	hl
+	ld	(??AUTO+135),hl
 ??TEST0175:
-	ld	a,(??AUTO+135)
-	cp	40H
-	jr	C,??FOR0174
+	ld	hl,(??AUTO+135)
+	ex	de,hl
+	ld	hl,3FH
+	call	??subde
+	jp	nc,??FOR0174
 ??NEXT0177:
 	ld	hl,40H
-	ld	a,l
-	ld	(??AUTO+135),a
+	ld	(??AUTO+135),hl
 	JR ??TEST0179
 ??FOR0178:
 	ld	a,3
 	ld	b,a
-	ld	a,(??AUTO+135)
-	ld	l,a
-	ld	h,0
-	ld	de,DCODE
+	ld	hl,DCODE
+	push	hl
+	ld	hl,(??AUTO+135)
+	pop	de
 	add	hl,de
 	ld	(hl),b
 ??INCR0180:
-	ld	a,(??AUTO+135)
-	inc	a
-	ld	(??AUTO+135),a
+	ld	hl,(??AUTO+135)
+	inc	hl
+	ld	(??AUTO+135),hl
 ??TEST0179:
-	ld	a,(??AUTO+135)
-	cp	50H
-	jr	C,??FOR0178
+	ld	hl,(??AUTO+135)
+	ex	de,hl
+	ld	hl,4FH
+	call	??subde
+	jp	nc,??FOR0178
 ??NEXT0181:
 	ld	hl,50H
-	ld	a,l
-	ld	(??AUTO+135),a
+	ld	(??AUTO+135),hl
 	JR ??TEST0183
 ??FOR0182:
 	ld	a,4
 	ld	b,a
-	ld	a,(??AUTO+135)
-	ld	l,a
-	ld	h,0
-	ld	de,DCODE
+	ld	hl,DCODE
+	push	hl
+	ld	hl,(??AUTO+135)
+	pop	de
 	add	hl,de
 	ld	(hl),b
 ??INCR0184:
-	ld	a,(??AUTO+135)
-	inc	a
-	ld	(??AUTO+135),a
+	ld	hl,(??AUTO+135)
+	inc	hl
+	ld	(??AUTO+135),hl
 ??TEST0183:
-	ld	a,(??AUTO+135)
-	cp	58H
-	jr	C,??FOR0182
+	ld	hl,(??AUTO+135)
+	ex	de,hl
+	ld	hl,57H
+	call	??subde
+	jp	nc,??FOR0182
 ??NEXT0185:
 	ld	hl,58H
-	ld	a,l
-	ld	(??AUTO+135),a
+	ld	(??AUTO+135),hl
 	JR ??TEST0187
 ??FOR0186:
 	ld	a,5
 	ld	b,a
-	ld	a,(??AUTO+135)
-	ld	l,a
-	ld	h,0
-	ld	de,DCODE
+	ld	hl,DCODE
+	push	hl
+	ld	hl,(??AUTO+135)
+	pop	de
 	add	hl,de
 	ld	(hl),b
 ??INCR0188:
-	ld	a,(??AUTO+135)
-	inc	a
-	ld	(??AUTO+135),a
+	ld	hl,(??AUTO+135)
+	inc	hl
+	ld	(??AUTO+135),hl
 ??TEST0187:
-	ld	a,(??AUTO+135)
-	cp	60H
-	jr	C,??FOR0186
+	ld	hl,(??AUTO+135)
+	ex	de,hl
+	ld	hl,5FH
+	call	??subde
+	jp	nc,??FOR0186
 ??NEXT0189:
 	ld	hl,60H
-	ld	a,l
-	ld	(??AUTO+135),a
+	ld	(??AUTO+135),hl
 	JR ??TEST0191
 ??FOR0190:
 	ld	a,6
 	ld	b,a
-	ld	a,(??AUTO+135)
-	ld	l,a
-	ld	h,0
-	ld	de,DCODE
+	ld	hl,DCODE
+	push	hl
+	ld	hl,(??AUTO+135)
+	pop	de
 	add	hl,de
 	ld	(hl),b
 ??INCR0192:
-	ld	a,(??AUTO+135)
-	inc	a
-	ld	(??AUTO+135),a
+	ld	hl,(??AUTO+135)
+	inc	hl
+	ld	(??AUTO+135),hl
 ??TEST0191:
-	ld	a,(??AUTO+135)
-	cp	68H
-	jr	C,??FOR0190
+	ld	hl,(??AUTO+135)
+	ex	de,hl
+	ld	hl,67H
+	call	??subde
+	jp	nc,??FOR0190
 ??NEXT0193:
 	ld	hl,68H
-	ld	a,l
-	ld	(??AUTO+135),a
+	ld	(??AUTO+135),hl
 	JR ??TEST0195
 ??FOR0194:
 	ld	a,7
 	ld	b,a
-	ld	a,(??AUTO+135)
-	ld	l,a
-	ld	h,0
-	ld	de,DCODE
+	ld	hl,DCODE
+	push	hl
+	ld	hl,(??AUTO+135)
+	pop	de
 	add	hl,de
 	ld	(hl),b
 ??INCR0196:
-	ld	a,(??AUTO+135)
-	inc	a
-	ld	(??AUTO+135),a
+	ld	hl,(??AUTO+135)
+	inc	hl
+	ld	(??AUTO+135),hl
 ??TEST0195:
-	ld	a,(??AUTO+135)
-	cp	70H
-	jr	C,??FOR0194
+	ld	hl,(??AUTO+135)
+	ex	de,hl
+	ld	hl,6FH
+	call	??subde
+	jp	nc,??FOR0194
 ??NEXT0197:
 	ld	hl,70H
-	ld	a,l
-	ld	(??AUTO+135),a
+	ld	(??AUTO+135),hl
 	JR ??TEST0199
 ??FOR0198:
 	ld	a,8
 	ld	b,a
-	ld	a,(??AUTO+135)
-	ld	l,a
-	ld	h,0
-	ld	de,DCODE
+	ld	hl,DCODE
+	push	hl
+	ld	hl,(??AUTO+135)
+	pop	de
 	add	hl,de
 	ld	(hl),b
 ??INCR0200:
-	ld	a,(??AUTO+135)
-	inc	a
-	ld	(??AUTO+135),a
+	ld	hl,(??AUTO+135)
+	inc	hl
+	ld	(??AUTO+135),hl
 ??TEST0199:
-	ld	a,(??AUTO+135)
-	cp	78H
-	jr	C,??FOR0198
+	ld	hl,(??AUTO+135)
+	ex	de,hl
+	ld	hl,77H
+	call	??subde
+	jp	nc,??FOR0198
 ??NEXT0201:
 	ld	hl,78H
-	ld	a,l
-	ld	(??AUTO+135),a
+	ld	(??AUTO+135),hl
 	JR ??TEST0203
 ??FOR0202:
 	ld	a,9
 	ld	b,a
-	ld	a,(??AUTO+135)
-	ld	l,a
-	ld	h,0
-	ld	de,DCODE
+	ld	hl,DCODE
+	push	hl
+	ld	hl,(??AUTO+135)
+	pop	de
 	add	hl,de
 	ld	(hl),b
 ??INCR0204:
-	ld	a,(??AUTO+135)
-	inc	a
-	ld	(??AUTO+135),a
+	ld	hl,(??AUTO+135)
+	inc	hl
+	ld	(??AUTO+135),hl
 ??TEST0203:
-	ld	a,(??AUTO+135)
-	cp	80H
-	jr	C,??FOR0202
+	ld	hl,(??AUTO+135)
+	ex	de,hl
+	ld	hl,7FH
+	call	??subde
+	jp	nc,??FOR0202
 ??NEXT0205:
 	ld	hl,80H
-	ld	a,l
-	ld	(??AUTO+135),a
+	ld	(??AUTO+135),hl
 	JR ??TEST0207
 ??FOR0206:
 	ld	a,0AH
 	ld	b,a
-	ld	a,(??AUTO+135)
-	ld	l,a
-	ld	h,0
-	ld	de,DCODE
+	ld	hl,DCODE
+	push	hl
+	ld	hl,(??AUTO+135)
+	pop	de
 	add	hl,de
 	ld	(hl),b
 ??INCR0208:
-	ld	a,(??AUTO+135)
-	inc	a
-	ld	(??AUTO+135),a
+	ld	hl,(??AUTO+135)
+	inc	hl
+	ld	(??AUTO+135),hl
 ??TEST0207:
-	ld	a,(??AUTO+135)
-	cp	88H
-	jr	C,??FOR0206
+	ld	hl,(??AUTO+135)
+	ex	de,hl
+	ld	hl,87H
+	call	??subde
+	jp	nc,??FOR0206
 ??NEXT0209:
 	ld	hl,88H
-	ld	a,l
-	ld	(??AUTO+135),a
+	ld	(??AUTO+135),hl
 	JR ??TEST0211
 ??FOR0210:
 	ld	a,0BH
 	ld	b,a
-	ld	a,(??AUTO+135)
-	ld	l,a
-	ld	h,0
-	ld	de,DCODE
+	ld	hl,DCODE
+	push	hl
+	ld	hl,(??AUTO+135)
+	pop	de
 	add	hl,de
 	ld	(hl),b
 ??INCR0212:
-	ld	a,(??AUTO+135)
-	inc	a
-	ld	(??AUTO+135),a
+	ld	hl,(??AUTO+135)
+	inc	hl
+	ld	(??AUTO+135),hl
 ??TEST0211:
-	ld	a,(??AUTO+135)
-	cp	90H
-	jr	C,??FOR0210
+	ld	hl,(??AUTO+135)
+	ex	de,hl
+	ld	hl,8FH
+	call	??subde
+	jp	nc,??FOR0210
 ??NEXT0213:
 	ld	hl,90H
-	ld	a,l
-	ld	(??AUTO+135),a
+	ld	(??AUTO+135),hl
 	JR ??TEST0215
 ??FOR0214:
 	ld	a,0CH
 	ld	b,a
-	ld	a,(??AUTO+135)
-	ld	l,a
-	ld	h,0
-	ld	de,DCODE
+	ld	hl,DCODE
+	push	hl
+	ld	hl,(??AUTO+135)
+	pop	de
 	add	hl,de
 	ld	(hl),b
 ??INCR0216:
-	ld	a,(??AUTO+135)
-	inc	a
-	ld	(??AUTO+135),a
+	ld	hl,(??AUTO+135)
+	inc	hl
+	ld	(??AUTO+135),hl
 ??TEST0215:
-	ld	a,(??AUTO+135)
-	cp	94H
-	jr	C,??FOR0214
+	ld	hl,(??AUTO+135)
+	ex	de,hl
+	ld	hl,93H
+	call	??subde
+	jp	nc,??FOR0214
 ??NEXT0217:
 	ld	hl,94H
-	ld	a,l
-	ld	(??AUTO+135),a
+	ld	(??AUTO+135),hl
 	JR ??TEST0219
 ??FOR0218:
 	ld	a,0DH
 	ld	b,a
-	ld	a,(??AUTO+135)
-	ld	l,a
-	ld	h,0
-	ld	de,DCODE
+	ld	hl,DCODE
+	push	hl
+	ld	hl,(??AUTO+135)
+	pop	de
 	add	hl,de
 	ld	(hl),b
 ??INCR0220:
-	ld	a,(??AUTO+135)
-	inc	a
-	ld	(??AUTO+135),a
+	ld	hl,(??AUTO+135)
+	inc	hl
+	ld	(??AUTO+135),hl
 ??TEST0219:
-	ld	a,(??AUTO+135)
-	cp	98H
-	jr	C,??FOR0218
+	ld	hl,(??AUTO+135)
+	ex	de,hl
+	ld	hl,97H
+	call	??subde
+	jp	nc,??FOR0218
 ??NEXT0221:
 	ld	hl,98H
-	ld	a,l
-	ld	(??AUTO+135),a
+	ld	(??AUTO+135),hl
 	JR ??TEST0223
 ??FOR0222:
 	ld	a,0EH
 	ld	b,a
-	ld	a,(??AUTO+135)
-	ld	l,a
-	ld	h,0
-	ld	de,DCODE
+	ld	hl,DCODE
+	push	hl
+	ld	hl,(??AUTO+135)
+	pop	de
 	add	hl,de
 	ld	(hl),b
 ??INCR0224:
-	ld	a,(??AUTO+135)
-	inc	a
-	ld	(??AUTO+135),a
+	ld	hl,(??AUTO+135)
+	inc	hl
+	ld	(??AUTO+135),hl
 ??TEST0223:
-	ld	a,(??AUTO+135)
-	cp	9CH
-	jr	C,??FOR0222
+	ld	hl,(??AUTO+135)
+	ex	de,hl
+	ld	hl,9BH
+	call	??subde
+	jp	nc,??FOR0222
 ??NEXT0225:
 	ld	hl,9CH
-	ld	a,l
-	ld	(??AUTO+135),a
+	ld	(??AUTO+135),hl
 	JR ??TEST0227
 ??FOR0226:
 	ld	a,0FH
 	ld	b,a
-	ld	a,(??AUTO+135)
-	ld	l,a
-	ld	h,0
-	ld	de,DCODE
+	ld	hl,DCODE
+	push	hl
+	ld	hl,(??AUTO+135)
+	pop	de
 	add	hl,de
 	ld	(hl),b
 ??INCR0228:
-	ld	a,(??AUTO+135)
-	inc	a
-	ld	(??AUTO+135),a
+	ld	hl,(??AUTO+135)
+	inc	hl
+	ld	(??AUTO+135),hl
 ??TEST0227:
-	ld	a,(??AUTO+135)
-	cp	0A0H
-	jr	C,??FOR0226
+	ld	hl,(??AUTO+135)
+	ex	de,hl
+	ld	hl,9FH
+	call	??subde
+	jp	nc,??FOR0226
 ??NEXT0229:
 	ld	hl,0A0H
-	ld	a,l
-	ld	(??AUTO+135),a
+	ld	(??AUTO+135),hl
 	JR ??TEST0231
 ??FOR0230:
 	ld	a,10H
 	ld	b,a
-	ld	a,(??AUTO+135)
-	ld	l,a
-	ld	h,0
-	ld	de,DCODE
+	ld	hl,DCODE
+	push	hl
+	ld	hl,(??AUTO+135)
+	pop	de
 	add	hl,de
 	ld	(hl),b
 ??INCR0232:
-	ld	a,(??AUTO+135)
-	inc	a
-	ld	(??AUTO+135),a
+	ld	hl,(??AUTO+135)
+	inc	hl
+	ld	(??AUTO+135),hl
 ??TEST0231:
-	ld	a,(??AUTO+135)
-	cp	0A4H
-	jr	C,??FOR0230
+	ld	hl,(??AUTO+135)
+	ex	de,hl
+	ld	hl,0A3H
+	call	??subde
+	jp	nc,??FOR0230
 ??NEXT0233:
 	ld	hl,0A4H
-	ld	a,l
-	ld	(??AUTO+135),a
+	ld	(??AUTO+135),hl
 	JR ??TEST0235
 ??FOR0234:
 	ld	a,11H
 	ld	b,a
-	ld	a,(??AUTO+135)
-	ld	l,a
-	ld	h,0
-	ld	de,DCODE
+	ld	hl,DCODE
+	push	hl
+	ld	hl,(??AUTO+135)
+	pop	de
 	add	hl,de
 	ld	(hl),b
 ??INCR0236:
-	ld	a,(??AUTO+135)
-	inc	a
-	ld	(??AUTO+135),a
+	ld	hl,(??AUTO+135)
+	inc	hl
+	ld	(??AUTO+135),hl
 ??TEST0235:
-	ld	a,(??AUTO+135)
-	cp	0A8H
-	jr	C,??FOR0234
+	ld	hl,(??AUTO+135)
+	ex	de,hl
+	ld	hl,0A7H
+	call	??subde
+	jp	nc,??FOR0234
 ??NEXT0237:
 	ld	hl,0A8H
-	ld	a,l
-	ld	(??AUTO+135),a
+	ld	(??AUTO+135),hl
 	JR ??TEST0239
 ??FOR0238:
 	ld	a,12H
 	ld	b,a
-	ld	a,(??AUTO+135)
-	ld	l,a
-	ld	h,0
-	ld	de,DCODE
+	ld	hl,DCODE
+	push	hl
+	ld	hl,(??AUTO+135)
+	pop	de
 	add	hl,de
 	ld	(hl),b
 ??INCR0240:
-	ld	a,(??AUTO+135)
-	inc	a
-	ld	(??AUTO+135),a
+	ld	hl,(??AUTO+135)
+	inc	hl
+	ld	(??AUTO+135),hl
 ??TEST0239:
-	ld	a,(??AUTO+135)
-	cp	0ACH
-	jr	C,??FOR0238
+	ld	hl,(??AUTO+135)
+	ex	de,hl
+	ld	hl,0ABH
+	call	??subde
+	jp	nc,??FOR0238
 ??NEXT0241:
 	ld	hl,0ACH
-	ld	a,l
-	ld	(??AUTO+135),a
+	ld	(??AUTO+135),hl
 	JR ??TEST0243
 ??FOR0242:
 	ld	a,13H
 	ld	b,a
-	ld	a,(??AUTO+135)
-	ld	l,a
-	ld	h,0
-	ld	de,DCODE
+	ld	hl,DCODE
+	push	hl
+	ld	hl,(??AUTO+135)
+	pop	de
 	add	hl,de
 	ld	(hl),b
 ??INCR0244:
-	ld	a,(??AUTO+135)
-	inc	a
-	ld	(??AUTO+135),a
+	ld	hl,(??AUTO+135)
+	inc	hl
+	ld	(??AUTO+135),hl
 ??TEST0243:
-	ld	a,(??AUTO+135)
-	cp	0B0H
-	jr	C,??FOR0242
+	ld	hl,(??AUTO+135)
+	ex	de,hl
+	ld	hl,0AFH
+	call	??subde
+	jp	nc,??FOR0242
 ??NEXT0245:
 	ld	hl,0B0H
-	ld	a,l
-	ld	(??AUTO+135),a
+	ld	(??AUTO+135),hl
 	JR ??TEST0247
 ??FOR0246:
 	ld	a,14H
 	ld	b,a
-	ld	a,(??AUTO+135)
-	ld	l,a
-	ld	h,0
-	ld	de,DCODE
+	ld	hl,DCODE
+	push	hl
+	ld	hl,(??AUTO+135)
+	pop	de
 	add	hl,de
 	ld	(hl),b
 ??INCR0248:
-	ld	a,(??AUTO+135)
-	inc	a
-	ld	(??AUTO+135),a
+	ld	hl,(??AUTO+135)
+	inc	hl
+	ld	(??AUTO+135),hl
 ??TEST0247:
-	ld	a,(??AUTO+135)
-	cp	0B4H
-	jr	C,??FOR0246
+	ld	hl,(??AUTO+135)
+	ex	de,hl
+	ld	hl,0B3H
+	call	??subde
+	jp	nc,??FOR0246
 ??NEXT0249:
 	ld	hl,0B4H
-	ld	a,l
-	ld	(??AUTO+135),a
+	ld	(??AUTO+135),hl
 	JR ??TEST0251
 ??FOR0250:
 	ld	a,15H
 	ld	b,a
-	ld	a,(??AUTO+135)
-	ld	l,a
-	ld	h,0
-	ld	de,DCODE
+	ld	hl,DCODE
+	push	hl
+	ld	hl,(??AUTO+135)
+	pop	de
 	add	hl,de
 	ld	(hl),b
 ??INCR0252:
-	ld	a,(??AUTO+135)
-	inc	a
-	ld	(??AUTO+135),a
+	ld	hl,(??AUTO+135)
+	inc	hl
+	ld	(??AUTO+135),hl
 ??TEST0251:
-	ld	a,(??AUTO+135)
-	cp	0B8H
-	jr	C,??FOR0250
+	ld	hl,(??AUTO+135)
+	ex	de,hl
+	ld	hl,0B7H
+	call	??subde
+	jp	nc,??FOR0250
 ??NEXT0253:
 	ld	hl,0B8H
-	ld	a,l
-	ld	(??AUTO+135),a
+	ld	(??AUTO+135),hl
 	JR ??TEST0255
 ??FOR0254:
 	ld	a,16H
 	ld	b,a
-	ld	a,(??AUTO+135)
-	ld	l,a
-	ld	h,0
-	ld	de,DCODE
+	ld	hl,DCODE
+	push	hl
+	ld	hl,(??AUTO+135)
+	pop	de
 	add	hl,de
 	ld	(hl),b
 ??INCR0256:
-	ld	a,(??AUTO+135)
-	inc	a
-	ld	(??AUTO+135),a
+	ld	hl,(??AUTO+135)
+	inc	hl
+	ld	(??AUTO+135),hl
 ??TEST0255:
-	ld	a,(??AUTO+135)
-	cp	0BCH
-	jr	C,??FOR0254
+	ld	hl,(??AUTO+135)
+	ex	de,hl
+	ld	hl,0BBH
+	call	??subde
+	jp	nc,??FOR0254
 ??NEXT0257:
 	ld	hl,0BCH
-	ld	a,l
-	ld	(??AUTO+135),a
+	ld	(??AUTO+135),hl
 	JR ??TEST0259
 ??FOR0258:
 	ld	a,17H
 	ld	b,a
-	ld	a,(??AUTO+135)
-	ld	l,a
-	ld	h,0
-	ld	de,DCODE
+	ld	hl,DCODE
+	push	hl
+	ld	hl,(??AUTO+135)
+	pop	de
 	add	hl,de
 	ld	(hl),b
 ??INCR0260:
-	ld	a,(??AUTO+135)
-	inc	a
-	ld	(??AUTO+135),a
+	ld	hl,(??AUTO+135)
+	inc	hl
+	ld	(??AUTO+135),hl
 ??TEST0259:
-	ld	a,(??AUTO+135)
-	cp	0C0H
-	jr	C,??FOR0258
+	ld	hl,(??AUTO+135)
+	ex	de,hl
+	ld	hl,0BFH
+	call	??subde
+	jp	nc,??FOR0258
 ??NEXT0261:
 	ld	a,18H
 	ld	(DCODE+192),a
@@ -2677,156 +2708,171 @@ INITLZHTABLES:
 	ld	a,2FH
 	ld	(DCODE+239),a
 	ld	hl,0F0H
-	ld	a,l
-	ld	(??AUTO+135),a
+	ld	(??AUTO+135),hl
 	JR ??TEST0263
 ??FOR0262:
-	ld	a,30H
+	ld	hl,(??AUTO+135)
+	ld	de,0F0H
+	call	??subde
+	ex	de,hl
+	ld	hl,30H
+	add	hl,de
+	ld	a,l
 	ld	b,a
-	ld	a,(??AUTO+135)
-	sub	0F0H
-	add	a,b
-	ld	b,a
-	ld	a,(??AUTO+135)
-	ld	l,a
-	ld	h,0
-	ld	de,DCODE
+	ld	hl,DCODE
+	push	hl
+	ld	hl,(??AUTO+135)
+	pop	de
 	add	hl,de
 	ld	(hl),b
 ??INCR0264:
-	ld	a,(??AUTO+135)
-	inc	a
-	ld	(??AUTO+135),a
+	ld	hl,(??AUTO+135)
+	inc	hl
+	ld	(??AUTO+135),hl
 ??TEST0263:
-	ld	a,(??AUTO+135)
-	cp	0100H
-	jr	C,??FOR0262
+	ld	hl,(??AUTO+135)
+	ex	de,hl
+	ld	hl,0FFH
+	call	??subde
+	jp	nc,??FOR0262
 ??NEXT0265:
-	ld	b,20H
+	ld	hl,0
+	ld	(??AUTO+135),hl
+	JR ??TEST0267
 ??FOR0266:
-	push	bc
 	ld	a,3
 	ld	b,a
-	ld	a,(??AUTO+135)
-	ld	l,a
-	ld	h,0
-	ld	de,DLEN
+	ld	hl,DLEN
+	push	hl
+	ld	hl,(??AUTO+135)
+	pop	de
 	add	hl,de
 	ld	(hl),b
-	pop	bc
 ??INCR0268:
-	dec	b
-	jp	nz,??FOR0266
+	ld	hl,(??AUTO+135)
+	inc	hl
+	ld	(??AUTO+135),hl
+??TEST0267:
+	ld	hl,(??AUTO+135)
+	ex	de,hl
+	ld	hl,1FH
+	call	??subde
+	jp	nc,??FOR0266
 ??NEXT0269:
 	ld	hl,20H
-	ld	a,l
-	ld	(??AUTO+135),a
+	ld	(??AUTO+135),hl
 	JR ??TEST0271
 ??FOR0270:
 	ld	a,4
 	ld	b,a
-	ld	a,(??AUTO+135)
-	ld	l,a
-	ld	h,0
-	ld	de,DLEN
+	ld	hl,DLEN
+	push	hl
+	ld	hl,(??AUTO+135)
+	pop	de
 	add	hl,de
 	ld	(hl),b
 ??INCR0272:
-	ld	a,(??AUTO+135)
-	inc	a
-	ld	(??AUTO+135),a
+	ld	hl,(??AUTO+135)
+	inc	hl
+	ld	(??AUTO+135),hl
 ??TEST0271:
-	ld	a,(??AUTO+135)
-	cp	50H
-	jr	C,??FOR0270
+	ld	hl,(??AUTO+135)
+	ex	de,hl
+	ld	hl,4FH
+	call	??subde
+	jp	nc,??FOR0270
 ??NEXT0273:
 	ld	hl,50H
-	ld	a,l
-	ld	(??AUTO+135),a
+	ld	(??AUTO+135),hl
 	JR ??TEST0275
 ??FOR0274:
 	ld	a,5
 	ld	b,a
-	ld	a,(??AUTO+135)
-	ld	l,a
-	ld	h,0
-	ld	de,DLEN
+	ld	hl,DLEN
+	push	hl
+	ld	hl,(??AUTO+135)
+	pop	de
 	add	hl,de
 	ld	(hl),b
 ??INCR0276:
-	ld	a,(??AUTO+135)
-	inc	a
-	ld	(??AUTO+135),a
+	ld	hl,(??AUTO+135)
+	inc	hl
+	ld	(??AUTO+135),hl
 ??TEST0275:
-	ld	a,(??AUTO+135)
-	cp	90H
-	jr	C,??FOR0274
+	ld	hl,(??AUTO+135)
+	ex	de,hl
+	ld	hl,8FH
+	call	??subde
+	jp	nc,??FOR0274
 ??NEXT0277:
 	ld	hl,90H
-	ld	a,l
-	ld	(??AUTO+135),a
+	ld	(??AUTO+135),hl
 	JR ??TEST0279
 ??FOR0278:
 	ld	a,6
 	ld	b,a
-	ld	a,(??AUTO+135)
-	ld	l,a
-	ld	h,0
-	ld	de,DLEN
+	ld	hl,DLEN
+	push	hl
+	ld	hl,(??AUTO+135)
+	pop	de
 	add	hl,de
 	ld	(hl),b
 ??INCR0280:
-	ld	a,(??AUTO+135)
-	inc	a
-	ld	(??AUTO+135),a
+	ld	hl,(??AUTO+135)
+	inc	hl
+	ld	(??AUTO+135),hl
 ??TEST0279:
-	ld	a,(??AUTO+135)
-	cp	0C0H
-	jr	C,??FOR0278
+	ld	hl,(??AUTO+135)
+	ex	de,hl
+	ld	hl,0BFH
+	call	??subde
+	jp	nc,??FOR0278
 ??NEXT0281:
 	ld	hl,0C0H
-	ld	a,l
-	ld	(??AUTO+135),a
+	ld	(??AUTO+135),hl
 	JR ??TEST0283
 ??FOR0282:
 	ld	a,7
 	ld	b,a
-	ld	a,(??AUTO+135)
-	ld	l,a
-	ld	h,0
-	ld	de,DLEN
+	ld	hl,DLEN
+	push	hl
+	ld	hl,(??AUTO+135)
+	pop	de
 	add	hl,de
 	ld	(hl),b
 ??INCR0284:
-	ld	a,(??AUTO+135)
-	inc	a
-	ld	(??AUTO+135),a
+	ld	hl,(??AUTO+135)
+	inc	hl
+	ld	(??AUTO+135),hl
 ??TEST0283:
-	ld	a,(??AUTO+135)
-	cp	0F0H
-	jr	C,??FOR0282
+	ld	hl,(??AUTO+135)
+	ex	de,hl
+	ld	hl,0EFH
+	call	??subde
+	jp	nc,??FOR0282
 ??NEXT0285:
 	ld	hl,0F0H
-	ld	a,l
-	ld	(??AUTO+135),a
+	ld	(??AUTO+135),hl
 	JR ??TEST0287
 ??FOR0286:
 	ld	a,8
 	ld	b,a
-	ld	a,(??AUTO+135)
-	ld	l,a
-	ld	h,0
-	ld	de,DLEN
+	ld	hl,DLEN
+	push	hl
+	ld	hl,(??AUTO+135)
+	pop	de
 	add	hl,de
 	ld	(hl),b
 ??INCR0288:
-	ld	a,(??AUTO+135)
-	inc	a
-	ld	(??AUTO+135),a
+	ld	hl,(??AUTO+135)
+	inc	hl
+	ld	(??AUTO+135),hl
 ??TEST0287:
-	ld	a,(??AUTO+135)
-	cp	0100H
-	jr	C,??FOR0286
+	ld	hl,(??AUTO+135)
+	ex	de,hl
+	ld	hl,0FFH
+	call	??subde
+	jp	nc,??FOR0286
 ??NEXT0289:
 	ret
 
@@ -3009,30 +3055,10 @@ LZHGETBIT:
 	cp	8
 	jp	c,??SKIP0299
 	jp	z,??SKIP0299
-	jp	??WEND0298
+	JR ??WEND0298
 ??SKIP0299:
-	ld	hl,(LZHPOS)
-	push	hl
-	ld	hl,(INBUFEND)
-	ex	de,hl
-	pop	hl
-	call	??subde
-	jp	nc,??ELSE0300
-	ld	hl,(INBUFPTR)
-	push	hl
-	ld	hl,(LZHPOS)
-	pop	de
-	add	hl,de
-	ld	a,(hl)
+	call	GETBYTE
 	ld	(??AUTO+145),a
-	ld	hl,(LZHPOS)
-	inc	hl
-	ld	(LZHPOS),hl
-	JR ??ENDIF0301
-??ELSE0300:
-	xor	a
-	ld	(??AUTO+145),a
-??ENDIF0301:
 	ld	a,(??AUTO+145)
 	ld	l,a
 	ld	h,0
@@ -3041,14 +3067,14 @@ LZHGETBIT:
 	cpl
 	inc	a
 	add	a,8
-	ld	c,l
+	ld	c,a
 	pop	hl
-??SHL0302:
+??SHL0300:
 	dec	c
-	jp	m,??SHLE0303
+	jp	m,??SHLE0301
 	add	hl,hl
-	JR ??SHL0302
-??SHLE0303:
+	JR ??SHL0300
+??SHLE0301:
 	ex	de,hl
 	ld	hl,(LZHBUF)
 	ld	a,l
@@ -3061,7 +3087,7 @@ LZHGETBIT:
 	ld	a,(LZHBUFLEN)
 	add	a,8
 	ld	(LZHBUFLEN),a
-	jp	??WHILE0297
+	JR ??WHILE0297
 ??WEND0298:
 	xor	a
 	ld	(??AUTO+144),a
@@ -3081,10 +3107,10 @@ LZHGETBIT:
 	call	??subde
 	ld	a,l
 	or	h
-	jp	z,??ENDIF0305
+	jp	z,??ENDIF0303
 	ld	a,1
 	ld	(??AUTO+144),a
-??ENDIF0305:
+??ENDIF0303:
 	ld	hl,(LZHBUF)
 	add	hl,hl
 	ld	de,0
@@ -3102,7 +3128,7 @@ LZHGETBYTE:
 	xor	a
 	ld	(??AUTO+146),a
 	ld	b,8
-??FOR0306:
+??FOR0304:
 	push	bc
 	ld	a,(??AUTO+146)
 	ld	l,a
@@ -3124,10 +3150,10 @@ LZHGETBYTE:
 	ld	a,l
 	ld	(??AUTO+146),a
 	pop	bc
-??INCR0308:
+??INCR0306:
 	dec	b
-	jp	nz,??FOR0306
-??NEXT0309:
+	jp	nz,??FOR0304
+??NEXT0307:
 	ld	a,(??AUTO+146)
 	ret
 
@@ -3139,8 +3165,8 @@ RECONST:
 	ld	(??AUTO+137),hl
 	ld	hl,0
 	ld	(??AUTO+135),hl
-	jp	??TEST0311
-??FOR0310:
+	jp	??TEST0309
+??FOR0308:
 	ld	hl,SON
 	push	hl
 	ld	hl,(??AUTO+135)
@@ -3156,7 +3182,7 @@ RECONST:
 	ex	de,hl
 	pop	hl
 	call	??subde
-	jp	c,??ENDIF0315
+	jp	c,??ENDIF0313
 	ld	hl,FREQ
 	push	hl
 	ld	hl,(??AUTO+135)
@@ -3210,30 +3236,30 @@ RECONST:
 	ld	hl,(??AUTO+137)
 	inc	hl
 	ld	(??AUTO+137),hl
-??ENDIF0315:
-??INCR0312:
+??ENDIF0313:
+??INCR0310:
 	ld	hl,(??AUTO+135)
 	inc	hl
 	ld	(??AUTO+135),hl
-??TEST0311:
+??TEST0309:
 	ld	hl,(??AUTO+135)
 	ex	de,hl
 	ld	hl,0274H
 	call	??subde
-	jp	nc,??FOR0310
-??NEXT0313:
+	jp	nc,??FOR0308
+??NEXT0311:
 	ld	hl,0
 	ld	(??AUTO+135),hl
 	ld	hl,013BH
 	ld	(??AUTO+137),hl
-??WHILE0316:
+??WHILE0314:
 	ld	hl,(??AUTO+137)
 	push	hl
 	ld	hl,0275H
 	ex	de,hl
 	pop	hl
 	call	??subde
-	jp	nc,??WEND0317
+	jp	nc,??WEND0315
 	ld	hl,FREQ
 	push	hl
 	ld	hl,(??AUTO+135)
@@ -3273,17 +3299,17 @@ RECONST:
 	ld	hl,(??AUTO+137)
 	dec	hl
 	ld	(??AUTO+139),hl
-??WHILE0318:
+??WHILE0316:
 	ld	hl,(??AUTO+139)
 	push	hl
 	ld	hl,0
 	ex	de,hl
 	pop	hl
 	call	??subde
-	jp	c,??WEND0319
+	jp	c,??WEND0317
 	ld	a,l
 	or	h
-	jp	z,??WEND0319
+	jp	z,??WEND0317
 	ld	hl,FREQ
 	push	hl
 	ld	hl,(??AUTO+139)
@@ -3295,28 +3321,28 @@ RECONST:
 	ld	d,(hl)
 	ld	hl,(??AUTO+143)
 	call	??subde
-	jp	nc,??WEND0319
+	jp	nc,??WEND0317
 	ld	hl,(??AUTO+139)
 	dec	hl
 	ld	(??AUTO+139),hl
-	JR ??WHILE0318
-??WEND0319:
+	JR ??WHILE0316
+??WEND0317:
 	ld	hl,(??AUTO+139)
 	inc	hl
 	ld	(??AUTO+139),hl
 	ld	hl,(??AUTO+137)
 	ld	(??AUTO+141),hl
-??WHILE0320:
+??WHILE0318:
 	ld	hl,(??AUTO+141)
 	push	hl
 	ld	hl,(??AUTO+139)
 	ex	de,hl
 	pop	hl
 	call	??subde
-	jp	c,??WEND0321
+	jp	c,??WEND0319
 	ld	a,l
 	or	h
-	jp	z,??WEND0321
+	jp	z,??WEND0319
 	ld	hl,FREQ
 	push	hl
 	ld	hl,(??AUTO+141)
@@ -3364,8 +3390,8 @@ RECONST:
 	ld	hl,(??AUTO+141)
 	dec	hl
 	ld	(??AUTO+141),hl
-	jp	??WHILE0320
-??WEND0321:
+	jp	??WHILE0318
+??WEND0319:
 	ld	hl,(??AUTO+143)
 	push	hl
 	ld	hl,FREQ
@@ -3397,12 +3423,12 @@ RECONST:
 	ld	hl,(??AUTO+137)
 	inc	hl
 	ld	(??AUTO+137),hl
-	jp	??WHILE0316
-??WEND0317:
+	jp	??WHILE0314
+??WEND0315:
 	ld	hl,0
 	ld	(??AUTO+135),hl
-	jp	??TEST0323
-??FOR0322:
+	jp	??TEST0321
+??FOR0320:
 	ld	hl,SON
 	push	hl
 	ld	hl,(??AUTO+135)
@@ -3420,7 +3446,7 @@ RECONST:
 	ex	de,hl
 	pop	hl
 	call	??subde
-	jp	c,??ELSE0326
+	jp	c,??ELSE0324
 	ld	hl,(??AUTO+135)
 	push	hl
 	ld	hl,PRNT
@@ -3433,8 +3459,8 @@ RECONST:
 	ld	(hl),e
 	inc	hl
 	ld	(hl),d
-	JR ??ENDIF0327
-??ELSE0326:
+	JR ??ENDIF0325
+??ELSE0324:
 	ld	hl,(??AUTO+135)
 	push	hl
 	ld	hl,PRNT
@@ -3460,18 +3486,18 @@ RECONST:
 	ld	(hl),e
 	inc	hl
 	ld	(hl),d
-??ENDIF0327:
-??INCR0324:
+??ENDIF0325:
+??INCR0322:
 	ld	hl,(??AUTO+135)
 	inc	hl
 	ld	(??AUTO+135),hl
-??TEST0323:
+??TEST0321:
 	ld	hl,(??AUTO+135)
 	ex	de,hl
 	ld	hl,0274H
 	call	??subde
-	jp	nc,??FOR0322
-??NEXT0325:
+	jp	nc,??FOR0320
+??NEXT0323:
 	ret
 
 ; Module: MODULE
@@ -3491,9 +3517,9 @@ UPDATETREE:
 	call	??subde
 	ld	a,l
 	or	h
-	jp	nz,??ENDIF0329
+	jp	nz,??ENDIF0327
 	call	RECONST
-??ENDIF0329:
+??ENDIF0327:
 	ld	hl,PRNT
 	push	hl
 	ld	hl,(??AUTO+145)
@@ -3507,16 +3533,7 @@ UPDATETREE:
 	ld	d,(hl)
 	ex	de,hl
 	ld	(??AUTO+145),hl
-??WHILE0330:
-	ld	hl,(??AUTO+145)
-	push	hl
-	ld	hl,0
-	ex	de,hl
-	pop	hl
-	call	??subde
-	ld	a,l
-	or	h
-	jp	z,??WEND0331
+??WHILE0328:
 	ld	hl,FREQ
 	push	hl
 	ld	hl,(??AUTO+145)
@@ -3564,11 +3581,11 @@ UPDATETREE:
 	ld	d,(hl)
 	ld	hl,(??AUTO+147)
 	call	??subde
-	jp	c,??ENDIF0333
+	jp	c,??ENDIF0331
 	ld	a,l
 	or	h
-	jp	z,??ENDIF0333
-??WHILE0334:
+	jp	z,??ENDIF0331
+??WHILE0332:
 	ld	hl,FREQ
 	push	hl
 	ld	hl,(??AUTO+149)
@@ -3581,15 +3598,15 @@ UPDATETREE:
 	ld	d,(hl)
 	ld	hl,(??AUTO+147)
 	call	??subde
-	jp	c,??WEND0335
+	jp	c,??WEND0333
 	ld	a,l
 	or	h
-	jp	z,??WEND0335
+	jp	z,??WEND0333
 	ld	hl,(??AUTO+149)
 	inc	hl
 	ld	(??AUTO+149),hl
-	JR ??WHILE0334
-??WEND0335:
+	JR ??WHILE0332
+??WEND0333:
 	ld	hl,FREQ
 	push	hl
 	ld	hl,(??AUTO+149)
@@ -3652,7 +3669,7 @@ UPDATETREE:
 	ex	de,hl
 	pop	hl
 	call	??subde
-	jp	nc,??ENDIF0337
+	jp	nc,??ENDIF0335
 	ld	hl,(??AUTO+149)
 	push	hl
 	ld	hl,PRNT
@@ -3666,7 +3683,7 @@ UPDATETREE:
 	ld	(hl),e
 	inc	hl
 	ld	(hl),d
-??ENDIF0337:
+??ENDIF0335:
 	ld	hl,SON
 	push	hl
 	ld	hl,(??AUTO+149)
@@ -3708,7 +3725,7 @@ UPDATETREE:
 	ex	de,hl
 	pop	hl
 	call	??subde
-	jp	nc,??ENDIF0339
+	jp	nc,??ENDIF0337
 	ld	hl,(??AUTO+145)
 	push	hl
 	ld	hl,PRNT
@@ -3722,7 +3739,7 @@ UPDATETREE:
 	ld	(hl),e
 	inc	hl
 	ld	(hl),d
-??ENDIF0339:
+??ENDIF0337:
 	ld	hl,(??AUTO+153)
 	push	hl
 	ld	hl,SON
@@ -3737,7 +3754,7 @@ UPDATETREE:
 	ld	(hl),d
 	ld	hl,(??AUTO+149)
 	ld	(??AUTO+145),hl
-??ENDIF0333:
+??ENDIF0331:
 	ld	hl,PRNT
 	push	hl
 	ld	hl,(??AUTO+145)
@@ -3749,8 +3766,19 @@ UPDATETREE:
 	ld	d,(hl)
 	ex	de,hl
 	ld	(??AUTO+145),hl
-	jp	??WHILE0330
-??WEND0331:
+	ld	hl,(??AUTO+145)
+	push	hl
+	ld	hl,0
+	ex	de,hl
+	pop	hl
+	call	??subde
+	ld	a,l
+	or	h
+	jp	nz,??ENDIF0339
+	ret
+??ENDIF0339:
+	jp	??WHILE0328
+??WEND0329:
 	ret
 
 ; Module: MODULE
@@ -4023,6 +4051,8 @@ UNCRLZH:
 	ld	hl,(LZHPOS)
 	inc	hl
 	ld	(LZHPOS),hl
+	ld	hl,(LZHPOS)
+	ld	(INBUFPOS),hl
 	ld	hl,0
 	ld	(LZHBUF),hl
 	xor	a
@@ -4072,16 +4102,12 @@ UNCRLZH:
 	jp	nc,??ELSE0356
 	ld	hl,(??AUTO+123)
 	ld	a,l
-	ld	b,a
-	ld	hl,(OUTBUFPTR)
-	push	hl
-	ld	hl,(OUTBUFPOS)
-	pop	de
-	add	hl,de
-	ld	(hl),b
-	ld	hl,(OUTBUFPOS)
-	inc	hl
-	ld	(OUTBUFPOS),hl
+	call	PUTBYTE
+	or	a
+	jp	nz,??ENDIF0359
+    XOR A
+	ret
+??ENDIF0359:
 	ld	hl,(??AUTO+123)
 	ld	a,l
 	ld	b,a
@@ -4114,25 +4140,25 @@ UNCRLZH:
 	call	??subde
 	ld	a,l
 	or	h
-	jp	nz,??ELSE0358
+	jp	nz,??ELSE0360
 	ld	a,1
 	ret
-	jp	??ENDIF0359
-??ELSE0358:
+	jp	??ENDIF0361
+??ELSE0360:
 	ld	hl,(??AUTO+123)
 	ld	de,0FEH
 	call	??subde
 	ld	(??AUTO+127),hl
 	ld	a,(USEV2)
 	or	a
-	jp	z,??ELSE0360
+	jp	z,??ELSE0362
 	call	DECODEPOSV2
 	ld	(??AUTO+125),hl
-	JR ??ENDIF0361
-??ELSE0360:
+	JR ??ENDIF0363
+??ELSE0362:
 	call	DECODEPOSV1
 	ld	(??AUTO+125),hl
-??ENDIF0361:
+??ENDIF0363:
 	ld	hl,(??AUTO+125)
 	ex	de,hl
 	ld	hl,(LZHRINGPOS)
@@ -4156,8 +4182,8 @@ UNCRLZH:
 	ld	b,a
 	ld	a,b
 	or	a
-	jp	z,??NEXT0365
-??FOR0362:
+	jp	z,??NEXT0367
+??FOR0364:
 	push	bc
 	ld	hl,LZHRING
 	push	hl
@@ -4167,16 +4193,12 @@ UNCRLZH:
 	ld	a,(hl)
 	ld	(??AUTO+134),a
 	ld	a,(??AUTO+134)
-	ld	b,a
-	ld	hl,(OUTBUFPTR)
-	push	hl
-	ld	hl,(OUTBUFPOS)
-	pop	de
-	add	hl,de
-	ld	(hl),b
-	ld	hl,(OUTBUFPOS)
-	inc	hl
-	ld	(OUTBUFPOS),hl
+	call	PUTBYTE
+	or	a
+	jp	nz,??ENDIF0369
+    XOR A
+	ret
+??ENDIF0369:
 	ld	a,(??AUTO+134)
 	ld	b,a
 	ld	hl,LZHRING
@@ -4212,11 +4234,11 @@ UNCRLZH:
 	ld	h,a
 	ld	(??AUTO+129),hl
 	pop	bc
-??INCR0364:
+??INCR0366:
 	dec	b
-	jp	nz,??FOR0362
-??NEXT0365:
-??ENDIF0359:
+	jp	nz,??FOR0364
+??NEXT0367:
+??ENDIF0361:
 ??ENDIF0357:
 	jp	??WHILE0354
 ??WEND0355:
@@ -4228,41 +4250,6 @@ UNCRLZH:
 ; Procedure ARCDECOMPSTORED
 ARCDECOMPSTORED:
 	ld	(??AUTO+23),hl
-??WHILE0366:
-	ld	hl,(??AUTO+23)
-	push	hl
-	ld	hl,0
-	ex	de,hl
-	pop	hl
-	call	??subde
-	jp	c,??WEND0367
-	ld	a,l
-	or	h
-	jp	z,??WEND0367
-	call	GETBYTE
-	ld	(??AUTO+25),a
-	ld	a,(??AUTO+25)
-	call	PUTBYTE
-	or	a
-	jp	nz,??ENDIF0369
-    XOR A
-	ret
-??ENDIF0369:
-	ld	hl,(??AUTO+23)
-	dec	hl
-	ld	(??AUTO+23),hl
-	JR ??WHILE0366
-??WEND0367:
-	ld	a,1
-	ret
-
-; Module: MODULE
-
-; Procedure ARCDECOMPRLE
-ARCDECOMPRLE:
-	ld	(??AUTO+23),hl
-	xor	a
-	ld	(??AUTO+27),a
 ??WHILE0370:
 	ld	hl,(??AUTO+23)
 	push	hl
@@ -4276,12 +4263,47 @@ ARCDECOMPRLE:
 	jp	z,??WEND0371
 	call	GETBYTE
 	ld	(??AUTO+25),a
+	ld	a,(??AUTO+25)
+	call	PUTBYTE
+	or	a
+	jp	nz,??ENDIF0373
+    XOR A
+	ret
+??ENDIF0373:
+	ld	hl,(??AUTO+23)
+	dec	hl
+	ld	(??AUTO+23),hl
+	JR ??WHILE0370
+??WEND0371:
+	ld	a,1
+	ret
+
+; Module: MODULE
+
+; Procedure ARCDECOMPRLE
+ARCDECOMPRLE:
+	ld	(??AUTO+23),hl
+	xor	a
+	ld	(??AUTO+27),a
+??WHILE0374:
+	ld	hl,(??AUTO+23)
+	push	hl
+	ld	hl,0
+	ex	de,hl
+	pop	hl
+	call	??subde
+	jp	c,??WEND0375
+	ld	a,l
+	or	h
+	jp	z,??WEND0375
+	call	GETBYTE
+	ld	(??AUTO+25),a
 	ld	hl,(??AUTO+23)
 	dec	hl
 	ld	(??AUTO+23),hl
 	ld	a,(??AUTO+25)
 	cp	90H
-	jp	nz,??ELSE0372
+	jp	nz,??ELSE0376
 	ld	hl,(??AUTO+23)
 	push	hl
 	ld	hl,0
@@ -4290,23 +4312,6 @@ ARCDECOMPRLE:
 	call	??subde
 	ld	a,l
 	or	h
-	jp	nz,??ELSE0374
-	ld	a,90H
-	call	PUTBYTE
-	or	a
-	jp	nz,??ENDIF0377
-    XOR A
-	ret
-??ENDIF0377:
-	JR ??WHILE0370
-??ELSE0374:
-	call	GETBYTE
-	ld	(??AUTO+26),a
-	ld	hl,(??AUTO+23)
-	dec	hl
-	ld	(??AUTO+23),hl
-	ld	a,(??AUTO+26)
-    OR A
 	jp	nz,??ELSE0378
 	ld	a,90H
 	call	PUTBYTE
@@ -4315,43 +4320,60 @@ ARCDECOMPRLE:
     XOR A
 	ret
 ??ENDIF0381:
-	ld	a,90H
-	ld	(??AUTO+27),a
-	JR ??ENDIF0379
+	JR ??WHILE0374
 ??ELSE0378:
-??WHILE0382:
+	call	GETBYTE
+	ld	(??AUTO+26),a
+	ld	hl,(??AUTO+23)
+	dec	hl
+	ld	(??AUTO+23),hl
 	ld	a,(??AUTO+26)
     OR A
-	jp	c,??WEND0383
-	jp	z,??WEND0383
-	ld	a,(??AUTO+27)
+	jp	nz,??ELSE0382
+	ld	a,90H
 	call	PUTBYTE
 	or	a
 	jp	nz,??ENDIF0385
     XOR A
 	ret
 ??ENDIF0385:
+	ld	a,90H
+	ld	(??AUTO+27),a
+	JR ??ENDIF0383
+??ELSE0382:
+??WHILE0386:
+	ld	a,(??AUTO+26)
+    OR A
+	jp	c,??WEND0387
+	jp	z,??WEND0387
+	ld	a,(??AUTO+27)
+	call	PUTBYTE
+	or	a
+	jp	nz,??ENDIF0389
+    XOR A
+	ret
+??ENDIF0389:
 	ld	a,(??AUTO+26)
 	sub	1
 	ld	(??AUTO+26),a
-	JR ??WHILE0382
-??WEND0383:
+	JR ??WHILE0386
+??WEND0387:
+??ENDIF0383:
 ??ENDIF0379:
-??ENDIF0375:
-	JP ??WHILE0370
-??ELSE0372:
+	JP ??WHILE0374
+??ELSE0376:
 	ld	a,(??AUTO+25)
 	call	PUTBYTE
 	or	a
-	jp	nz,??ENDIF0387
+	jp	nz,??ENDIF0391
     XOR A
 	ret
-??ENDIF0387:
+??ENDIF0391:
 	ld	a,(??AUTO+25)
 	ld	(??AUTO+27),a
-??ENDIF0373:
-	jp	??WHILE0370
-??WEND0371:
+??ENDIF0377:
+	jp	??WHILE0374
+??WEND0375:
 	ld	a,1
 	ret
 
@@ -4368,22 +4390,22 @@ ARCDECOMPSQUEEZED:
 	ex	de,hl
 	pop	hl
 	call	??subde
-	jp	c,??ENDIF0389
+	jp	c,??ENDIF0393
 	ld	a,l
 	or	h
-	jp	z,??ENDIF0389
+	jp	z,??ENDIF0393
     XOR A
 	ret
-??ENDIF0389:
+??ENDIF0393:
 	xor	a
 	ld	(??AUTO+23),a
-??WHILE0390:
+??WHILE0394:
 	ld	hl,(??AUTO+25)
 	ld	a,l
 	ld	b,a
 	ld	a,(??AUTO+23)
 	sub	b
-	jp	nc,??WEND0391
+	jp	nc,??WEND0395
 	ld	a,(??AUTO+23)
 	ld	l,a
 	ld	h,0
@@ -4409,30 +4431,30 @@ ARCDECOMPSQUEEZED:
 	ld	a,(??AUTO+23)
 	add	a,1
 	ld	(??AUTO+23),a
-	JR ??WHILE0390
-??WEND0391:
+	JR ??WHILE0394
+??WEND0395:
 	ld	hl,(??AUTO+25)
 	ld	(HUFFNODES),hl
 	call	INITRLE
 	xor	a
 	ld	(??AUTO+35),a
-??WHILE0392:
+??WHILE0396:
 	ld	a,(??AUTO+35)
 	or	a
-	jp	nz,??WEND0393
+	jp	nz,??WEND0397
 	call	INPUTAVAIL
 	or	a
-	jp	z,??WEND0393
+	jp	z,??WEND0397
 	ld	hl,0
 	ld	(??AUTO+27),hl
-??WHILE0394:
+??WHILE0398:
 	ld	hl,(??AUTO+27)
 	push	hl
 	ld	hl,(HUFFNODES)
 	ex	de,hl
 	pop	hl
 	call	??subde
-	jp	nc,??WEND0395
+	jp	nc,??WEND0399
 	ld	hl,(??AUTO+27)
 	ld	a,l
 	ld	h,0
@@ -4445,18 +4467,18 @@ ARCDECOMPSQUEEZED:
 	ld	(??AUTO+33),hl
 	call	READBITLSB
 	or	a
-	jp	z,??ELSE0396
+	jp	z,??ELSE0400
 	ld	hl,(??AUTO+33)
 	inc	hl
 	inc	hl
 	call	READWORD
 	ld	(??AUTO+29),hl
-	JR ??ENDIF0397
-??ELSE0396:
+	JR ??ENDIF0401
+??ELSE0400:
 	ld	hl,(??AUTO+33)
 	call	READWORD
 	ld	(??AUTO+29),hl
-??ENDIF0397:
+??ENDIF0401:
 	ld	hl,8000H
 	ex	de,hl
 	ld	hl,(??AUTO+29)
@@ -4473,7 +4495,7 @@ ARCDECOMPSQUEEZED:
 	call	??subde
 	ld	a,l
 	or	h
-	jp	z,??ELSE0398
+	jp	z,??ELSE0402
 	ld	hl,(??AUTO+29)
 	ld	a,l
 	cpl
@@ -4490,31 +4512,31 @@ ARCDECOMPSQUEEZED:
 	call	??subde
 	ld	a,l
 	or	h
-	jp	nz,??ELSE0400
+	jp	nz,??ELSE0404
 	ld	a,1
 	ld	(??AUTO+35),a
-	JR ??ENDIF0401
-??ELSE0400:
+	JR ??ENDIF0405
+??ELSE0404:
 	ld	hl,(??AUTO+31)
 	ld	a,l
 	call	RLEDECODEBYTE
 	or	a
-	jp	nz,??ENDIF0403
+	jp	nz,??ENDIF0407
     XOR A
 	ret
-??ENDIF0403:
-??ENDIF0401:
+??ENDIF0407:
+??ENDIF0405:
 	ld	hl,(HUFFNODES)
 	ld	(??AUTO+27),hl
-	JP ??WHILE0394
-??ELSE0398:
+	JP ??WHILE0398
+??ELSE0402:
 	ld	hl,(??AUTO+29)
 	ld	(??AUTO+27),hl
-??ENDIF0399:
-	jp	??WHILE0394
-??WEND0395:
-	jp	??WHILE0392
-??WEND0393:
+??ENDIF0403:
+	jp	??WHILE0398
+??WEND0399:
+	jp	??WHILE0396
+??WEND0397:
 	ld	a,1
 	ret
 
@@ -4529,22 +4551,22 @@ ARCDECOMPLZW56:
 	call	INITBITSMSB
 	ld	a,(??AUTO+23)
 	or	a
-	jp	z,??ENDIF0405
+	jp	z,??ENDIF0409
 	call	INITRLE
-??ENDIF0405:
+??ENDIF0409:
 	ld	hl,0FFFFH
 	ld	(??AUTO+26),hl
 	ld	a,1
 	ld	(??AUTO+28),a
 	xor	a
 	ld	(??AUTO+29),a
-??WHILE0406:
+??WHILE0410:
 	ld	a,(??AUTO+29)
 	or	a
-	jp	nz,??WEND0407
+	jp	nz,??WEND0411
 	call	INPUTAVAIL
 	or	a
-	jp	z,??WEND0407
+	jp	z,??WEND0411
 	ld	a,0CH
 	call	READCODEMSB
 	ld	(??AUTO+24),hl
@@ -4554,48 +4576,48 @@ ARCDECOMPLZW56:
 	ex	de,hl
 	pop	hl
 	call	??subde
-	jp	nc,??ELSE0408
+	jp	nc,??ELSE0412
 	ld	a,(??AUTO+23)
 	or	a
-	jp	z,??ELSE0410
+	jp	z,??ELSE0414
 	ld	hl,(??AUTO+24)
 	ld	a,l
 	call	RLEDECODEBYTE
 	or	a
-	jp	nz,??ENDIF0413
+	jp	nz,??ENDIF0417
     XOR A
 	ret
-??ENDIF0413:
-	JR ??ENDIF0411
-??ELSE0410:
+??ENDIF0417:
+	JR ??ENDIF0415
+??ELSE0414:
 	ld	hl,(??AUTO+24)
 	ld	a,l
 	call	PUTBYTE
 	or	a
-	jp	nz,??ENDIF0415
+	jp	nz,??ENDIF0419
     XOR A
 	ret
+??ENDIF0419:
 ??ENDIF0415:
-??ENDIF0411:
 	ld	hl,(??AUTO+24)
 	ld	a,l
 	ld	(??AUTO+30),a
-	jp	??ENDIF0409
-??ELSE0408:
+	jp	??ENDIF0413
+??ELSE0412:
 	ld	hl,(??AUTO+24)
 	push	hl
 	ld	hl,(LZWNEXTCODE)
 	ex	de,hl
 	pop	hl
 	call	??subde
-	jp	nc,??ELSE0416
+	jp	nc,??ELSE0420
 	ld	hl,(??AUTO+24)
 	call	LZWFIRSTBYTE
 	ld	(??AUTO+30),a
 	ld	hl,(??AUTO+24)
 	call	LZWOUTPUT
-	jp	??ENDIF0417
-??ELSE0416:
+	jp	??ENDIF0421
+??ELSE0420:
 	ld	hl,(??AUTO+24)
 	push	hl
 	ld	hl,(LZWNEXTCODE)
@@ -4604,7 +4626,7 @@ ARCDECOMPLZW56:
 	call	??subde
 	ld	a,l
 	or	h
-	jp	nz,??ELSE0418
+	jp	nz,??ELSE0422
 	ld	hl,(??AUTO+26)
 	push	hl
 	ld	hl,0FFFFH
@@ -4613,7 +4635,7 @@ ARCDECOMPLZW56:
 	call	??subde
 	ld	a,l
 	or	h
-	jp	z,??ELSE0418
+	jp	z,??ELSE0422
 	ld	hl,(??AUTO+26)
 	call	LZWFIRSTBYTE
 	ld	(??AUTO+30),a
@@ -4621,34 +4643,34 @@ ARCDECOMPLZW56:
 	call	LZWOUTPUT
 	ld	a,(??AUTO+23)
 	or	a
-	jp	z,??ELSE0420
+	jp	z,??ELSE0424
 	ld	a,(??AUTO+30)
 	call	RLEDECODEBYTE
 	or	a
-	jp	nz,??ENDIF0423
+	jp	nz,??ENDIF0427
     XOR A
 	ret
-??ENDIF0423:
-	JR ??ENDIF0419
-??ELSE0420:
+??ENDIF0427:
+	JR ??ENDIF0423
+??ELSE0424:
 	ld	a,(??AUTO+30)
 	call	PUTBYTE
 	or	a
-	jp	nz,??ENDIF0425
+	jp	nz,??ENDIF0429
     XOR A
 	ret
+??ENDIF0429:
 ??ENDIF0425:
-??ENDIF0421:
-	JR ??ENDIF0419
-??ELSE0418:
+	JR ??ENDIF0423
+??ELSE0422:
 	ld	a,1
 	ld	(??AUTO+29),a
-??ENDIF0419:
-??ENDIF0417:
-??ENDIF0409:
+??ENDIF0423:
+??ENDIF0421:
+??ENDIF0413:
 	ld	a,(??AUTO+28)
 	or	a
-	jp	nz,??ENDIF0427
+	jp	nz,??ENDIF0431
 	ld	hl,(??AUTO+26)
 	push	hl
 	ld	hl,0FFFFH
@@ -4657,29 +4679,29 @@ ARCDECOMPLZW56:
 	call	??subde
 	ld	a,l
 	or	h
-	jp	z,??ENDIF0427
+	jp	z,??ENDIF0431
 	ld	a,(??AUTO+29)
 	or	a
-	jp	nz,??ENDIF0427
+	jp	nz,??ENDIF0431
 	ld	hl,(LZWNEXTCODE)
 	push	hl
 	ld	hl,1000H
 	ex	de,hl
 	pop	hl
 	call	??subde
-	jp	nc,??ENDIF0429
+	jp	nc,??ENDIF0433
 	ld	hl,(??AUTO+26)
 	ld	(??AUTO+147),hl
 	ld	a,(??AUTO+30)
 	call	LZWADDENTRY
-??ENDIF0429:
-??ENDIF0427:
+??ENDIF0433:
+??ENDIF0431:
 	ld	hl,(??AUTO+24)
 	ld	(??AUTO+26),hl
 	xor	a
 	ld	(??AUTO+28),a
-	jp	??WHILE0406
-??WEND0407:
+	jp	??WHILE0410
+??WEND0411:
 	ld	a,1
 	ret
 
@@ -4691,15 +4713,15 @@ ARCDECOMPLZW8:
 	ld	(LZWMAXBITS),a
 	ld	a,(LZWMAXBITS)
 	cp	9
-	jp	c,??ORTRUE0432
+	jp	c,??ORTRUE0436
 	ld	a,(LZWMAXBITS)
 	cp	10H
-	jp	c,??ENDIF0431
-	jp	z,??ENDIF0431
-??ORTRUE0432:
+	jp	c,??ENDIF0435
+	jp	z,??ENDIF0435
+??ORTRUE0436:
 	ld	a,0CH
 	ld	(LZWMAXBITS),a
-??ENDIF0431:
+??ENDIF0435:
 	call	INITLZW
 	ld	hl,0101H
 	ld	(LZWNEXTCODE),hl
@@ -4713,13 +4735,13 @@ ARCDECOMPLZW8:
 	ld	(??AUTO+27),a
 	xor	a
 	ld	(??AUTO+28),a
-??WHILE0433:
+??WHILE0437:
 	ld	a,(??AUTO+28)
 	or	a
-	jp	nz,??WEND0434
+	jp	nz,??WEND0438
 	call	INPUTAVAIL
 	or	a
-	jp	z,??WEND0434
+	jp	z,??WEND0438
 	ld	a,(LZWCODESIZE)
 	call	READBITSLSB
 	ld	(??AUTO+23),hl
@@ -4731,7 +4753,7 @@ ARCDECOMPLZW8:
 	call	??subde
 	ld	a,l
 	or	h
-	jp	nz,??ELSE0435
+	jp	nz,??ELSE0439
 	call	INITLZW
 	ld	hl,0101H
 	ld	(LZWNEXTCODE),hl
@@ -4741,51 +4763,26 @@ ARCDECOMPLZW8:
 	ld	(??AUTO+25),hl
 	ld	a,1
 	ld	(??AUTO+27),a
-	JR ??WHILE0433
-??ELSE0435:
+	JR ??WHILE0437
+??ELSE0439:
 	ld	hl,(??AUTO+23)
 	push	hl
 	ld	hl,0100H
 	ex	de,hl
 	pop	hl
 	call	??subde
-	jp	nc,??ELSE0437
+	jp	nc,??ELSE0441
 	ld	hl,(??AUTO+23)
 	ld	a,l
 	call	RLEDECODEBYTE
 	or	a
-	jp	nz,??ENDIF0440
-    XOR A
-	ret
-??ENDIF0440:
-	ld	hl,(??AUTO+23)
-	ld	a,l
-	ld	(??AUTO+29),a
-	jp	??ENDIF0438
-??ELSE0437:
-	ld	hl,(??AUTO+23)
-	push	hl
-	ld	hl,(LZWNEXTCODE)
-	ex	de,hl
-	pop	hl
-	call	??subde
-	jp	nc,??ELSE0441
-	ld	hl,(??AUTO+23)
-	call	LZWFIRSTBYTE
-	ld	(??AUTO+29),a
-	ld	hl,(??AUTO+23)
-	call	LZWOUTPUT
-	push	hl
-	ld	hl,0
-	ex	de,hl
-	pop	hl
-	call	??subde
-	ld	a,l
-	or	h
 	jp	nz,??ENDIF0444
     XOR A
 	ret
 ??ENDIF0444:
+	ld	hl,(??AUTO+23)
+	ld	a,l
+	ld	(??AUTO+29),a
 	jp	??ENDIF0442
 ??ELSE0441:
 	ld	hl,(??AUTO+23)
@@ -4794,22 +4791,11 @@ ARCDECOMPLZW8:
 	ex	de,hl
 	pop	hl
 	call	??subde
-	ld	a,l
-	or	h
-	jp	nz,??ELSE0445
-	ld	hl,(??AUTO+25)
-	push	hl
-	ld	hl,0FFFFH
-	ex	de,hl
-	pop	hl
-	call	??subde
-	ld	a,l
-	or	h
-	jp	z,??ELSE0445
-	ld	hl,(??AUTO+25)
+	jp	nc,??ELSE0445
+	ld	hl,(??AUTO+23)
 	call	LZWFIRSTBYTE
 	ld	(??AUTO+29),a
-	ld	hl,(??AUTO+25)
+	ld	hl,(??AUTO+23)
 	call	LZWOUTPUT
 	push	hl
 	ld	hl,0
@@ -4822,23 +4808,17 @@ ARCDECOMPLZW8:
     XOR A
 	ret
 ??ENDIF0448:
-	ld	a,(??AUTO+29)
-	call	RLEDECODEBYTE
-	or	a
-	jp	nz,??ENDIF0450
-    XOR A
-	ret
-??ENDIF0450:
-	JR ??ENDIF0446
+	jp	??ENDIF0446
 ??ELSE0445:
-	ld	a,1
-	ld	(??AUTO+28),a
-??ENDIF0446:
-??ENDIF0442:
-??ENDIF0438:
-	ld	a,(??AUTO+27)
-	or	a
-	jp	nz,??ENDIF0452
+	ld	hl,(??AUTO+23)
+	push	hl
+	ld	hl,(LZWNEXTCODE)
+	ex	de,hl
+	pop	hl
+	call	??subde
+	ld	a,l
+	or	h
+	jp	nz,??ELSE0449
 	ld	hl,(??AUTO+25)
 	push	hl
 	ld	hl,0FFFFH
@@ -4847,25 +4827,67 @@ ARCDECOMPLZW8:
 	call	??subde
 	ld	a,l
 	or	h
-	jp	z,??ENDIF0452
+	jp	z,??ELSE0449
+	ld	hl,(??AUTO+25)
+	call	LZWFIRSTBYTE
+	ld	(??AUTO+29),a
+	ld	hl,(??AUTO+25)
+	call	LZWOUTPUT
+	push	hl
+	ld	hl,0
+	ex	de,hl
+	pop	hl
+	call	??subde
+	ld	a,l
+	or	h
+	jp	nz,??ENDIF0452
+    XOR A
+	ret
+??ENDIF0452:
+	ld	a,(??AUTO+29)
+	call	RLEDECODEBYTE
+	or	a
+	jp	nz,??ENDIF0454
+    XOR A
+	ret
+??ENDIF0454:
+	JR ??ENDIF0450
+??ELSE0449:
+	ld	a,1
+	ld	(??AUTO+28),a
+??ENDIF0450:
+??ENDIF0446:
+??ENDIF0442:
+	ld	a,(??AUTO+27)
+	or	a
+	jp	nz,??ENDIF0456
+	ld	hl,(??AUTO+25)
+	push	hl
+	ld	hl,0FFFFH
+	ex	de,hl
+	pop	hl
+	call	??subde
+	ld	a,l
+	or	h
+	jp	z,??ENDIF0456
 	ld	a,(??AUTO+28)
 	or	a
-	jp	nz,??ENDIF0452
+	jp	nz,??ENDIF0456
 	ld	hl,1
 	push	hl
 	ld	a,(LZWMAXBITS)
-	ld	c,l
+	ld	c,a
 	pop	hl
-??SHL0455:
+??SHL0459:
 	dec	c
-	jp	m,??SHLE0456
+	jp	m,??SHLE0460
 	add	hl,hl
-	JR ??SHL0455
-??SHLE0456:
+	JR ??SHL0459
+??SHLE0460:
 	ex	de,hl
 	ld	hl,(LZWNEXTCODE)
 	call	??subde
-	jp	nc,??ENDIF0454
+	jp	nc,??ENDIF0458
 	ld	hl,(??AUTO+25)
 	ld	(??AUTO+147),hl
 	ld	a,(??AUTO+29)
@@ -4873,14 +4895,14 @@ ARCDECOMPLZW8:
 	ld	hl,1
 	push	hl
 	ld	a,(LZWCODESIZE)
-	ld	c,l
+	ld	c,a
 	pop	hl
-??SHL0457:
+??SHL0461:
 	dec	c
-	jp	m,??SHLE0458
+	jp	m,??SHLE0462
 	add	hl,hl
-	JR ??SHL0457
-??SHLE0458:
+	JR ??SHL0461
+??SHLE0462:
 	dec	hl
 	ld	(??AUTO+30),hl
 	ld	hl,(LZWNEXTCODE)
@@ -4889,28 +4911,28 @@ ARCDECOMPLZW8:
 	ex	de,hl
 	pop	hl
 	call	??subde
-	jp	c,??ENDIF0460
+	jp	c,??ENDIF0464
 	ld	a,l
 	or	h
-	jp	z,??ENDIF0460
+	jp	z,??ENDIF0464
 	ld	a,(LZWMAXBITS)
 	ld	b,a
 	ld	a,(LZWCODESIZE)
 	sub	b
-	jp	nc,??ENDIF0460
+	jp	nc,??ENDIF0464
 	ld	a,(LZWCODESIZE)
 	add	a,1
 	ld	(LZWCODESIZE),a
-??ENDIF0460:
-??ENDIF0454:
-??ENDIF0452:
+??ENDIF0464:
+??ENDIF0458:
+??ENDIF0456:
 	ld	hl,(??AUTO+23)
 	ld	(??AUTO+25),hl
 	xor	a
 	ld	(??AUTO+27),a
-??ENDIF0436:
-	jp	??WHILE0433
-??WEND0434:
+??ENDIF0440:
+	jp	??WHILE0437
+??WEND0438:
 	ld	a,1
 	ret
 
@@ -4932,13 +4954,13 @@ ARCDECOMPSQUASHED:
 	ld	(??AUTO+27),a
 	xor	a
 	ld	(??AUTO+28),a
-??WHILE0461:
+??WHILE0465:
 	ld	a,(??AUTO+28)
 	or	a
-	jp	nz,??WEND0462
+	jp	nz,??WEND0466
 	call	INPUTAVAIL
 	or	a
-	jp	z,??WEND0462
+	jp	z,??WEND0466
 	ld	a,(LZWCODESIZE)
 	call	READBITSLSB
 	ld	(??AUTO+23),hl
@@ -4950,7 +4972,7 @@ ARCDECOMPSQUASHED:
 	call	??subde
 	ld	a,l
 	or	h
-	jp	nz,??ELSE0463
+	jp	nz,??ELSE0467
 	call	INITLZW
 	ld	hl,0101H
 	ld	(LZWNEXTCODE),hl
@@ -4960,51 +4982,26 @@ ARCDECOMPSQUASHED:
 	ld	(??AUTO+25),hl
 	ld	a,1
 	ld	(??AUTO+27),a
-	JR ??WHILE0461
-??ELSE0463:
+	JR ??WHILE0465
+??ELSE0467:
 	ld	hl,(??AUTO+23)
 	push	hl
 	ld	hl,0100H
 	ex	de,hl
 	pop	hl
 	call	??subde
-	jp	nc,??ELSE0465
+	jp	nc,??ELSE0469
 	ld	hl,(??AUTO+23)
 	ld	a,l
 	call	PUTBYTE
 	or	a
-	jp	nz,??ENDIF0468
-    XOR A
-	ret
-??ENDIF0468:
-	ld	hl,(??AUTO+23)
-	ld	a,l
-	ld	(??AUTO+29),a
-	jp	??ENDIF0466
-??ELSE0465:
-	ld	hl,(??AUTO+23)
-	push	hl
-	ld	hl,(LZWNEXTCODE)
-	ex	de,hl
-	pop	hl
-	call	??subde
-	jp	nc,??ELSE0469
-	ld	hl,(??AUTO+23)
-	call	LZWFIRSTBYTE
-	ld	(??AUTO+29),a
-	ld	hl,(??AUTO+23)
-	call	LZWOUTPUT
-	push	hl
-	ld	hl,0
-	ex	de,hl
-	pop	hl
-	call	??subde
-	ld	a,l
-	or	h
 	jp	nz,??ENDIF0472
     XOR A
 	ret
 ??ENDIF0472:
+	ld	hl,(??AUTO+23)
+	ld	a,l
+	ld	(??AUTO+29),a
 	jp	??ENDIF0470
 ??ELSE0469:
 	ld	hl,(??AUTO+23)
@@ -5013,22 +5010,11 @@ ARCDECOMPSQUASHED:
 	ex	de,hl
 	pop	hl
 	call	??subde
-	ld	a,l
-	or	h
-	jp	nz,??ELSE0473
-	ld	hl,(??AUTO+25)
-	push	hl
-	ld	hl,0FFFFH
-	ex	de,hl
-	pop	hl
-	call	??subde
-	ld	a,l
-	or	h
-	jp	z,??ELSE0473
-	ld	hl,(??AUTO+25)
+	jp	nc,??ELSE0473
+	ld	hl,(??AUTO+23)
 	call	LZWFIRSTBYTE
 	ld	(??AUTO+29),a
-	ld	hl,(??AUTO+25)
+	ld	hl,(??AUTO+23)
 	call	LZWOUTPUT
 	push	hl
 	ld	hl,0
@@ -5041,23 +5027,17 @@ ARCDECOMPSQUASHED:
     XOR A
 	ret
 ??ENDIF0476:
-	ld	a,(??AUTO+29)
-	call	PUTBYTE
-	or	a
-	jp	nz,??ENDIF0478
-    XOR A
-	ret
-??ENDIF0478:
-	JR ??ENDIF0474
+	jp	??ENDIF0474
 ??ELSE0473:
-	ld	a,1
-	ld	(??AUTO+28),a
-??ENDIF0474:
-??ENDIF0470:
-??ENDIF0466:
-	ld	a,(??AUTO+27)
-	or	a
-	jp	nz,??ENDIF0480
+	ld	hl,(??AUTO+23)
+	push	hl
+	ld	hl,(LZWNEXTCODE)
+	ex	de,hl
+	pop	hl
+	call	??subde
+	ld	a,l
+	or	h
+	jp	nz,??ELSE0477
 	ld	hl,(??AUTO+25)
 	push	hl
 	ld	hl,0FFFFH
@@ -5066,17 +5046,59 @@ ARCDECOMPSQUASHED:
 	call	??subde
 	ld	a,l
 	or	h
-	jp	z,??ENDIF0480
+	jp	z,??ELSE0477
+	ld	hl,(??AUTO+25)
+	call	LZWFIRSTBYTE
+	ld	(??AUTO+29),a
+	ld	hl,(??AUTO+25)
+	call	LZWOUTPUT
+	push	hl
+	ld	hl,0
+	ex	de,hl
+	pop	hl
+	call	??subde
+	ld	a,l
+	or	h
+	jp	nz,??ENDIF0480
+    XOR A
+	ret
+??ENDIF0480:
+	ld	a,(??AUTO+29)
+	call	PUTBYTE
+	or	a
+	jp	nz,??ENDIF0482
+    XOR A
+	ret
+??ENDIF0482:
+	JR ??ENDIF0478
+??ELSE0477:
+	ld	a,1
+	ld	(??AUTO+28),a
+??ENDIF0478:
+??ENDIF0474:
+??ENDIF0470:
+	ld	a,(??AUTO+27)
+	or	a
+	jp	nz,??ENDIF0484
+	ld	hl,(??AUTO+25)
+	push	hl
+	ld	hl,0FFFFH
+	ex	de,hl
+	pop	hl
+	call	??subde
+	ld	a,l
+	or	h
+	jp	z,??ENDIF0484
 	ld	a,(??AUTO+28)
 	or	a
-	jp	nz,??ENDIF0480
+	jp	nz,??ENDIF0484
 	ld	hl,(LZWNEXTCODE)
 	push	hl
 	ld	hl,2000H
 	ex	de,hl
 	pop	hl
 	call	??subde
-	jp	nc,??ENDIF0482
+	jp	nc,??ENDIF0486
 	ld	hl,(??AUTO+25)
 	ld	(??AUTO+147),hl
 	ld	a,(??AUTO+29)
@@ -5084,14 +5106,14 @@ ARCDECOMPSQUASHED:
 	ld	hl,1
 	push	hl
 	ld	a,(LZWCODESIZE)
-	ld	c,l
+	ld	c,a
 	pop	hl
-??SHL0483:
+??SHL0487:
 	dec	c
-	jp	m,??SHLE0484
+	jp	m,??SHLE0488
 	add	hl,hl
-	JR ??SHL0483
-??SHLE0484:
+	JR ??SHL0487
+??SHLE0488:
 	dec	hl
 	ld	(??AUTO+30),hl
 	ld	hl,(LZWNEXTCODE)
@@ -5100,26 +5122,26 @@ ARCDECOMPSQUASHED:
 	ex	de,hl
 	pop	hl
 	call	??subde
-	jp	c,??ENDIF0486
+	jp	c,??ENDIF0490
 	ld	a,l
 	or	h
-	jp	z,??ENDIF0486
+	jp	z,??ENDIF0490
 	ld	a,(LZWCODESIZE)
 	cp	0DH
-	jp	nc,??ENDIF0486
+	jp	nc,??ENDIF0490
 	ld	a,(LZWCODESIZE)
 	add	a,1
 	ld	(LZWCODESIZE),a
+??ENDIF0490:
 ??ENDIF0486:
-??ENDIF0482:
-??ENDIF0480:
+??ENDIF0484:
 	ld	hl,(??AUTO+23)
 	ld	(??AUTO+25),hl
 	xor	a
 	ld	(??AUTO+27),a
-??ENDIF0464:
-	jp	??WHILE0461
-??WEND0462:
+??ENDIF0468:
+	jp	??WHILE0465
+??WEND0466:
 	ld	a,1
 	ret
 
@@ -5132,16 +5154,16 @@ EXTRACTARCMEMBER:
 	ld	(??AUTO+3),a
 	ld	a,(??AUTO+3)
     OR A
-	jp	nz,??ENDIF0488
+	jp	nz,??ENDIF0492
     XOR A
 	ret
-??ENDIF0488:
+??ENDIF0492:
 	xor	a
 	ld	(??AUTO+2),a
-??WHILE0489:
+??WHILE0493:
 	ld	a,(??AUTO+2)
 	cp	0DH
-	jp	nc,??WEND0490
+	jp	nc,??WEND0494
 	call	GETBYTE
 	ld	b,a
 	ld	a,(??AUTO+2)
@@ -5153,8 +5175,8 @@ EXTRACTARCMEMBER:
 	ld	a,(??AUTO+2)
 	add	a,1
 	ld	(??AUTO+2),a
-	JR ??WHILE0489
-??WEND0490:
+	JR ??WHILE0493
+??WEND0494:
 	xor	a
 	ld	(??AUTO+8+13),a
 	call	GETBYTE
@@ -5189,7 +5211,7 @@ EXTRACTARCMEMBER:
 	ld	(??AUTO+2),a
 	ld	a,(??AUTO+3)
 	cp	2
-	jp	c,??ELSE0491
+	jp	c,??ELSE0495
 	call	GETBYTE
 	ld	l,a
 	ld	h,0
@@ -5208,18 +5230,18 @@ EXTRACTARCMEMBER:
 	ld	(??AUTO+2),a
 	call	GETBYTE
 	ld	(??AUTO+2),a
-	JR ??ENDIF0492
-??ELSE0491:
+	JR ??ENDIF0496
+??ELSE0495:
 	ld	hl,(??AUTO+4)
 	ld	(??AUTO+6),hl
-??ENDIF0492:
+??ENDIF0496:
 	ld	a,20H
 	call	PRINTCHAR
 	ld	a,20H
 	call	PRINTCHAR
 	xor	a
 	ld	(??AUTO+2),a
-??WHILE0493:
+??WHILE0497:
 	ld	a,(??AUTO+2)
 	ld	l,a
 	ld	h,0
@@ -5227,7 +5249,7 @@ EXTRACTARCMEMBER:
 	add	hl,de
 	ld	a,(hl)
     OR A
-	jp	z,??WEND0494
+	jp	z,??WEND0498
 	ld	a,(??AUTO+2)
 	ld	l,a
 	ld	h,0
@@ -5238,8 +5260,8 @@ EXTRACTARCMEMBER:
 	ld	a,(??AUTO+2)
 	add	a,1
 	ld	(??AUTO+2),a
-	JR ??WHILE0493
-??WEND0494:
+	JR ??WHILE0497
+??WEND0498:
 	ld	hl,(OFCBPTR)
 	ld	(??AUTO+150),hl
 	ld	hl,24H
@@ -5248,67 +5270,11 @@ EXTRACTARCMEMBER:
 	call	FILLMEM
 	xor	a
 	ld	(??AUTO+2),a
-??WHILE0495:
-	ld	a,(??AUTO+2)
-	cp	8
-	jp	nc,??WEND0496
-	ld	a,(??AUTO+2)
-	ld	l,a
-	ld	h,0
-	ld	de,??AUTO+8
-	add	hl,de
-	ld	a,(hl)
-    OR A
-	jp	z,??WEND0496
-	ld	a,(??AUTO+2)
-	ld	l,a
-	ld	h,0
-	ld	de,??AUTO+8
-	add	hl,de
-	ld	a,(hl)
-	cp	2EH
-	jp	z,??WEND0496
-	ld	a,(??AUTO+2)
-	ld	l,a
-	ld	h,0
-	ld	de,??AUTO+8
-	add	hl,de
-	ld	a,(hl)
-	ld	b,a
-	ld	a,(??AUTO+2)
-	add	a,1
-	ld	l,a
-	ld	h,0
-	ld	de,(OFCBPTR)
-	add	hl,de
-	ld	(hl),b
-	ld	a,(??AUTO+2)
-	add	a,1
-	ld	(??AUTO+2),a
-	JR ??WHILE0495
-??WEND0496:
-??WHILE0497:
-	ld	a,(??AUTO+2)
-	cp	8
-	jp	nc,??WEND0498
-	ld	a,20H
-	ld	b,a
-	ld	a,(??AUTO+2)
-	add	a,1
-	ld	l,a
-	ld	h,0
-	ld	de,(OFCBPTR)
-	add	hl,de
-	ld	(hl),b
-	ld	a,(??AUTO+2)
-	add	a,1
-	ld	(??AUTO+2),a
-	JR ??WHILE0497
-??WEND0498:
-	xor	a
-	ld	(??AUTO+2),a
 ??WHILE0499:
 	ld	a,(??AUTO+2)
+	cp	8
+	jp	nc,??WEND0500
+	ld	a,(??AUTO+2)
 	ld	l,a
 	ld	h,0
 	ld	de,??AUTO+8
@@ -5324,11 +5290,54 @@ EXTRACTARCMEMBER:
 	ld	a,(hl)
 	cp	2EH
 	jp	z,??WEND0500
+	ld	a,(??AUTO+2)
+	ld	l,a
+	ld	h,0
+	ld	de,??AUTO+8
+	add	hl,de
+	ld	a,(hl)
+	ld	b,a
+	ld	a,(??AUTO+2)
+	add	a,1
+	ld	l,a
+	ld	h,0
+	ld	de,(OFCBPTR)
+	add	hl,de
+	ld	(hl),b
 	ld	a,(??AUTO+2)
 	add	a,1
 	ld	(??AUTO+2),a
 	JR ??WHILE0499
 ??WEND0500:
+??WHILE0501:
+	ld	a,(??AUTO+2)
+	cp	8
+	jp	nc,??WEND0502
+	ld	a,20H
+	ld	b,a
+	ld	a,(??AUTO+2)
+	add	a,1
+	ld	l,a
+	ld	h,0
+	ld	de,(OFCBPTR)
+	add	hl,de
+	ld	(hl),b
+	ld	a,(??AUTO+2)
+	add	a,1
+	ld	(??AUTO+2),a
+	JR ??WHILE0501
+??WEND0502:
+	xor	a
+	ld	(??AUTO+2),a
+??WHILE0503:
+	ld	a,(??AUTO+2)
+	ld	l,a
+	ld	h,0
+	ld	de,??AUTO+8
+	add	hl,de
+	ld	a,(hl)
+    OR A
+	jp	z,??WEND0504
 	ld	a,(??AUTO+2)
 	ld	l,a
 	ld	h,0
@@ -5336,7 +5345,20 @@ EXTRACTARCMEMBER:
 	add	hl,de
 	ld	a,(hl)
 	cp	2EH
-	jp	nz,??ELSE0501
+	jp	z,??WEND0504
+	ld	a,(??AUTO+2)
+	add	a,1
+	ld	(??AUTO+2),a
+	JR ??WHILE0503
+??WEND0504:
+	ld	a,(??AUTO+2)
+	ld	l,a
+	ld	h,0
+	ld	de,??AUTO+8
+	add	hl,de
+	ld	a,(hl)
+	cp	2EH
+	jp	nz,??ELSE0505
 	ld	a,(??AUTO+2)
 	add	a,1
 	ld	(??AUTO+2),a
@@ -5358,11 +5380,11 @@ EXTRACTARCMEMBER:
 	add	hl,de
 	ld	a,(hl)
     OR A
-	jp	z,??ENDIF0504
+	jp	z,??ENDIF0508
 	ld	a,(??AUTO+2)
 	add	a,1
 	ld	(??AUTO+2),a
-??ENDIF0504:
+??ENDIF0508:
 	ld	a,(??AUTO+2)
 	ld	l,a
 	ld	h,0
@@ -5381,54 +5403,54 @@ EXTRACTARCMEMBER:
 	add	hl,de
 	ld	a,(hl)
     OR A
-	jp	z,??ENDIF0506
+	jp	z,??ENDIF0510
 	ld	a,(??AUTO+2)
 	add	a,1
 	ld	(??AUTO+2),a
+??ENDIF0510:
+	ld	a,(??AUTO+2)
+	ld	l,a
+	ld	h,0
+	ld	de,??AUTO+8
+	add	hl,de
+	ld	a,(hl)
+	ld	b,a
+	ld	hl,(OFCBPTR)
+	ld	de,11
+	add	hl,de
+	ld	(hl),b
+	JR ??ENDIF0506
+??ELSE0505:
+	ld	a,20H
+	ld	b,a
+	ld	hl,(OFCBPTR)
+	ld	de,9
+	add	hl,de
+	ld	(hl),b
+	ld	a,20H
+	ld	b,a
+	ld	hl,(OFCBPTR)
+	ld	de,10
+	add	hl,de
+	ld	(hl),b
+	ld	a,20H
+	ld	b,a
+	ld	hl,(OFCBPTR)
+	ld	de,11
+	add	hl,de
+	ld	(hl),b
 ??ENDIF0506:
-	ld	a,(??AUTO+2)
-	ld	l,a
-	ld	h,0
-	ld	de,??AUTO+8
-	add	hl,de
-	ld	a,(hl)
-	ld	b,a
-	ld	hl,(OFCBPTR)
-	ld	de,11
-	add	hl,de
-	ld	(hl),b
-	JR ??ENDIF0502
-??ELSE0501:
-	ld	a,20H
-	ld	b,a
-	ld	hl,(OFCBPTR)
-	ld	de,9
-	add	hl,de
-	ld	(hl),b
-	ld	a,20H
-	ld	b,a
-	ld	hl,(OFCBPTR)
-	ld	de,10
-	add	hl,de
-	ld	(hl),b
-	ld	a,20H
-	ld	b,a
-	ld	hl,(OFCBPTR)
-	ld	de,11
-	add	hl,de
-	ld	(hl),b
-??ENDIF0502:
 	ld	hl,(OFCBPTR)
 	call	DELETEFILE
 	ld	hl,(OFCBPTR)
 	call	MAKEFILE
 	cp	0FFH
-	jp	nz,??ENDIF0508
-	ld	hl,??DATA0509
+	jp	nz,??ENDIF0512
+	ld	hl,??DATA0513
 	call	PRINTSTR
 	ld	a,2
 	ret
-??ENDIF0508:
+??ENDIF0512:
 	ld	hl,0
 	ld	(OUTBUFPOS),hl
 	ld	a,1
@@ -5437,67 +5459,67 @@ EXTRACTARCMEMBER:
 	ld	(INPUTLIMIT),hl
 	ld	a,(??AUTO+3)
 	cp	1
-	jp	z,??ORTRUE0512
+	jp	z,??ORTRUE0516
 	ld	a,(??AUTO+3)
 	cp	2
-	jp	nz,??ELSE0510
-??ORTRUE0512:
+	jp	nz,??ELSE0514
+??ORTRUE0516:
 	ld	hl,(??AUTO+4)
 	call	ARCDECOMPSTORED
 	ld	(??AUTO+22),a
-	jp	??ENDIF0511
-??ELSE0510:
+	jp	??ENDIF0515
+??ELSE0514:
 	ld	a,(??AUTO+3)
 	cp	3
-	jp	nz,??ELSE0513
+	jp	nz,??ELSE0517
 	ld	hl,(??AUTO+4)
 	call	ARCDECOMPRLE
-	ld	(??AUTO+22),a
-	jp	??ENDIF0514
-??ELSE0513:
-	ld	a,(??AUTO+3)
-	cp	4
-	jp	nz,??ELSE0515
-	call	INITBITSLSB
-	call	ARCDECOMPSQUEEZED
-	ld	(??AUTO+22),a
-	jp	??ENDIF0516
-??ELSE0515:
-	ld	a,(??AUTO+3)
-	cp	5
-	jp	nz,??ELSE0517
-    XOR A
-	call	ARCDECOMPLZW56
 	ld	(??AUTO+22),a
 	jp	??ENDIF0518
 ??ELSE0517:
 	ld	a,(??AUTO+3)
-	cp	6
+	cp	4
 	jp	nz,??ELSE0519
-	ld	a,1
-	call	ARCDECOMPLZW56
+	call	INITBITSLSB
+	call	ARCDECOMPSQUEEZED
 	ld	(??AUTO+22),a
 	jp	??ENDIF0520
 ??ELSE0519:
 	ld	a,(??AUTO+3)
-	cp	7
-	jp	z,??ORTRUE0523
-	ld	a,(??AUTO+3)
-	cp	8
+	cp	5
 	jp	nz,??ELSE0521
-??ORTRUE0523:
-	call	ARCDECOMPLZW8
+    XOR A
+	call	ARCDECOMPLZW56
 	ld	(??AUTO+22),a
-	JR ??ENDIF0522
+	jp	??ENDIF0522
 ??ELSE0521:
 	ld	a,(??AUTO+3)
+	cp	6
+	jp	nz,??ELSE0523
+	ld	a,1
+	call	ARCDECOMPLZW56
+	ld	(??AUTO+22),a
+	jp	??ENDIF0524
+??ELSE0523:
+	ld	a,(??AUTO+3)
+	cp	7
+	jp	z,??ORTRUE0527
+	ld	a,(??AUTO+3)
+	cp	8
+	jp	nz,??ELSE0525
+??ORTRUE0527:
+	call	ARCDECOMPLZW8
+	ld	(??AUTO+22),a
+	JR ??ENDIF0526
+??ELSE0525:
+	ld	a,(??AUTO+3)
 	cp	9
-	jp	nz,??ELSE0524
+	jp	nz,??ELSE0528
 	call	ARCDECOMPSQUASHED
 	ld	(??AUTO+22),a
-	JR ??ENDIF0525
-??ELSE0524:
-	ld	hl,??DATA0526
+	JR ??ENDIF0529
+??ELSE0528:
+	ld	hl,??DATA0530
 	call	PRINTSTR
 	ld	hl,@EXTRACTARCMEMBER$MSGMETHOD
 	call	PRINTSTR
@@ -5505,45 +5527,45 @@ EXTRACTARCMEMBER:
 	call	PRINTCHAR
 	ld	a,(??AUTO+3)
 	call	PRINTHEX
-??WHILE0527:
+??WHILE0531:
 	ld	hl,(INPUTLIMIT)
 	push	hl
 	ld	hl,0
 	ex	de,hl
 	pop	hl
 	call	??subde
-	jp	c,??WEND0528
+	jp	c,??WEND0532
 	ld	a,l
 	or	h
-	jp	z,??WEND0528
+	jp	z,??WEND0532
 	call	GETBYTE
 	ld	(??AUTO+2),a
-	JR ??WHILE0527
-??WEND0528:
+	JR ??WHILE0531
+??WEND0532:
 	ld	hl,(OFCBPTR)
 	call	CLOSEFILE
 	ld	hl,0FFFFH
 	ld	(INPUTLIMIT),hl
 	ld	a,2
 	ret
-??ENDIF0525:
+??ENDIF0529:
+??ENDIF0526:
+??ENDIF0524:
 ??ENDIF0522:
 ??ENDIF0520:
 ??ENDIF0518:
-??ENDIF0516:
-??ENDIF0514:
-??ENDIF0511:
-??WHILE0529:
+??ENDIF0515:
+??WHILE0533:
 	ld	hl,(INPUTLIMIT)
 	push	hl
 	ld	hl,0
 	ex	de,hl
 	pop	hl
 	call	??subde
-	jp	c,??WEND0530
+	jp	c,??WEND0534
 	ld	a,l
 	or	h
-	jp	z,??WEND0530
+	jp	z,??WEND0534
 	ld	hl,(INPUTLIMIT)
 	push	hl
 	ld	hl,0FFFFH
@@ -5552,34 +5574,34 @@ EXTRACTARCMEMBER:
 	call	??subde
 	ld	a,l
 	or	h
-	jp	z,??WEND0530
+	jp	z,??WEND0534
 	call	GETBYTE
 	ld	(??AUTO+2),a
-	JR ??WHILE0529
-??WEND0530:
+	JR ??WHILE0533
+??WEND0534:
 	ld	hl,0FFFFH
 	ld	(INPUTLIMIT),hl
 	ld	a,(??AUTO+22)
 	or	a
-	jp	z,??ENDIF0532
+	jp	z,??ENDIF0536
 	call	FLUSHOUTBUF
 	ld	(??AUTO+22),a
-??ENDIF0532:
+??ENDIF0536:
 	ld	hl,(OFCBPTR)
 	call	CLOSEFILE
 	ld	a,(??AUTO+22)
 	or	a
-	jp	z,??ELSE0533
-	ld	hl,??DATA0535
+	jp	z,??ELSE0537
+	ld	hl,??DATA0539
 	call	PRINTSTR
 	ld	a,(FILECOUNT)
 	add	a,1
 	ld	(FILECOUNT),a
-	JR ??ENDIF0534
-??ELSE0533:
-	ld	hl,??DATA0536
+	JR ??ENDIF0538
+??ELSE0537:
+	ld	hl,??DATA0540
 	call	PRINTSTR
-??ENDIF0534:
+??ENDIF0538:
 	call	CRLF
 	ld	a,(??AUTO+22)
 	ret
@@ -5593,38 +5615,38 @@ EXTRACTARC:
 	ld	(FILECOUNT),a
 	ld	hl,0FFFFH
 	ld	(INPUTLIMIT),hl
-??WHILE0537:
+??WHILE0541:
 	call	INPUTAVAIL
 	or	a
-	jp	z,??WEND0538
+	jp	z,??WEND0542
 	call	PEEKBYTE
 	ld	(??AUTO+42),a
 	ld	a,(??AUTO+42)
 	cp	1AH
-	jp	z,??ENDIF0540
+	jp	z,??ENDIF0544
 	ld	a,1
 	ret
-??ENDIF0540:
+??ENDIF0544:
 	call	GETBYTE
 	ld	(??AUTO+42),a
 	call	PEEKBYTE
 	ld	(??AUTO+42),a
 	ld	a,(??AUTO+42)
     OR A
-	jp	nz,??ENDIF0542
+	jp	nz,??ENDIF0546
 	ld	a,1
 	ret
-??ENDIF0542:
+??ENDIF0546:
 	call	EXTRACTARCMEMBER
 	ld	(??AUTO+41),a
 	ld	a,(??AUTO+41)
     OR A
-	jp	nz,??ENDIF0544
+	jp	nz,??ENDIF0548
     XOR A
 	ret
-??ENDIF0544:
-	JR ??WHILE0537
-??WEND0538:
+??ENDIF0548:
+	JR ??WHILE0541
+??WEND0542:
 	ld	a,1
 	ret
 
@@ -5641,23 +5663,23 @@ EXTRACTLBR:
 	ld	(INPUTLIMIT),hl
 	call	FILLINBUF
 	or	a
-	jp	nz,??ENDIF0546
+	jp	nz,??ENDIF0550
 	ld	hl,@EXTRACTLBR$MSGBADLBR
 	call	PRINTSTR
     XOR A
 	ret
-??ENDIF0546:
+??ENDIF0550:
 	ld	hl,(INBUFPTR)
 	ld	(??AUTO+55),hl
 	ld	hl,(??AUTO+55)
 	ld	a,(hl)
     OR A
-	jp	z,??ENDIF0548
+	jp	z,??ENDIF0552
 	ld	hl,@EXTRACTLBR$MSGBADLBR
 	call	PRINTSTR
     XOR A
 	ret
-??ENDIF0548:
+??ENDIF0552:
 	ld	hl,(??AUTO+55)
 	ld	de,14
 	add	hl,de
@@ -5665,17 +5687,17 @@ EXTRACTLBR:
 	ld	(??AUTO+43),a
 	ld	a,(??AUTO+43)
     OR A
-	jp	z,??ORTRUE0551
+	jp	z,??ORTRUE0555
 	ld	a,(??AUTO+43)
 	cp	20H
-	jp	c,??ENDIF0550
-	jp	z,??ENDIF0550
-??ORTRUE0551:
+	jp	c,??ENDIF0554
+	jp	z,??ENDIF0554
+??ORTRUE0555:
 	ld	hl,@EXTRACTLBR$MSGBADLBR
 	call	PRINTSTR
     XOR A
 	ret
-??ENDIF0550:
+??ENDIF0554:
 	ld	a,(??AUTO+43)
 	ld	l,a
 	ld	h,0
@@ -5699,14 +5721,14 @@ EXTRACTLBR:
 	ld	(FILECOUNT),a
 	ld	hl,1
 	ld	(??AUTO+45),hl
-??WHILE0552:
+??WHILE0556:
 	ld	hl,(??AUTO+45)
 	push	hl
 	ld	hl,(??AUTO+47)
 	ex	de,hl
 	pop	hl
 	call	??subde
-	jp	nc,??WEND0553
+	jp	nc,??WEND0557
 	ld	hl,(??AUTO+45)
 	add	hl,hl
 	add	hl,hl
@@ -5725,36 +5747,36 @@ EXTRACTLBR:
 	ex	de,hl
 	ld	hl,(??AUTO+55)
 	call	??subde
-	jp	c,??ELSE0554
+	jp	c,??ELSE0558
 	ld	hl,(??AUTO+47)
 	ld	(??AUTO+45),hl
-	JR ??WHILE0552
-??ELSE0554:
+	JR ??WHILE0556
+??ELSE0558:
 	ld	hl,(??AUTO+55)
 	ld	a,(hl)
 	cp	0FFH
-	jp	nz,??ELSE0556
+	jp	nz,??ELSE0560
 	ld	hl,(??AUTO+47)
 	ld	(??AUTO+45),hl
-	jp	??ENDIF0557
-??ELSE0556:
+	jp	??ENDIF0561
+??ELSE0560:
 	ld	hl,(??AUTO+55)
 	ld	a,(hl)
     OR A
-	jp	nz,??ELSE0558
+	jp	nz,??ELSE0562
 	ld	a,20H
 	call	PRINTCHAR
 	ld	a,20H
 	call	PRINTCHAR
 	ld	a,1
 	ld	(??AUTO+44),a
-??WHILE0560:
+??WHILE0564:
 	ld	a,(??AUTO+44)
 	cp	8
-	jp	c,??SKIP0562
-	jp	z,??SKIP0562
-	JR ??WEND0561
-??SKIP0562:
+	jp	c,??SKIP0566
+	jp	z,??SKIP0566
+	JR ??WEND0565
+??SKIP0566:
 	ld	a,(??AUTO+44)
 	ld	l,a
 	ld	h,0
@@ -5763,7 +5785,7 @@ EXTRACTLBR:
 	ld	a,(hl)
 	and	7FH
 	cp	20H
-	jp	z,??ENDIF0564
+	jp	z,??ENDIF0568
 	ld	a,(??AUTO+44)
 	ld	l,a
 	ld	h,0
@@ -5772,30 +5794,30 @@ EXTRACTLBR:
 	ld	a,(hl)
 	and	7FH
 	call	PRINTCHAR
-??ENDIF0564:
+??ENDIF0568:
 	ld	a,(??AUTO+44)
 	add	a,1
 	ld	(??AUTO+44),a
-	JR ??WHILE0560
-??WEND0561:
+	JR ??WHILE0564
+??WEND0565:
 	ld	hl,(??AUTO+55)
 	ld	de,9
 	add	hl,de
 	ld	a,(hl)
 	and	7FH
 	cp	20H
-	jp	z,??ENDIF0566
+	jp	z,??ENDIF0570
 	ld	a,2EH
 	call	PRINTCHAR
 	ld	a,9
 	ld	(??AUTO+44),a
-??WHILE0567:
+??WHILE0571:
 	ld	a,(??AUTO+44)
 	cp	0BH
-	jp	c,??SKIP0569
-	jp	z,??SKIP0569
-	JR ??WEND0568
-??SKIP0569:
+	jp	c,??SKIP0573
+	jp	z,??SKIP0573
+	JR ??WEND0572
+??SKIP0573:
 	ld	a,(??AUTO+44)
 	ld	l,a
 	ld	h,0
@@ -5804,7 +5826,7 @@ EXTRACTLBR:
 	ld	a,(hl)
 	and	7FH
 	cp	20H
-	jp	z,??ENDIF0571
+	jp	z,??ENDIF0575
 	ld	a,(??AUTO+44)
 	ld	l,a
 	ld	h,0
@@ -5813,13 +5835,13 @@ EXTRACTLBR:
 	ld	a,(hl)
 	and	7FH
 	call	PRINTCHAR
-??ENDIF0571:
+??ENDIF0575:
 	ld	a,(??AUTO+44)
 	add	a,1
 	ld	(??AUTO+44),a
-	JR ??WHILE0567
-??WEND0568:
-??ENDIF0566:
+	JR ??WHILE0571
+??WEND0572:
+??ENDIF0570:
 	ld	hl,(??AUTO+55)
 	ld	de,12
 	add	hl,de
@@ -5868,13 +5890,13 @@ EXTRACTLBR:
 	call	FILLMEM
 	ld	a,1
 	ld	(??AUTO+44),a
-??WHILE0572:
+??WHILE0576:
 	ld	a,(??AUTO+44)
 	cp	0BH
-	jp	c,??SKIP0574
-	jp	z,??SKIP0574
-	JR ??WEND0573
-??SKIP0574:
+	jp	c,??SKIP0578
+	jp	z,??SKIP0578
+	JR ??WEND0577
+??SKIP0578:
 	ld	a,(??AUTO+44)
 	ld	l,a
 	ld	h,0
@@ -5892,8 +5914,8 @@ EXTRACTLBR:
 	ld	a,(??AUTO+44)
 	add	a,1
 	ld	(??AUTO+44),a
-	JR ??WHILE0572
-??WEND0573:
+	JR ??WHILE0576
+??WEND0577:
 	ld	hl,(??AUTO+53)
 	push	hl
 	ld	hl,0
@@ -5902,7 +5924,7 @@ EXTRACTLBR:
 	call	??subde
 	ld	a,l
 	or	h
-	jp	z,??ELSE0575
+	jp	z,??ELSE0579
 	ld	hl,(OFCBPTR)
 	call	DELETEFILE
 	ld	hl,(OFCBPTR)
@@ -5910,12 +5932,12 @@ EXTRACTLBR:
 	ld	(??AUTO+42),a
 	ld	a,(??AUTO+42)
 	cp	0FFH
-	jp	nz,??ELSE0577
+	jp	nz,??ELSE0581
 	ld	hl,@EXTRACTLBR$MSGNOCREAT
 	call	PRINTSTR
 	call	CRLF
-	JP ??ENDIF0576
-??ELSE0577:
+	JP ??ENDIF0580
+??ELSE0581:
 	ld	hl,(IFCBPTR)
 	call	CLOSEFILE
 	ld	hl,??AUTO+6
@@ -5937,17 +5959,17 @@ EXTRACTLBR:
 	ld	(??AUTO+42),a
 	ld	a,(??AUTO+42)
 	cp	0FFH
-	jp	nz,??ELSE0579
+	jp	nz,??ELSE0583
 	ld	hl,(OFCBPTR)
 	call	CLOSEFILE
 	call	CRLF
-	jp	??ENDIF0580
-??ELSE0579:
+	jp	??ENDIF0584
+??ELSE0583:
 	ld	hl,(DMAPTR)
 	call	SETDMAADDR
 	ld	hl,(??AUTO+51)
 	ld	(??AUTO+49),hl
-??WHILE0581:
+??WHILE0585:
 	ld	hl,(??AUTO+49)
 	push	hl
 	ld	hl,0
@@ -5956,15 +5978,15 @@ EXTRACTLBR:
 	call	??subde
 	ld	a,l
 	or	h
-	jp	z,??WEND0582
+	jp	z,??WEND0586
 	ld	hl,(IFCBPTR)
 	call	READFILE
 	ld	(??AUTO+42),a
 	ld	hl,(??AUTO+49)
 	dec	hl
 	ld	(??AUTO+49),hl
-	JR ??WHILE0581
-??WEND0582:
+	JR ??WHILE0585
+??WEND0586:
 	ld	hl,0
 	ld	(INBUFPOS),hl
 	ld	hl,0
@@ -5973,47 +5995,27 @@ EXTRACTLBR:
 	ld	(INPUTLIMIT),hl
 	call	FILLINBUF
 	or	a
-	jp	nz,??ELSE0583
+	jp	nz,??ELSE0587
 	ld	hl,(OFCBPTR)
 	call	CLOSEFILE
 	call	CRLF
-	jp	??ENDIF0584
-??ELSE0583:
+	jp	??ENDIF0588
+??ELSE0587:
 	ld	hl,(INBUFPTR)
 	ld	a,(hl)
 	cp	76H
-	jp	nz,??ELSE0585
+	jp	nz,??ELSE0589
 	ld	hl,(INBUFPTR)
 	ld	de,1
 	add	hl,de
 	ld	a,(hl)
 	cp	0FFH
-	jp	nz,??ELSE0585
+	jp	nz,??ELSE0589
 	ld	hl,0
 	ld	(OUTBUFPOS),hl
 	call	UNSQUEEZE
 	ld	(??AUTO+42),a
 	ld	a,(??AUTO+42)
-	or	a
-	jp	z,??ENDIF0588
-	call	FLUSHOUTBUF
-	ld	(??AUTO+42),a
-??ENDIF0588:
-	jp	??ENDIF0586
-??ELSE0585:
-	ld	hl,(INBUFPTR)
-	ld	a,(hl)
-	cp	76H
-	jp	nz,??ELSE0589
-	ld	hl,(INBUFPTR)
-	ld	de,1
-	add	hl,de
-	ld	a,(hl)
-	cp	0FEH
-	jp	nz,??ELSE0589
-	ld	hl,0
-	ld	(OUTBUFPOS),hl
-	call	UNCRUNCH
 	or	a
 	jp	z,??ENDIF0592
 	call	FLUSHOUTBUF
@@ -6029,11 +6031,11 @@ EXTRACTLBR:
 	ld	de,1
 	add	hl,de
 	ld	a,(hl)
-	cp	0FDH
+	cp	0FEH
 	jp	nz,??ELSE0593
 	ld	hl,0
 	ld	(OUTBUFPOS),hl
-	call	UNCRLZH
+	call	UNCRUNCH
 	or	a
 	jp	z,??ENDIF0596
 	call	FLUSHOUTBUF
@@ -6041,9 +6043,29 @@ EXTRACTLBR:
 ??ENDIF0596:
 	jp	??ENDIF0594
 ??ELSE0593:
+	ld	hl,(INBUFPTR)
+	ld	a,(hl)
+	cp	76H
+	jp	nz,??ELSE0597
+	ld	hl,(INBUFPTR)
+	ld	de,1
+	add	hl,de
+	ld	a,(hl)
+	cp	0FDH
+	jp	nz,??ELSE0597
+	ld	hl,0
+	ld	(OUTBUFPOS),hl
+	call	UNCRLZH
+	or	a
+	jp	z,??ENDIF0600
+	call	FLUSHOUTBUF
+	ld	(??AUTO+42),a
+??ENDIF0600:
+	jp	??ENDIF0598
+??ELSE0597:
 	ld	hl,(??AUTO+53)
 	ld	(??AUTO+49),hl
-??WHILE0597:
+??WHILE0601:
 	ld	hl,(??AUTO+49)
 	push	hl
 	ld	hl,0
@@ -6052,7 +6074,7 @@ EXTRACTLBR:
 	call	??subde
 	ld	a,l
 	or	h
-	jp	z,??WEND0598
+	jp	z,??WEND0602
 	ld	hl,(DMAPTR)
 	call	SETDMAADDR
 	ld	hl,(INBUFPOS)
@@ -6061,7 +6083,7 @@ EXTRACTLBR:
 	ex	de,hl
 	pop	hl
 	call	??subde
-	jp	nc,??ELSE0599
+	jp	nc,??ELSE0603
 	ld	hl,(INBUFPOS)
 	ex	de,hl
 	ld	hl,(INBUFPTR)
@@ -6075,27 +6097,27 @@ EXTRACTLBR:
 	ld	de,80H
 	add	hl,de
 	ld	(INBUFPOS),hl
-	JR ??ENDIF0600
-??ELSE0599:
+	JR ??ENDIF0604
+??ELSE0603:
 	ld	hl,(IFCBPTR)
 	call	READFILE
 	ld	(??AUTO+42),a
-??ENDIF0600:
+??ENDIF0604:
 	ld	hl,(OFCBPTR)
 	call	WRITEFILE
     OR A
-	jp	z,??ENDIF0602
+	jp	z,??ENDIF0606
 	ld	hl,1
 	ld	(??AUTO+49),hl
-??ENDIF0602:
+??ENDIF0606:
 	ld	hl,(??AUTO+49)
 	dec	hl
 	ld	(??AUTO+49),hl
-	jp	??WHILE0597
-??WEND0598:
+	jp	??WHILE0601
+??WEND0602:
+??ENDIF0598:
 ??ENDIF0594:
 ??ENDIF0590:
-??ENDIF0586:
 	ld	hl,(OFCBPTR)
 	call	CLOSEFILE
 	ld	a,(FILECOUNT)
@@ -6125,7 +6147,7 @@ EXTRACTLBR:
 	ld	(??AUTO+42),a
 	ld	a,(??AUTO+42)
 	cp	0FFH
-	jp	z,??ELSE0603
+	jp	z,??ELSE0607
 	ld	hl,0
 	ld	(INBUFPOS),hl
 	ld	hl,0
@@ -6134,31 +6156,31 @@ EXTRACTLBR:
 	ld	(INPUTLIMIT),hl
 	call	FILLINBUF
 	ld	(??AUTO+42),a
-	JR ??ENDIF0604
-??ELSE0603:
+	JR ??ENDIF0608
+??ELSE0607:
 	ld	hl,(??AUTO+47)
 	ld	(??AUTO+45),hl
-??ENDIF0604:
+??ENDIF0608:
+??ENDIF0588:
 ??ENDIF0584:
-??ENDIF0580:
-??ENDIF0578:
-	JR ??ENDIF0576
-??ELSE0575:
+??ENDIF0582:
+	JR ??ENDIF0580
+??ELSE0579:
 	call	CRLF
-??ENDIF0576:
+??ENDIF0580:
 	ld	hl,(??AUTO+45)
 	inc	hl
 	ld	(??AUTO+45),hl
-	JR ??ENDIF0559
-??ELSE0558:
+	JR ??ENDIF0563
+??ELSE0562:
 	ld	hl,(??AUTO+45)
 	inc	hl
 	ld	(??AUTO+45),hl
+??ENDIF0563:
+??ENDIF0561:
 ??ENDIF0559:
-??ENDIF0557:
-??ENDIF0555:
-	jp	??WHILE0552
-??WEND0553:
+	jp	??WHILE0556
+??WEND0557:
 	ld	a,1
 	ret
 
@@ -6234,22 +6256,22 @@ ISTOKENIZEDBASIC:
 	call	??subde
 	ld	a,l
 	or	h
-	jp	nz,??ENDIF0606
+	jp	nz,??ENDIF0610
     XOR A
 	ret
-??ENDIF0606:
+??ENDIF0610:
 	ld	hl,(INBUFPTR)
 	ld	a,(hl)
 	cp	0FFH
-	jp	z,??ORTRUE0609
+	jp	z,??ORTRUE0613
 	ld	hl,(INBUFPTR)
 	ld	a,(hl)
 	cp	0FEH
-	jp	nz,??ENDIF0608
-??ORTRUE0609:
+	jp	nz,??ENDIF0612
+??ORTRUE0613:
 	ld	a,1
 	ret
-??ENDIF0608:
+??ENDIF0612:
     XOR A
 	ret
 
@@ -6292,9 +6314,9 @@ EMITHEXBYTE:
 	ld	l,a
 	ld	h,0
 	ld	c,4
-??SHR0610:
+??SHR0614:
 	dec	c
-	jp	m,??SHRE0611
+	jp	m,??SHRE0615
 	or	a
 	ld	a,h
 	rra
@@ -6302,8 +6324,8 @@ EMITHEXBYTE:
 	ld	a,l
 	rra
 	ld	l,a
-	JR ??SHR0610
-??SHRE0611:
+	JR ??SHR0614
+??SHRE0615:
 	pop	de
 	add	hl,de
 	ld	a,(hl)
@@ -6331,26 +6353,26 @@ EMITNUM:
 	call	??subde
 	ld	a,l
 	or	h
-	jp	nz,??ENDIF0613
+	jp	nz,??ENDIF0617
 	ld	a,30H
 	call	EMIT
 	ret
-??ENDIF0613:
+??ENDIF0617:
 	xor	a
 	ld	(??AUTO+3),a
 	ld	hl,2710H
 	ld	(??AUTO+4),hl
-??WHILE0614:
+??WHILE0618:
 	ld	hl,(??AUTO+4)
 	push	hl
 	ld	hl,0
 	ex	de,hl
 	pop	hl
 	call	??subde
-	jp	c,??WEND0615
+	jp	c,??WEND0619
 	ld	a,l
 	or	h
-	jp	z,??WEND0615
+	jp	z,??WEND0619
 	ld	hl,(??AUTO+4)
 	ex	de,hl
 	ld	hl,(??AUTO+0)
@@ -6359,14 +6381,14 @@ EMITNUM:
 	ld	(??AUTO+2),a
 	ld	a,(??AUTO+2)
     OR A
-	jp	c,??SKIP0619
-	jp	z,??SKIP0619
-	JR ??ORTRUE0618
-??SKIP0619:
+	jp	c,??SKIP0623
+	jp	z,??SKIP0623
+	JR ??ORTRUE0622
+??SKIP0623:
 	ld	a,(??AUTO+3)
 	or	a
-	jp	z,??ENDIF0617
-??ORTRUE0618:
+	jp	z,??ENDIF0621
+??ORTRUE0622:
 	ld	a,30H
 	ld	b,a
 	ld	a,(??AUTO+2)
@@ -6374,7 +6396,7 @@ EMITNUM:
 	call	EMIT
 	ld	a,1
 	ld	(??AUTO+3),a
-??ENDIF0617:
+??ENDIF0621:
 	ld	hl,(??AUTO+4)
 	ex	de,hl
 	ld	hl,(??AUTO+0)
@@ -6385,8 +6407,8 @@ EMITNUM:
 	ld	hl,(??AUTO+4)
 	call	??div16
 	ld	(??AUTO+4),hl
-	jp	??WHILE0614
-??WEND0615:
+	jp	??WHILE0618
+??WEND0619:
 	ret
 
 ; Module: MODULE
@@ -6420,8 +6442,8 @@ EMITHEX:
 	ld	(??AUTO+2),a
 	ld	a,(??AUTO+2)
     OR A
-	jp	c,??ENDIF0621
-	jp	z,??ENDIF0621
+	jp	c,??ENDIF0625
+	jp	z,??ENDIF0625
 	ld	a,(??AUTO+2)
 	ld	l,a
 	ld	h,0
@@ -6429,7 +6451,7 @@ EMITHEX:
 	add	hl,de
 	ld	a,(hl)
 	call	EMIT
-??ENDIF0621:
+??ENDIF0625:
 	ld	hl,(??AUTO+0)
 	ld	l,h
 	ld	h,0
@@ -6447,10 +6469,10 @@ EMITHEX:
 	ld	(??AUTO+2),a
 	ld	a,(??AUTO+2)
     OR A
-	jp	c,??SKIP0625
-	jp	z,??SKIP0625
-	JR ??ORTRUE0624
-??SKIP0625:
+	jp	c,??SKIP0629
+	jp	z,??SKIP0629
+	JR ??ORTRUE0628
+??SKIP0629:
 	ld	hl,(??AUTO+0)
 	ld	a,h
 	srl	a
@@ -6464,11 +6486,11 @@ EMITHEX:
 	ex	de,hl
 	pop	hl
 	call	??subde
-	jp	c,??ENDIF0623
+	jp	c,??ENDIF0627
 	ld	a,l
 	or	h
-	jp	z,??ENDIF0623
-??ORTRUE0624:
+	jp	z,??ENDIF0627
+??ORTRUE0628:
 	ld	a,(??AUTO+2)
 	ld	l,a
 	ld	h,0
@@ -6476,12 +6498,12 @@ EMITHEX:
 	add	hl,de
 	ld	a,(hl)
 	call	EMIT
-??ENDIF0623:
+??ENDIF0627:
 	ld	hl,(??AUTO+0)
 	ld	c,4
-??SHR0626:
+??SHR0630:
 	dec	c
-	jp	m,??SHRE0627
+	jp	m,??SHRE0631
 	or	a
 	ld	a,h
 	rra
@@ -6489,8 +6511,8 @@ EMITHEX:
 	ld	a,l
 	rra
 	ld	l,a
-	JR ??SHR0626
-??SHRE0627:
+	JR ??SHR0630
+??SHRE0631:
 	push	hl
 	ld	hl,0FH
 	ex	de,hl
@@ -6505,10 +6527,10 @@ EMITHEX:
 	ld	(??AUTO+2),a
 	ld	a,(??AUTO+2)
     OR A
-	jp	c,??SKIP0631
-	jp	z,??SKIP0631
-	JR ??ORTRUE0630
-??SKIP0631:
+	jp	c,??SKIP0635
+	jp	z,??SKIP0635
+	JR ??ORTRUE0634
+??SKIP0635:
 	ld	hl,(??AUTO+0)
 	ld	l,h
 	ld	h,0
@@ -6517,11 +6539,11 @@ EMITHEX:
 	ex	de,hl
 	pop	hl
 	call	??subde
-	jp	c,??ENDIF0629
+	jp	c,??ENDIF0633
 	ld	a,l
 	or	h
-	jp	z,??ENDIF0629
-??ORTRUE0630:
+	jp	z,??ENDIF0633
+??ORTRUE0634:
 	ld	a,(??AUTO+2)
 	ld	l,a
 	ld	h,0
@@ -6529,7 +6551,7 @@ EMITHEX:
 	add	hl,de
 	ld	a,(hl)
 	call	EMIT
-??ENDIF0629:
+??ENDIF0633:
 	ld	hl,0FH
 	ex	de,hl
 	ld	hl,(??AUTO+0)
@@ -6593,8 +6615,8 @@ EMITOCT:
 	ld	(??AUTO+2),a
 	ld	a,(??AUTO+2)
     OR A
-	jp	c,??ENDIF0633
-	jp	z,??ENDIF0633
+	jp	c,??ENDIF0637
+	jp	z,??ENDIF0637
 	ld	a,30H
 	ld	b,a
 	ld	a,(??AUTO+2)
@@ -6602,47 +6624,12 @@ EMITOCT:
 	call	EMIT
 	ld	a,1
 	ld	(??AUTO+3),a
-??ENDIF0633:
+??ENDIF0637:
 	ld	hl,(??AUTO+0)
 	ld	a,h
 	srl	a
 	srl	a
 	srl	a
-	srl	a
-	ld	l,a
-	ld	h,0
-	push	hl
-	ld	hl,7
-	ex	de,hl
-	pop	hl
-	ld	a,l
-	and	e
-	ld	l,a
-	ld	a,h
-	and	d
-	ld	h,a
-	ld	a,l
-	ld	(??AUTO+2),a
-	ld	a,(??AUTO+2)
-    OR A
-	jp	c,??SKIP0637
-	jp	z,??SKIP0637
-	JR ??ORTRUE0636
-??SKIP0637:
-	ld	a,(??AUTO+3)
-	or	a
-	jp	z,??ENDIF0635
-??ORTRUE0636:
-	ld	a,30H
-	ld	b,a
-	ld	a,(??AUTO+2)
-	add	a,b
-	call	EMIT
-	ld	a,1
-	ld	(??AUTO+3),a
-??ENDIF0635:
-	ld	hl,(??AUTO+0)
-	ld	a,h
 	srl	a
 	ld	l,a
 	ld	h,0
@@ -6677,19 +6664,10 @@ EMITOCT:
 	ld	(??AUTO+3),a
 ??ENDIF0639:
 	ld	hl,(??AUTO+0)
-	ld	c,6
-??SHR0642:
-	dec	c
-	jp	m,??SHRE0643
-	or	a
 	ld	a,h
-	rra
-	ld	h,a
-	ld	a,l
-	rra
+	srl	a
 	ld	l,a
-	JR ??SHR0642
-??SHRE0643:
+	ld	h,0
 	push	hl
 	ld	hl,7
 	ex	de,hl
@@ -6704,14 +6682,14 @@ EMITOCT:
 	ld	(??AUTO+2),a
 	ld	a,(??AUTO+2)
     OR A
-	jp	c,??SKIP0647
-	jp	z,??SKIP0647
-	JR ??ORTRUE0646
-??SKIP0647:
+	jp	c,??SKIP0645
+	jp	z,??SKIP0645
+	JR ??ORTRUE0644
+??SKIP0645:
 	ld	a,(??AUTO+3)
 	or	a
-	jp	z,??ENDIF0645
-??ORTRUE0646:
+	jp	z,??ENDIF0643
+??ORTRUE0644:
 	ld	a,30H
 	ld	b,a
 	ld	a,(??AUTO+2)
@@ -6719,8 +6697,12 @@ EMITOCT:
 	call	EMIT
 	ld	a,1
 	ld	(??AUTO+3),a
-??ENDIF0645:
+??ENDIF0643:
 	ld	hl,(??AUTO+0)
+	ld	c,6
+??SHR0646:
+	dec	c
+	jp	m,??SHRE0647
 	or	a
 	ld	a,h
 	rra
@@ -6728,20 +6710,8 @@ EMITOCT:
 	ld	a,l
 	rra
 	ld	l,a
-	or	a
-	ld	a,h
-	rra
-	ld	h,a
-	ld	a,l
-	rra
-	ld	l,a
-	or	a
-	ld	a,h
-	rra
-	ld	h,a
-	ld	a,l
-	rra
-	ld	l,a
+	JR ??SHR0646
+??SHRE0647:
 	push	hl
 	ld	hl,7
 	ex	de,hl
@@ -6772,6 +6742,58 @@ EMITOCT:
 	ld	a,1
 	ld	(??AUTO+3),a
 ??ENDIF0649:
+	ld	hl,(??AUTO+0)
+	or	a
+	ld	a,h
+	rra
+	ld	h,a
+	ld	a,l
+	rra
+	ld	l,a
+	or	a
+	ld	a,h
+	rra
+	ld	h,a
+	ld	a,l
+	rra
+	ld	l,a
+	or	a
+	ld	a,h
+	rra
+	ld	h,a
+	ld	a,l
+	rra
+	ld	l,a
+	push	hl
+	ld	hl,7
+	ex	de,hl
+	pop	hl
+	ld	a,l
+	and	e
+	ld	l,a
+	ld	a,h
+	and	d
+	ld	h,a
+	ld	a,l
+	ld	(??AUTO+2),a
+	ld	a,(??AUTO+2)
+    OR A
+	jp	c,??SKIP0655
+	jp	z,??SKIP0655
+	JR ??ORTRUE0654
+??SKIP0655:
+	ld	a,(??AUTO+3)
+	or	a
+	jp	z,??ENDIF0653
+??ORTRUE0654:
+	ld	a,30H
+	ld	b,a
+	ld	a,(??AUTO+2)
+	add	a,b
+	call	EMIT
+	ld	a,1
+	ld	(??AUTO+3),a
+??ENDIF0653:
 	ld	hl,7
 	ex	de,hl
 	ld	hl,(??AUTO+0)
@@ -6796,70 +6818,70 @@ EMITOCT:
 NEEDSPACEBEFOREKW:
 	ld	a,(PREVTOK)
 	cp	41H
-	jp	c,??ENDIF0653
+	jp	c,??ENDIF0657
 	ld	a,(PREVTOK)
 	cp	5AH
-	jp	c,??SKIP0654
-	jp	z,??SKIP0654
-	JR ??ENDIF0653
-??SKIP0654:
+	jp	c,??SKIP0658
+	jp	z,??SKIP0658
+	JR ??ENDIF0657
+??SKIP0658:
 	ld	a,1
 	ret
-??ENDIF0653:
+??ENDIF0657:
 	ld	a,(PREVTOK)
 	cp	61H
-	jp	c,??ENDIF0656
+	jp	c,??ENDIF0660
 	ld	a,(PREVTOK)
 	cp	7AH
-	jp	c,??SKIP0657
-	jp	z,??SKIP0657
-	JR ??ENDIF0656
-??SKIP0657:
+	jp	c,??SKIP0661
+	jp	z,??SKIP0661
+	JR ??ENDIF0660
+??SKIP0661:
 	ld	a,1
 	ret
-??ENDIF0656:
+??ENDIF0660:
 	ld	a,(PREVTOK)
 	cp	30H
-	jp	c,??ENDIF0659
+	jp	c,??ENDIF0663
 	ld	a,(PREVTOK)
 	cp	39H
-	jp	c,??SKIP0660
-	jp	z,??SKIP0660
-	JR ??ENDIF0659
-??SKIP0660:
+	jp	c,??SKIP0664
+	jp	z,??SKIP0664
+	JR ??ENDIF0663
+??SKIP0664:
 	ld	a,1
 	ret
-??ENDIF0659:
+??ENDIF0663:
 	ld	a,(PREVTOK)
 	cp	29H
-	jp	nz,??ENDIF0662
-	ld	a,1
-	ret
-??ENDIF0662:
-	ld	a,(PREVTOK)
-	cp	24H
-	jp	nz,??ENDIF0664
-	ld	a,1
-	ret
-??ENDIF0664:
-	ld	a,(PREVTOK)
-	cp	25H
 	jp	nz,??ENDIF0666
 	ld	a,1
 	ret
 ??ENDIF0666:
 	ld	a,(PREVTOK)
-	cp	21H
+	cp	24H
 	jp	nz,??ENDIF0668
 	ld	a,1
 	ret
 ??ENDIF0668:
 	ld	a,(PREVTOK)
-	cp	23H
+	cp	25H
 	jp	nz,??ENDIF0670
 	ld	a,1
 	ret
 ??ENDIF0670:
+	ld	a,(PREVTOK)
+	cp	21H
+	jp	nz,??ENDIF0672
+	ld	a,1
+	ret
+??ENDIF0672:
+	ld	a,(PREVTOK)
+	cp	23H
+	jp	nz,??ENDIF0674
+	ld	a,1
+	ret
+??ENDIF0674:
     XOR A
 	ret
 
@@ -6872,94 +6894,94 @@ EMITTOKEN:
 	ld	(??AUTO+15),a
 	ld	a,(??AUTO+14)
 	cp	0EFH
-	jp	nz,??ENDIF0672
-	ld	a,3EH
-	call	EMIT
-	ld	a,3EH
-	ld	(PREVTOK),a
-	ret
-??ENDIF0672:
-	ld	a,(??AUTO+14)
-	cp	0F0H
-	jp	nz,??ENDIF0674
-	ld	a,3DH
-	call	EMIT
-	ld	a,3DH
-	ld	(PREVTOK),a
-	ret
-??ENDIF0674:
-	ld	a,(??AUTO+14)
-	cp	0F1H
 	jp	nz,??ENDIF0676
-	ld	a,3CH
+	ld	a,3EH
 	call	EMIT
-	ld	a,3CH
+	ld	a,3EH
 	ld	(PREVTOK),a
 	ret
 ??ENDIF0676:
 	ld	a,(??AUTO+14)
-	cp	0F2H
+	cp	0F0H
 	jp	nz,??ENDIF0678
-	ld	a,2BH
+	ld	a,3DH
 	call	EMIT
-	ld	a,2BH
+	ld	a,3DH
 	ld	(PREVTOK),a
 	ret
 ??ENDIF0678:
 	ld	a,(??AUTO+14)
-	cp	0F3H
+	cp	0F1H
 	jp	nz,??ENDIF0680
-	ld	a,2DH
+	ld	a,3CH
 	call	EMIT
-	ld	a,2DH
+	ld	a,3CH
 	ld	(PREVTOK),a
 	ret
 ??ENDIF0680:
 	ld	a,(??AUTO+14)
-	cp	0F4H
+	cp	0F2H
 	jp	nz,??ENDIF0682
-	ld	a,2AH
+	ld	a,2BH
 	call	EMIT
-	ld	a,2AH
+	ld	a,2BH
 	ld	(PREVTOK),a
 	ret
 ??ENDIF0682:
 	ld	a,(??AUTO+14)
-	cp	0F5H
+	cp	0F3H
 	jp	nz,??ENDIF0684
-	ld	a,2FH
+	ld	a,2DH
 	call	EMIT
-	ld	a,2FH
+	ld	a,2DH
 	ld	(PREVTOK),a
 	ret
 ??ENDIF0684:
 	ld	a,(??AUTO+14)
-	cp	0F6H
+	cp	0F4H
 	jp	nz,??ENDIF0686
-	ld	a,5EH
+	ld	a,2AH
 	call	EMIT
-	ld	a,5EH
+	ld	a,2AH
 	ld	(PREVTOK),a
 	ret
 ??ENDIF0686:
 	ld	a,(??AUTO+14)
-	cp	0FCH
+	cp	0F5H
 	jp	nz,??ENDIF0688
+	ld	a,2FH
+	call	EMIT
+	ld	a,2FH
+	ld	(PREVTOK),a
+	ret
+??ENDIF0688:
+	ld	a,(??AUTO+14)
+	cp	0F6H
+	jp	nz,??ENDIF0690
+	ld	a,5EH
+	call	EMIT
+	ld	a,5EH
+	ld	(PREVTOK),a
+	ret
+??ENDIF0690:
+	ld	a,(??AUTO+14)
+	cp	0FCH
+	jp	nz,??ENDIF0692
 	ld	a,5CH
 	call	EMIT
 	ld	a,5CH
 	ld	(PREVTOK),a
 	ret
-??ENDIF0688:
+??ENDIF0692:
 	ld	a,(??AUTO+14)
 	cp	0F7H
-	jp	nz,??ENDIF0690
+	jp	nz,??ENDIF0694
 	ld	a,(??AUTO+15)
 	or	a
-	jp	z,??ENDIF0692
+	jp	z,??ENDIF0696
 	ld	a,20H
 	call	EMIT
-??ENDIF0692:
+??ENDIF0696:
 	ld	a,41H
 	call	EMIT
 	ld	a,4EH
@@ -6971,28 +6993,9 @@ EMITTOKEN:
 	ld	a,20H
 	ld	(PREVTOK),a
 	ret
-??ENDIF0690:
-	ld	a,(??AUTO+14)
-	cp	0F8H
-	jp	nz,??ENDIF0694
-	ld	a,(??AUTO+15)
-	or	a
-	jp	z,??ENDIF0696
-	ld	a,20H
-	call	EMIT
-??ENDIF0696:
-	ld	a,4FH
-	call	EMIT
-	ld	a,52H
-	call	EMIT
-	ld	a,20H
-	call	EMIT
-	ld	a,20H
-	ld	(PREVTOK),a
-	ret
 ??ENDIF0694:
 	ld	a,(??AUTO+14)
-	cp	0F9H
+	cp	0F8H
 	jp	nz,??ENDIF0698
 	ld	a,(??AUTO+15)
 	or	a
@@ -7000,8 +7003,6 @@ EMITTOKEN:
 	ld	a,20H
 	call	EMIT
 ??ENDIF0700:
-	ld	a,58H
-	call	EMIT
 	ld	a,4FH
 	call	EMIT
 	ld	a,52H
@@ -7013,7 +7014,7 @@ EMITTOKEN:
 	ret
 ??ENDIF0698:
 	ld	a,(??AUTO+14)
-	cp	0FAH
+	cp	0F9H
 	jp	nz,??ENDIF0702
 	ld	a,(??AUTO+15)
 	or	a
@@ -7021,6 +7022,27 @@ EMITTOKEN:
 	ld	a,20H
 	call	EMIT
 ??ENDIF0704:
+	ld	a,58H
+	call	EMIT
+	ld	a,4FH
+	call	EMIT
+	ld	a,52H
+	call	EMIT
+	ld	a,20H
+	call	EMIT
+	ld	a,20H
+	ld	(PREVTOK),a
+	ret
+??ENDIF0702:
+	ld	a,(??AUTO+14)
+	cp	0FAH
+	jp	nz,??ENDIF0706
+	ld	a,(??AUTO+15)
+	or	a
+	jp	z,??ENDIF0708
+	ld	a,20H
+	call	EMIT
+??ENDIF0708:
 	ld	a,45H
 	call	EMIT
 	ld	a,51H
@@ -7032,16 +7054,16 @@ EMITTOKEN:
 	ld	a,20H
 	ld	(PREVTOK),a
 	ret
-??ENDIF0702:
+??ENDIF0706:
 	ld	a,(??AUTO+14)
 	cp	0FBH
-	jp	nz,??ENDIF0706
+	jp	nz,??ENDIF0710
 	ld	a,(??AUTO+15)
 	or	a
-	jp	z,??ENDIF0708
+	jp	z,??ENDIF0712
 	ld	a,20H
 	call	EMIT
-??ENDIF0708:
+??ENDIF0712:
 	ld	a,49H
 	call	EMIT
 	ld	a,4DH
@@ -7053,16 +7075,16 @@ EMITTOKEN:
 	ld	a,20H
 	ld	(PREVTOK),a
 	ret
-??ENDIF0706:
+??ENDIF0710:
 	ld	a,(??AUTO+14)
 	cp	0FDH
-	jp	nz,??ENDIF0710
+	jp	nz,??ENDIF0714
 	ld	a,(??AUTO+15)
 	or	a
-	jp	z,??ENDIF0712
+	jp	z,??ENDIF0716
 	ld	a,20H
 	call	EMIT
-??ENDIF0712:
+??ENDIF0716:
 	ld	a,4DH
 	call	EMIT
 	ld	a,4FH
@@ -7074,26 +7096,9 @@ EMITTOKEN:
 	ld	a,20H
 	ld	(PREVTOK),a
 	ret
-??ENDIF0710:
-	ld	a,(??AUTO+14)
-	cp	0CEH
-	jp	nz,??ENDIF0714
-	ld	a,(PREVTOK)
-	cp	20H
-	jp	z,??ENDIF0716
-	ld	a,20H
-	call	EMIT
-??ENDIF0716:
-	ld	a,54H
-	call	EMIT
-	ld	a,4FH
-	call	EMIT
-	ld	a,4FH
-	ld	(PREVTOK),a
-	ret
 ??ENDIF0714:
 	ld	a,(??AUTO+14)
-	cp	0CFH
+	cp	0CEH
 	jp	nz,??ENDIF0718
 	ld	a,(PREVTOK)
 	cp	20H
@@ -7101,6 +7106,23 @@ EMITTOKEN:
 	ld	a,20H
 	call	EMIT
 ??ENDIF0720:
+	ld	a,54H
+	call	EMIT
+	ld	a,4FH
+	call	EMIT
+	ld	a,4FH
+	ld	(PREVTOK),a
+	ret
+??ENDIF0718:
+	ld	a,(??AUTO+14)
+	cp	0CFH
+	jp	nz,??ENDIF0722
+	ld	a,(PREVTOK)
+	cp	20H
+	jp	z,??ENDIF0724
+	ld	a,20H
+	call	EMIT
+??ENDIF0724:
 	ld	a,54H
 	call	EMIT
 	ld	a,48H
@@ -7112,30 +7134,9 @@ EMITTOKEN:
 	ld	a,4EH
 	ld	(PREVTOK),a
 	ret
-??ENDIF0718:
-	ld	a,(??AUTO+14)
-	cp	0D1H
-	jp	nz,??ENDIF0722
-	ld	a,(PREVTOK)
-	cp	20H
-	jp	z,??ENDIF0724
-	ld	a,20H
-	call	EMIT
-??ENDIF0724:
-	ld	a,53H
-	call	EMIT
-	ld	a,54H
-	call	EMIT
-	ld	a,45H
-	call	EMIT
-	ld	a,50H
-	call	EMIT
-	ld	a,50H
-	ld	(PREVTOK),a
-	ret
 ??ENDIF0722:
 	ld	a,(??AUTO+14)
-	cp	0A2H
+	cp	0D1H
 	jp	nz,??ENDIF0726
 	ld	a,(PREVTOK)
 	cp	20H
@@ -7143,20 +7144,20 @@ EMITTOKEN:
 	ld	a,20H
 	call	EMIT
 ??ENDIF0728:
-	ld	a,45H
-	call	EMIT
-	ld	a,4CH
-	call	EMIT
 	ld	a,53H
 	call	EMIT
-	ld	a,45H
+	ld	a,54H
 	call	EMIT
 	ld	a,45H
+	call	EMIT
+	ld	a,50H
+	call	EMIT
+	ld	a,50H
 	ld	(PREVTOK),a
 	ret
 ??ENDIF0726:
 	ld	a,(??AUTO+14)
-	cp	0D9H
+	cp	0A2H
 	jp	nz,??ENDIF0730
 	ld	a,(PREVTOK)
 	cp	20H
@@ -7164,6 +7165,27 @@ EMITTOKEN:
 	ld	a,20H
 	call	EMIT
 ??ENDIF0732:
+	ld	a,45H
+	call	EMIT
+	ld	a,4CH
+	call	EMIT
+	ld	a,53H
+	call	EMIT
+	ld	a,45H
+	call	EMIT
+	ld	a,45H
+	ld	(PREVTOK),a
+	ret
+??ENDIF0730:
+	ld	a,(??AUTO+14)
+	cp	0D9H
+	jp	nz,??ENDIF0734
+	ld	a,(PREVTOK)
+	cp	20H
+	jp	z,??ENDIF0736
+	ld	a,20H
+	call	EMIT
+??ENDIF0736:
 	ld	a,55H
 	call	EMIT
 	ld	a,53H
@@ -7177,57 +7199,57 @@ EMITTOKEN:
 	ld	a,47H
 	ld	(PREVTOK),a
 	ret
-??ENDIF0730:
+??ENDIF0734:
 	ld	a,(??AUTO+15)
 	or	a
-	jp	z,??ENDIF0734
+	jp	z,??ENDIF0738
 	ld	a,20H
 	call	EMIT
-??ENDIF0734:
-	ld	a,(??AUTO+14)
-	cp	82H
-	jp	nz,??ENDIF0736
-	ld	a,46H
-	call	EMIT
-	ld	a,4FH
-	call	EMIT
-	ld	a,52H
-	call	EMIT
-	ld	a,52H
-	ld	(PREVTOK),a
-	ret
-??ENDIF0736:
-	ld	a,(??AUTO+14)
-	cp	8BH
-	jp	nz,??ENDIF0738
-	ld	a,49H
-	call	EMIT
-	ld	a,46H
-	call	EMIT
-	ld	a,46H
-	ld	(PREVTOK),a
-	ret
 ??ENDIF0738:
 	ld	a,(??AUTO+14)
-	cp	8DH
+	cp	82H
 	jp	nz,??ENDIF0740
-	ld	a,47H
+	ld	a,46H
 	call	EMIT
 	ld	a,4FH
 	call	EMIT
-	ld	a,53H
+	ld	a,52H
 	call	EMIT
-	ld	a,55H
-	call	EMIT
-	ld	a,42H
-	call	EMIT
-	ld	a,42H
+	ld	a,52H
 	ld	(PREVTOK),a
 	ret
 ??ENDIF0740:
 	ld	a,(??AUTO+14)
-	cp	89H
+	cp	8BH
 	jp	nz,??ENDIF0742
+	ld	a,49H
+	call	EMIT
+	ld	a,46H
+	call	EMIT
+	ld	a,46H
+	ld	(PREVTOK),a
+	ret
+??ENDIF0742:
+	ld	a,(??AUTO+14)
+	cp	8DH
+	jp	nz,??ENDIF0744
+	ld	a,47H
+	call	EMIT
+	ld	a,4FH
+	call	EMIT
+	ld	a,53H
+	call	EMIT
+	ld	a,55H
+	call	EMIT
+	ld	a,42H
+	call	EMIT
+	ld	a,42H
+	ld	(PREVTOK),a
+	ret
+??ENDIF0744:
+	ld	a,(??AUTO+14)
+	cp	89H
+	jp	nz,??ENDIF0746
 	ld	a,47H
 	call	EMIT
 	ld	a,4FH
@@ -7239,47 +7261,13 @@ EMITTOKEN:
 	ld	a,4FH
 	ld	(PREVTOK),a
 	ret
-??ENDIF0742:
+??ENDIF0746:
 	ld	a,(??AUTO+14)
 	cp	88H
-	jp	nz,??ENDIF0744
+	jp	nz,??ENDIF0748
 	ld	a,4CH
 	call	EMIT
 	ld	a,45H
-	call	EMIT
-	ld	a,54H
-	call	EMIT
-	ld	a,54H
-	ld	(PREVTOK),a
-	ret
-??ENDIF0744:
-	ld	a,(??AUTO+14)
-	cp	91H
-	jp	nz,??ENDIF0746
-	ld	a,50H
-	call	EMIT
-	ld	a,52H
-	call	EMIT
-	ld	a,49H
-	call	EMIT
-	ld	a,4EH
-	call	EMIT
-	ld	a,54H
-	call	EMIT
-	ld	a,54H
-	ld	(PREVTOK),a
-	ret
-??ENDIF0746:
-	ld	a,(??AUTO+14)
-	cp	85H
-	jp	nz,??ENDIF0748
-	ld	a,49H
-	call	EMIT
-	ld	a,4EH
-	call	EMIT
-	ld	a,50H
-	call	EMIT
-	ld	a,55H
 	call	EMIT
 	ld	a,54H
 	call	EMIT
@@ -7288,8 +7276,42 @@ EMITTOKEN:
 	ret
 ??ENDIF0748:
 	ld	a,(??AUTO+14)
-	cp	86H
+	cp	91H
 	jp	nz,??ENDIF0750
+	ld	a,50H
+	call	EMIT
+	ld	a,52H
+	call	EMIT
+	ld	a,49H
+	call	EMIT
+	ld	a,4EH
+	call	EMIT
+	ld	a,54H
+	call	EMIT
+	ld	a,54H
+	ld	(PREVTOK),a
+	ret
+??ENDIF0750:
+	ld	a,(??AUTO+14)
+	cp	85H
+	jp	nz,??ENDIF0752
+	ld	a,49H
+	call	EMIT
+	ld	a,4EH
+	call	EMIT
+	ld	a,50H
+	call	EMIT
+	ld	a,55H
+	call	EMIT
+	ld	a,54H
+	call	EMIT
+	ld	a,54H
+	ld	(PREVTOK),a
+	ret
+??ENDIF0752:
+	ld	a,(??AUTO+14)
+	cp	86H
+	jp	nz,??ENDIF0754
 	ld	a,44H
 	call	EMIT
 	ld	a,49H
@@ -7299,10 +7321,10 @@ EMITTOKEN:
 	ld	a,4DH
 	ld	(PREVTOK),a
 	ret
-??ENDIF0750:
+??ENDIF0754:
 	ld	a,(??AUTO+14)
 	cp	87H
-	jp	nz,??ENDIF0752
+	jp	nz,??ENDIF0756
 	ld	a,52H
 	call	EMIT
 	ld	a,45H
@@ -7314,10 +7336,10 @@ EMITTOKEN:
 	ld	a,44H
 	ld	(PREVTOK),a
 	ret
-??ENDIF0752:
+??ENDIF0756:
 	ld	a,(??AUTO+14)
 	cp	84H
-	jp	nz,??ENDIF0754
+	jp	nz,??ENDIF0758
 	ld	a,44H
 	call	EMIT
 	ld	a,41H
@@ -7329,34 +7351,34 @@ EMITTOKEN:
 	ld	a,41H
 	ld	(PREVTOK),a
 	ret
-??ENDIF0754:
-	ld	a,(??AUTO+14)
-	cp	0D5H
-	jp	nz,??ENDIF0756
-	ld	a,4EH
-	call	EMIT
-	ld	a,4FH
-	call	EMIT
-	ld	a,54H
-	call	EMIT
-	ld	a,54H
-	ld	(PREVTOK),a
-	ret
-??ENDIF0756:
-	ld	a,(??AUTO+14)
-	cp	95H
-	jp	nz,??ENDIF0758
-	ld	a,4FH
-	call	EMIT
-	ld	a,4EH
-	call	EMIT
-	ld	a,4EH
-	ld	(PREVTOK),a
-	ret
 ??ENDIF0758:
 	ld	a,(??AUTO+14)
-	cp	0B4H
+	cp	0D5H
 	jp	nz,??ENDIF0760
+	ld	a,4EH
+	call	EMIT
+	ld	a,4FH
+	call	EMIT
+	ld	a,54H
+	call	EMIT
+	ld	a,54H
+	ld	(PREVTOK),a
+	ret
+??ENDIF0760:
+	ld	a,(??AUTO+14)
+	cp	95H
+	jp	nz,??ENDIF0762
+	ld	a,4FH
+	call	EMIT
+	ld	a,4EH
+	call	EMIT
+	ld	a,4EH
+	ld	(PREVTOK),a
+	ret
+??ENDIF0762:
+	ld	a,(??AUTO+14)
+	cp	0B4H
+	jp	nz,??ENDIF0764
 	ld	a,57H
 	call	EMIT
 	ld	a,48H
@@ -7370,10 +7392,10 @@ EMITTOKEN:
 	ld	a,45H
 	ld	(PREVTOK),a
 	ret
-??ENDIF0760:
+??ENDIF0764:
 	ld	a,(??AUTO+14)
 	cp	98H
-	jp	nz,??ENDIF0762
+	jp	nz,??ENDIF0766
 	ld	a,44H
 	call	EMIT
 	ld	a,45H
@@ -7383,10 +7405,10 @@ EMITTOKEN:
 	ld	a,46H
 	ld	(PREVTOK),a
 	ret
-??ENDIF0762:
+??ENDIF0766:
 	ld	a,(??AUTO+14)
 	cp	99H
-	jp	nz,??ENDIF0764
+	jp	nz,??ENDIF0768
 	ld	a,50H
 	call	EMIT
 	ld	a,4FH
@@ -7398,10 +7420,10 @@ EMITTOKEN:
 	ld	a,45H
 	ld	(PREVTOK),a
 	ret
-??ENDIF0764:
+??ENDIF0768:
 	ld	a,(??AUTO+14)
 	cp	97H
-	jp	nz,??ENDIF0766
+	jp	nz,??ENDIF0770
 	ld	a,57H
 	call	EMIT
 	ld	a,41H
@@ -7413,10 +7435,10 @@ EMITTOKEN:
 	ld	a,54H
 	ld	(PREVTOK),a
 	ret
-??ENDIF0766:
+??ENDIF0770:
 	ld	a,(??AUTO+14)
 	cp	9DH
-	jp	nz,??ENDIF0768
+	jp	nz,??ENDIF0772
 	ld	a,4FH
 	call	EMIT
 	ld	a,55H
@@ -7426,10 +7448,10 @@ EMITTOKEN:
 	ld	a,54H
 	ld	(PREVTOK),a
 	ret
-??ENDIF0768:
+??ENDIF0772:
 	ld	a,(??AUTO+14)
 	cp	0B6H
-	jp	nz,??ENDIF0770
+	jp	nz,??ENDIF0774
 	ld	a,43H
 	call	EMIT
 	ld	a,41H
@@ -7441,10 +7463,10 @@ EMITTOKEN:
 	ld	a,4CH
 	ld	(PREVTOK),a
 	ret
-??ENDIF0770:
+??ENDIF0774:
 	ld	a,(??AUTO+14)
 	cp	0A8H
-	jp	nz,??ENDIF0772
+	jp	nz,??ENDIF0776
 	ld	a,45H
 	call	EMIT
 	ld	a,52H
@@ -7458,10 +7480,10 @@ EMITTOKEN:
 	ld	a,52H
 	ld	(PREVTOK),a
 	ret
-??ENDIF0772:
+??ENDIF0776:
 	ld	a,(??AUTO+14)
 	cp	0A9H
-	jp	nz,??ENDIF0774
+	jp	nz,??ENDIF0778
 	ld	a,52H
 	call	EMIT
 	ld	a,45H
@@ -7477,21 +7499,21 @@ EMITTOKEN:
 	ld	a,45H
 	ld	(PREVTOK),a
 	ret
-??ENDIF0774:
+??ENDIF0778:
 	ld	a,(??AUTO+14)
 	cp	81H
-	jp	nz,??ELSE0775
+	jp	nz,??ELSE0779
 	ld	a,45H
 	call	EMIT
 	ld	a,4EH
 	call	EMIT
 	ld	a,44H
 	call	EMIT
-	jp	??ENDIF0776
-??ELSE0775:
+	jp	??ENDIF0780
+??ELSE0779:
 	ld	a,(??AUTO+14)
 	cp	83H
-	jp	nz,??ELSE0777
+	jp	nz,??ELSE0781
 	ld	a,4EH
 	call	EMIT
 	ld	a,45H
@@ -7500,69 +7522,69 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,54H
 	call	EMIT
-	jp	??ENDIF0778
-??ELSE0777:
-	ld	a,(??AUTO+14)
-	cp	8AH
-	jp	nz,??ELSE0779
-	ld	a,52H
-	call	EMIT
-	ld	a,55H
-	call	EMIT
-	ld	a,4EH
-	call	EMIT
-	jp	??ENDIF0780
-??ELSE0779:
-	ld	a,(??AUTO+14)
-	cp	8CH
-	jp	nz,??ELSE0781
-	ld	a,52H
-	call	EMIT
-	ld	a,45H
-	call	EMIT
-	ld	a,53H
-	call	EMIT
-	ld	a,54H
-	call	EMIT
-	ld	a,4FH
-	call	EMIT
-	ld	a,52H
-	call	EMIT
-	ld	a,45H
-	call	EMIT
 	jp	??ENDIF0782
 ??ELSE0781:
 	ld	a,(??AUTO+14)
-	cp	8EH
+	cp	8AH
 	jp	nz,??ELSE0783
 	ld	a,52H
 	call	EMIT
-	ld	a,45H
-	call	EMIT
-	ld	a,54H
-	call	EMIT
 	ld	a,55H
-	call	EMIT
-	ld	a,52H
 	call	EMIT
 	ld	a,4EH
 	call	EMIT
 	jp	??ENDIF0784
 ??ELSE0783:
 	ld	a,(??AUTO+14)
-	cp	8FH
+	cp	8CH
 	jp	nz,??ELSE0785
+	ld	a,52H
+	call	EMIT
+	ld	a,45H
+	call	EMIT
+	ld	a,53H
+	call	EMIT
+	ld	a,54H
+	call	EMIT
+	ld	a,4FH
+	call	EMIT
+	ld	a,52H
+	call	EMIT
+	ld	a,45H
+	call	EMIT
+	jp	??ENDIF0786
+??ELSE0785:
+	ld	a,(??AUTO+14)
+	cp	8EH
+	jp	nz,??ELSE0787
+	ld	a,52H
+	call	EMIT
+	ld	a,45H
+	call	EMIT
+	ld	a,54H
+	call	EMIT
+	ld	a,55H
+	call	EMIT
+	ld	a,52H
+	call	EMIT
+	ld	a,4EH
+	call	EMIT
+	jp	??ENDIF0788
+??ELSE0787:
+	ld	a,(??AUTO+14)
+	cp	8FH
+	jp	nz,??ELSE0789
 	ld	a,52H
 	call	EMIT
 	ld	a,45H
 	call	EMIT
 	ld	a,4DH
 	call	EMIT
-	jp	??ENDIF0786
-??ELSE0785:
+	jp	??ENDIF0790
+??ELSE0789:
 	ld	a,(??AUTO+14)
 	cp	90H
-	jp	nz,??ELSE0787
+	jp	nz,??ELSE0791
 	ld	a,53H
 	call	EMIT
 	ld	a,54H
@@ -7571,11 +7593,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,50H
 	call	EMIT
-	jp	??ENDIF0788
-??ELSE0787:
+	jp	??ENDIF0792
+??ELSE0791:
 	ld	a,(??AUTO+14)
 	cp	92H
-	jp	nz,??ELSE0789
+	jp	nz,??ELSE0793
 	ld	a,43H
 	call	EMIT
 	ld	a,4CH
@@ -7586,11 +7608,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,52H
 	call	EMIT
-	jp	??ENDIF0790
-??ELSE0789:
+	jp	??ENDIF0794
+??ELSE0793:
 	ld	a,(??AUTO+14)
 	cp	93H
-	jp	nz,??ELSE0791
+	jp	nz,??ELSE0795
 	ld	a,4CH
 	call	EMIT
 	ld	a,49H
@@ -7599,22 +7621,22 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,54H
 	call	EMIT
-	jp	??ENDIF0792
-??ELSE0791:
+	jp	??ENDIF0796
+??ELSE0795:
 	ld	a,(??AUTO+14)
 	cp	94H
-	jp	nz,??ELSE0793
+	jp	nz,??ELSE0797
 	ld	a,4EH
 	call	EMIT
 	ld	a,45H
 	call	EMIT
 	ld	a,57H
 	call	EMIT
-	jp	??ENDIF0794
-??ELSE0793:
+	jp	??ENDIF0798
+??ELSE0797:
 	ld	a,(??AUTO+14)
 	cp	96H
-	jp	nz,??ELSE0795
+	jp	nz,??ELSE0799
 	ld	a,4EH
 	call	EMIT
 	ld	a,55H
@@ -7623,11 +7645,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,4CH
 	call	EMIT
-	jp	??ENDIF0796
-??ELSE0795:
+	jp	??ENDIF0800
+??ELSE0799:
 	ld	a,(??AUTO+14)
 	cp	9AH
-	jp	nz,??ELSE0797
+	jp	nz,??ELSE0801
 	ld	a,43H
 	call	EMIT
 	ld	a,4FH
@@ -7636,11 +7658,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,54H
 	call	EMIT
-	jp	??ENDIF0798
-??ELSE0797:
+	jp	??ENDIF0802
+??ELSE0801:
 	ld	a,(??AUTO+14)
 	cp	9BH
-	jp	nz,??ELSE0799
+	jp	nz,??ELSE0803
 	ld	a,4CH
 	call	EMIT
 	ld	a,50H
@@ -7653,11 +7675,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,54H
 	call	EMIT
-	jp	??ENDIF0800
-??ELSE0799:
+	jp	??ENDIF0804
+??ELSE0803:
 	ld	a,(??AUTO+14)
 	cp	9FH
-	jp	nz,??ELSE0801
+	jp	nz,??ELSE0805
 	ld	a,4CH
 	call	EMIT
 	ld	a,4CH
@@ -7668,11 +7690,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,54H
 	call	EMIT
-	jp	??ENDIF0802
-??ELSE0801:
+	jp	??ENDIF0806
+??ELSE0805:
 	ld	a,(??AUTO+14)
 	cp	0A0H
-	jp	nz,??ELSE0803
+	jp	nz,??ELSE0807
 	ld	a,4EH
 	call	EMIT
 	ld	a,4FH
@@ -7687,11 +7709,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,45H
 	call	EMIT
-	jp	??ENDIF0804
-??ELSE0803:
+	jp	??ENDIF0808
+??ELSE0807:
 	ld	a,(??AUTO+14)
 	cp	0A1H
-	jp	nz,??ELSE0805
+	jp	nz,??ELSE0809
 	ld	a,57H
 	call	EMIT
 	ld	a,49H
@@ -7702,11 +7724,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,48H
 	call	EMIT
-	jp	??ENDIF0806
-??ELSE0805:
+	jp	??ENDIF0810
+??ELSE0809:
 	ld	a,(??AUTO+14)
 	cp	0A3H
-	jp	nz,??ELSE0807
+	jp	nz,??ELSE0811
 	ld	a,54H
 	call	EMIT
 	ld	a,52H
@@ -7715,11 +7737,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,4EH
 	call	EMIT
-	jp	??ENDIF0808
-??ELSE0807:
+	jp	??ENDIF0812
+??ELSE0811:
 	ld	a,(??AUTO+14)
 	cp	0A4H
-	jp	nz,??ELSE0809
+	jp	nz,??ELSE0813
 	ld	a,54H
 	call	EMIT
 	ld	a,52H
@@ -7730,11 +7752,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,46H
 	call	EMIT
-	jp	??ENDIF0810
-??ELSE0809:
+	jp	??ENDIF0814
+??ELSE0813:
 	ld	a,(??AUTO+14)
 	cp	0A5H
-	jp	nz,??ELSE0811
+	jp	nz,??ELSE0815
 	ld	a,53H
 	call	EMIT
 	ld	a,57H
@@ -7743,11 +7765,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,50H
 	call	EMIT
-	jp	??ENDIF0812
-??ELSE0811:
+	jp	??ENDIF0816
+??ELSE0815:
 	ld	a,(??AUTO+14)
 	cp	0A6H
-	jp	nz,??ELSE0813
+	jp	nz,??ELSE0817
 	ld	a,45H
 	call	EMIT
 	ld	a,52H
@@ -7758,11 +7780,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,45H
 	call	EMIT
-	jp	??ENDIF0814
-??ELSE0813:
+	jp	??ENDIF0818
+??ELSE0817:
 	ld	a,(??AUTO+14)
 	cp	0A7H
-	jp	nz,??ELSE0815
+	jp	nz,??ELSE0819
 	ld	a,45H
 	call	EMIT
 	ld	a,44H
@@ -7771,11 +7793,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,54H
 	call	EMIT
-	jp	??ENDIF0816
-??ELSE0815:
+	jp	??ENDIF0820
+??ELSE0819:
 	ld	a,(??AUTO+14)
 	cp	0AAH
-	jp	nz,??ELSE0817
+	jp	nz,??ELSE0821
 	ld	a,44H
 	call	EMIT
 	ld	a,45H
@@ -7788,11 +7810,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,45H
 	call	EMIT
-	jp	??ENDIF0818
-??ELSE0817:
+	jp	??ENDIF0822
+??ELSE0821:
 	ld	a,(??AUTO+14)
 	cp	0ABH
-	jp	nz,??ELSE0819
+	jp	nz,??ELSE0823
 	ld	a,41H
 	call	EMIT
 	ld	a,55H
@@ -7801,11 +7823,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,4FH
 	call	EMIT
-	jp	??ENDIF0820
-??ELSE0819:
+	jp	??ENDIF0824
+??ELSE0823:
 	ld	a,(??AUTO+14)
 	cp	0ACH
-	jp	nz,??ELSE0821
+	jp	nz,??ELSE0825
 	ld	a,52H
 	call	EMIT
 	ld	a,45H
@@ -7816,11 +7838,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,4DH
 	call	EMIT
-	jp	??ENDIF0822
-??ELSE0821:
+	jp	??ENDIF0826
+??ELSE0825:
 	ld	a,(??AUTO+14)
 	cp	0ADH
-	jp	nz,??ELSE0823
+	jp	nz,??ELSE0827
 	ld	a,44H
 	call	EMIT
 	ld	a,45H
@@ -7833,11 +7855,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,52H
 	call	EMIT
-	jp	??ENDIF0824
-??ELSE0823:
+	jp	??ENDIF0828
+??ELSE0827:
 	ld	a,(??AUTO+14)
 	cp	0AEH
-	jp	nz,??ELSE0825
+	jp	nz,??ELSE0829
 	ld	a,44H
 	call	EMIT
 	ld	a,45H
@@ -7850,11 +7872,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,54H
 	call	EMIT
-	jp	??ENDIF0826
-??ELSE0825:
+	jp	??ENDIF0830
+??ELSE0829:
 	ld	a,(??AUTO+14)
 	cp	0AFH
-	jp	nz,??ELSE0827
+	jp	nz,??ELSE0831
 	ld	a,44H
 	call	EMIT
 	ld	a,45H
@@ -7867,11 +7889,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,47H
 	call	EMIT
-	jp	??ENDIF0828
-??ELSE0827:
+	jp	??ENDIF0832
+??ELSE0831:
 	ld	a,(??AUTO+14)
 	cp	0B0H
-	jp	nz,??ELSE0829
+	jp	nz,??ELSE0833
 	ld	a,44H
 	call	EMIT
 	ld	a,45H
@@ -7884,11 +7906,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,4CH
 	call	EMIT
-	jp	??ENDIF0830
-??ELSE0829:
+	jp	??ENDIF0834
+??ELSE0833:
 	ld	a,(??AUTO+14)
 	cp	0B1H
-	jp	nz,??ELSE0831
+	jp	nz,??ELSE0835
 	ld	a,4CH
 	call	EMIT
 	ld	a,49H
@@ -7897,11 +7919,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,45H
 	call	EMIT
-	jp	??ENDIF0832
-??ELSE0831:
+	jp	??ENDIF0836
+??ELSE0835:
 	ld	a,(??AUTO+14)
 	cp	0B2H
-	jp	nz,??ELSE0833
+	jp	nz,??ELSE0837
 	ld	a,57H
 	call	EMIT
 	ld	a,52H
@@ -7912,11 +7934,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,45H
 	call	EMIT
-	jp	??ENDIF0834
-??ELSE0833:
+	jp	??ENDIF0838
+??ELSE0837:
 	ld	a,(??AUTO+14)
 	cp	0B3H
-	jp	nz,??ELSE0835
+	jp	nz,??ELSE0839
 	ld	a,43H
 	call	EMIT
 	ld	a,4FH
@@ -7929,11 +7951,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,4EH
 	call	EMIT
-	jp	??ENDIF0836
-??ELSE0835:
+	jp	??ENDIF0840
+??ELSE0839:
 	ld	a,(??AUTO+14)
 	cp	0B5H
-	jp	nz,??ELSE0837
+	jp	nz,??ELSE0841
 	ld	a,57H
 	call	EMIT
 	ld	a,45H
@@ -7942,11 +7964,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,44H
 	call	EMIT
-	jp	??ENDIF0838
-??ELSE0837:
+	jp	??ENDIF0842
+??ELSE0841:
 	ld	a,(??AUTO+14)
 	cp	0B7H
-	jp	nz,??ELSE0839
+	jp	nz,??ELSE0843
 	ld	a,57H
 	call	EMIT
 	ld	a,52H
@@ -7957,11 +7979,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,45H
 	call	EMIT
-	jp	??ENDIF0840
-??ELSE0839:
+	jp	??ENDIF0844
+??ELSE0843:
 	ld	a,(??AUTO+14)
 	cp	0B8H
-	jp	nz,??ELSE0841
+	jp	nz,??ELSE0845
 	ld	a,43H
 	call	EMIT
 	ld	a,4FH
@@ -7974,11 +7996,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,4EH
 	call	EMIT
-	jp	??ENDIF0842
-??ELSE0841:
+	jp	??ENDIF0846
+??ELSE0845:
 	ld	a,(??AUTO+14)
 	cp	0B9H
-	jp	nz,??ELSE0843
+	jp	nz,??ELSE0847
 	ld	a,43H
 	call	EMIT
 	ld	a,48H
@@ -7989,11 +8011,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,4EH
 	call	EMIT
-	jp	??ENDIF0844
-??ELSE0843:
+	jp	??ENDIF0848
+??ELSE0847:
 	ld	a,(??AUTO+14)
 	cp	0BAH
-	jp	nz,??ELSE0845
+	jp	nz,??ELSE0849
 	ld	a,4FH
 	call	EMIT
 	ld	a,50H
@@ -8006,11 +8028,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,4EH
 	call	EMIT
-	jp	??ENDIF0846
-??ELSE0845:
+	jp	??ENDIF0850
+??ELSE0849:
 	ld	a,(??AUTO+14)
 	cp	0BBH
-	jp	nz,??ELSE0847
+	jp	nz,??ELSE0851
 	ld	a,52H
 	call	EMIT
 	ld	a,41H
@@ -8029,11 +8051,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,45H
 	call	EMIT
-	jp	??ENDIF0848
-??ELSE0847:
+	jp	??ENDIF0852
+??ELSE0851:
 	ld	a,(??AUTO+14)
 	cp	0BDH
-	jp	nz,??ELSE0849
+	jp	nz,??ELSE0853
 	ld	a,53H
 	call	EMIT
 	ld	a,59H
@@ -8046,11 +8068,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,4DH
 	call	EMIT
-	jp	??ENDIF0850
-??ELSE0849:
+	jp	??ENDIF0854
+??ELSE0853:
 	ld	a,(??AUTO+14)
 	cp	0BEH
-	jp	nz,??ELSE0851
+	jp	nz,??ELSE0855
 	ld	a,4DH
 	call	EMIT
 	ld	a,45H
@@ -8061,11 +8083,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,45H
 	call	EMIT
-	jp	??ENDIF0852
-??ELSE0851:
+	jp	??ENDIF0856
+??ELSE0855:
 	ld	a,(??AUTO+14)
 	cp	0BFH
-	jp	nz,??ELSE0853
+	jp	nz,??ELSE0857
 	ld	a,4FH
 	call	EMIT
 	ld	a,50H
@@ -8074,11 +8096,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,4EH
 	call	EMIT
-	jp	??ENDIF0854
-??ELSE0853:
+	jp	??ENDIF0858
+??ELSE0857:
 	ld	a,(??AUTO+14)
 	cp	0C0H
-	jp	nz,??ELSE0855
+	jp	nz,??ELSE0859
 	ld	a,46H
 	call	EMIT
 	ld	a,49H
@@ -8089,33 +8111,33 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,44H
 	call	EMIT
-	jp	??ENDIF0856
-??ELSE0855:
+	jp	??ENDIF0860
+??ELSE0859:
 	ld	a,(??AUTO+14)
 	cp	0C1H
-	jp	nz,??ELSE0857
+	jp	nz,??ELSE0861
 	ld	a,47H
 	call	EMIT
 	ld	a,45H
 	call	EMIT
 	ld	a,54H
 	call	EMIT
-	jp	??ENDIF0858
-??ELSE0857:
+	jp	??ENDIF0862
+??ELSE0861:
 	ld	a,(??AUTO+14)
 	cp	0C2H
-	jp	nz,??ELSE0859
+	jp	nz,??ELSE0863
 	ld	a,50H
 	call	EMIT
 	ld	a,55H
 	call	EMIT
 	ld	a,54H
 	call	EMIT
-	jp	??ENDIF0860
-??ELSE0859:
+	jp	??ENDIF0864
+??ELSE0863:
 	ld	a,(??AUTO+14)
 	cp	0C3H
-	jp	nz,??ELSE0861
+	jp	nz,??ELSE0865
 	ld	a,43H
 	call	EMIT
 	ld	a,4CH
@@ -8126,11 +8148,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,45H
 	call	EMIT
-	jp	??ENDIF0862
-??ELSE0861:
+	jp	??ENDIF0866
+??ELSE0865:
 	ld	a,(??AUTO+14)
 	cp	0C4H
-	jp	nz,??ELSE0863
+	jp	nz,??ELSE0867
 	ld	a,4CH
 	call	EMIT
 	ld	a,4FH
@@ -8139,11 +8161,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,44H
 	call	EMIT
-	jp	??ENDIF0864
-??ELSE0863:
+	jp	??ENDIF0868
+??ELSE0867:
 	ld	a,(??AUTO+14)
 	cp	0C5H
-	jp	nz,??ELSE0865
+	jp	nz,??ELSE0869
 	ld	a,4DH
 	call	EMIT
 	ld	a,45H
@@ -8154,11 +8176,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,45H
 	call	EMIT
-	jp	??ENDIF0866
-??ELSE0865:
+	jp	??ENDIF0870
+??ELSE0869:
 	ld	a,(??AUTO+14)
 	cp	0C6H
-	jp	nz,??ELSE0867
+	jp	nz,??ELSE0871
 	ld	a,46H
 	call	EMIT
 	ld	a,49H
@@ -8169,11 +8191,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,53H
 	call	EMIT
-	jp	??ENDIF0868
-??ELSE0867:
+	jp	??ENDIF0872
+??ELSE0871:
 	ld	a,(??AUTO+14)
 	cp	0C7H
-	jp	nz,??ELSE0869
+	jp	nz,??ELSE0873
 	ld	a,4EH
 	call	EMIT
 	ld	a,41H
@@ -8182,11 +8204,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,45H
 	call	EMIT
-	jp	??ENDIF0870
-??ELSE0869:
+	jp	??ENDIF0874
+??ELSE0873:
 	ld	a,(??AUTO+14)
 	cp	0C8H
-	jp	nz,??ELSE0871
+	jp	nz,??ELSE0875
 	ld	a,4BH
 	call	EMIT
 	ld	a,49H
@@ -8195,11 +8217,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,4CH
 	call	EMIT
-	jp	??ENDIF0872
-??ELSE0871:
+	jp	??ENDIF0876
+??ELSE0875:
 	ld	a,(??AUTO+14)
 	cp	0C9H
-	jp	nz,??ELSE0873
+	jp	nz,??ELSE0877
 	ld	a,4CH
 	call	EMIT
 	ld	a,53H
@@ -8208,40 +8230,12 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,54H
 	call	EMIT
-	jp	??ENDIF0874
-??ELSE0873:
-	ld	a,(??AUTO+14)
-	cp	0CAH
-	jp	nz,??ELSE0875
-	ld	a,52H
-	call	EMIT
-	ld	a,53H
-	call	EMIT
-	ld	a,45H
-	call	EMIT
-	ld	a,54H
-	call	EMIT
-	jp	??ENDIF0876
-??ELSE0875:
-	ld	a,(??AUTO+14)
-	cp	0CBH
-	jp	nz,??ELSE0877
-	ld	a,53H
-	call	EMIT
-	ld	a,41H
-	call	EMIT
-	ld	a,56H
-	call	EMIT
-	ld	a,45H
-	call	EMIT
 	jp	??ENDIF0878
 ??ELSE0877:
 	ld	a,(??AUTO+14)
-	cp	0CCH
+	cp	0CAH
 	jp	nz,??ELSE0879
 	ld	a,52H
-	call	EMIT
-	ld	a,45H
 	call	EMIT
 	ld	a,53H
 	call	EMIT
@@ -8252,8 +8246,36 @@ EMITTOKEN:
 	jp	??ENDIF0880
 ??ELSE0879:
 	ld	a,(??AUTO+14)
-	cp	0D0H
+	cp	0CBH
 	jp	nz,??ELSE0881
+	ld	a,53H
+	call	EMIT
+	ld	a,41H
+	call	EMIT
+	ld	a,56H
+	call	EMIT
+	ld	a,45H
+	call	EMIT
+	jp	??ENDIF0882
+??ELSE0881:
+	ld	a,(??AUTO+14)
+	cp	0CCH
+	jp	nz,??ELSE0883
+	ld	a,52H
+	call	EMIT
+	ld	a,45H
+	call	EMIT
+	ld	a,53H
+	call	EMIT
+	ld	a,45H
+	call	EMIT
+	ld	a,54H
+	call	EMIT
+	jp	??ENDIF0884
+??ELSE0883:
+	ld	a,(??AUTO+14)
+	cp	0D0H
+	jp	nz,??ELSE0885
 	ld	a,54H
 	call	EMIT
 	ld	a,41H
@@ -8262,31 +8284,31 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,28H
 	call	EMIT
-	jp	??ENDIF0882
-??ELSE0881:
+	jp	??ENDIF0886
+??ELSE0885:
 	ld	a,(??AUTO+14)
 	cp	0D2H
-	jp	nz,??ELSE0883
+	jp	nz,??ELSE0887
 	ld	a,55H
 	call	EMIT
 	ld	a,53H
 	call	EMIT
 	ld	a,52H
 	call	EMIT
-	jp	??ENDIF0884
-??ELSE0883:
+	jp	??ENDIF0888
+??ELSE0887:
 	ld	a,(??AUTO+14)
 	cp	0D3H
-	jp	nz,??ELSE0885
+	jp	nz,??ELSE0889
 	ld	a,46H
 	call	EMIT
 	ld	a,4EH
 	call	EMIT
-	jp	??ENDIF0886
-??ELSE0885:
+	jp	??ENDIF0890
+??ELSE0889:
 	ld	a,(??AUTO+14)
 	cp	0D4H
-	jp	nz,??ELSE0887
+	jp	nz,??ELSE0891
 	ld	a,53H
 	call	EMIT
 	ld	a,50H
@@ -8295,33 +8317,33 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,28H
 	call	EMIT
-	jp	??ENDIF0888
-??ELSE0887:
+	jp	??ENDIF0892
+??ELSE0891:
 	ld	a,(??AUTO+14)
 	cp	0D6H
-	jp	nz,??ELSE0889
+	jp	nz,??ELSE0893
 	ld	a,45H
 	call	EMIT
 	ld	a,52H
 	call	EMIT
 	ld	a,4CH
 	call	EMIT
-	jp	??ENDIF0890
-??ELSE0889:
+	jp	??ENDIF0894
+??ELSE0893:
 	ld	a,(??AUTO+14)
 	cp	0D7H
-	jp	nz,??ELSE0891
+	jp	nz,??ELSE0895
 	ld	a,45H
 	call	EMIT
 	ld	a,52H
 	call	EMIT
 	ld	a,52H
 	call	EMIT
-	jp	??ENDIF0892
-??ELSE0891:
+	jp	??ENDIF0896
+??ELSE0895:
 	ld	a,(??AUTO+14)
 	cp	0D8H
-	jp	nz,??ELSE0893
+	jp	nz,??ELSE0897
 	ld	a,53H
 	call	EMIT
 	ld	a,54H
@@ -8336,11 +8358,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,24H
 	call	EMIT
-	jp	??ENDIF0894
-??ELSE0893:
+	jp	??ENDIF0898
+??ELSE0897:
 	ld	a,(??AUTO+14)
 	cp	0DAH
-	jp	nz,??ELSE0895
+	jp	nz,??ELSE0899
 	ld	a,49H
 	call	EMIT
 	ld	a,4EH
@@ -8351,22 +8373,22 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,52H
 	call	EMIT
-	jp	??ENDIF0896
-??ELSE0895:
+	jp	??ENDIF0900
+??ELSE0899:
 	ld	a,(??AUTO+14)
 	cp	0DBH
-	jp	nz,??ELSE0897
+	jp	nz,??ELSE0901
 	ld	a,41H
 	call	EMIT
 	ld	a,52H
 	call	EMIT
 	ld	a,4BH
 	call	EMIT
-	jp	??ENDIF0898
-??ELSE0897:
+	jp	??ENDIF0902
+??ELSE0901:
 	ld	a,(??AUTO+14)
 	cp	0DCH
-	jp	nz,??ELSE0899
+	jp	nz,??ELSE0903
 	ld	a,56H
 	call	EMIT
 	ld	a,41H
@@ -8379,11 +8401,11 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,52H
 	call	EMIT
-	JR ??ENDIF0900
-??ELSE0899:
+	JR ??ENDIF0904
+??ELSE0903:
 	ld	a,(??AUTO+14)
 	cp	0DDH
-	jp	nz,??ELSE0901
+	jp	nz,??ELSE0905
 	ld	a,49H
 	call	EMIT
 	ld	a,4EH
@@ -8396,8 +8418,8 @@ EMITTOKEN:
 	call	EMIT
 	ld	a,24H
 	call	EMIT
-	JR ??ENDIF0902
-??ELSE0901:
+	JR ??ENDIF0906
+??ELSE0905:
 	ld	a,5BH
 	call	EMIT
 	ld	a,(??AUTO+14)
@@ -8406,6 +8428,8 @@ EMITTOKEN:
 	call	EMITHEX
 	ld	a,5DH
 	call	EMIT
+??ENDIF0906:
+??ENDIF0904:
 ??ENDIF0902:
 ??ENDIF0900:
 ??ENDIF0898:
@@ -8468,8 +8492,6 @@ EMITTOKEN:
 ??ENDIF0784:
 ??ENDIF0782:
 ??ENDIF0780:
-??ENDIF0778:
-??ENDIF0776:
 	ld	a,41H
 	ld	(PREVTOK),a
 	ret
@@ -8481,13 +8503,13 @@ EMITTOKEN2:
 	ld	(??AUTO+14),a
 	call	NEEDSPACEBEFOREKW
 	or	a
-	jp	z,??ENDIF0904
+	jp	z,??ENDIF0908
 	ld	a,20H
 	call	EMIT
-??ENDIF0904:
+??ENDIF0908:
 	ld	a,(??AUTO+14)
 	cp	81H
-	jp	nz,??ELSE0905
+	jp	nz,??ELSE0909
 	ld	a,4CH
 	call	EMIT
 	ld	a,45H
@@ -8498,11 +8520,11 @@ EMITTOKEN2:
 	call	EMIT
 	ld	a,24H
 	call	EMIT
-	jp	??ENDIF0906
-??ELSE0905:
+	jp	??ENDIF0910
+??ELSE0909:
 	ld	a,(??AUTO+14)
 	cp	82H
-	jp	nz,??ELSE0907
+	jp	nz,??ELSE0911
 	ld	a,52H
 	call	EMIT
 	ld	a,49H
@@ -8515,11 +8537,11 @@ EMITTOKEN2:
 	call	EMIT
 	ld	a,24H
 	call	EMIT
-	jp	??ENDIF0908
-??ELSE0907:
+	jp	??ENDIF0912
+??ELSE0911:
 	ld	a,(??AUTO+14)
 	cp	83H
-	jp	nz,??ELSE0909
+	jp	nz,??ELSE0913
 	ld	a,4DH
 	call	EMIT
 	ld	a,49H
@@ -8528,176 +8550,176 @@ EMITTOKEN2:
 	call	EMIT
 	ld	a,24H
 	call	EMIT
-	jp	??ENDIF0910
-??ELSE0909:
+	jp	??ENDIF0914
+??ELSE0913:
 	ld	a,(??AUTO+14)
 	cp	84H
-	jp	nz,??ELSE0911
+	jp	nz,??ELSE0915
 	ld	a,53H
 	call	EMIT
 	ld	a,47H
 	call	EMIT
 	ld	a,4EH
 	call	EMIT
-	jp	??ENDIF0912
-??ELSE0911:
+	jp	??ENDIF0916
+??ELSE0915:
 	ld	a,(??AUTO+14)
 	cp	85H
-	jp	nz,??ELSE0913
+	jp	nz,??ELSE0917
 	ld	a,49H
 	call	EMIT
 	ld	a,4EH
 	call	EMIT
 	ld	a,54H
 	call	EMIT
-	jp	??ENDIF0914
-??ELSE0913:
+	jp	??ENDIF0918
+??ELSE0917:
 	ld	a,(??AUTO+14)
 	cp	86H
-	jp	nz,??ELSE0915
+	jp	nz,??ELSE0919
 	ld	a,41H
 	call	EMIT
 	ld	a,42H
 	call	EMIT
 	ld	a,53H
 	call	EMIT
-	jp	??ENDIF0916
-??ELSE0915:
+	jp	??ENDIF0920
+??ELSE0919:
 	ld	a,(??AUTO+14)
 	cp	87H
-	jp	nz,??ELSE0917
+	jp	nz,??ELSE0921
 	ld	a,53H
 	call	EMIT
 	ld	a,51H
 	call	EMIT
 	ld	a,52H
 	call	EMIT
-	jp	??ENDIF0918
-??ELSE0917:
+	jp	??ENDIF0922
+??ELSE0921:
 	ld	a,(??AUTO+14)
 	cp	88H
-	jp	nz,??ELSE0919
+	jp	nz,??ELSE0923
 	ld	a,52H
 	call	EMIT
 	ld	a,4EH
 	call	EMIT
 	ld	a,44H
 	call	EMIT
-	jp	??ENDIF0920
-??ELSE0919:
+	jp	??ENDIF0924
+??ELSE0923:
 	ld	a,(??AUTO+14)
 	cp	89H
-	jp	nz,??ELSE0921
+	jp	nz,??ELSE0925
 	ld	a,53H
 	call	EMIT
 	ld	a,49H
 	call	EMIT
 	ld	a,4EH
 	call	EMIT
-	jp	??ENDIF0922
-??ELSE0921:
+	jp	??ENDIF0926
+??ELSE0925:
 	ld	a,(??AUTO+14)
 	cp	8AH
-	jp	nz,??ELSE0923
+	jp	nz,??ELSE0927
 	ld	a,4CH
 	call	EMIT
 	ld	a,4FH
 	call	EMIT
 	ld	a,47H
 	call	EMIT
-	jp	??ENDIF0924
-??ELSE0923:
+	jp	??ENDIF0928
+??ELSE0927:
 	ld	a,(??AUTO+14)
 	cp	8BH
-	jp	nz,??ELSE0925
+	jp	nz,??ELSE0929
 	ld	a,45H
 	call	EMIT
 	ld	a,58H
 	call	EMIT
 	ld	a,50H
 	call	EMIT
-	jp	??ENDIF0926
-??ELSE0925:
+	jp	??ENDIF0930
+??ELSE0929:
 	ld	a,(??AUTO+14)
 	cp	8CH
-	jp	nz,??ELSE0927
+	jp	nz,??ELSE0931
 	ld	a,43H
 	call	EMIT
 	ld	a,4FH
 	call	EMIT
 	ld	a,53H
 	call	EMIT
-	jp	??ENDIF0928
-??ELSE0927:
-	ld	a,(??AUTO+14)
-	cp	8DH
-	jp	nz,??ELSE0929
-	ld	a,54H
-	call	EMIT
-	ld	a,41H
-	call	EMIT
-	ld	a,4EH
-	call	EMIT
-	jp	??ENDIF0930
-??ELSE0929:
-	ld	a,(??AUTO+14)
-	cp	8EH
-	jp	nz,??ELSE0931
-	ld	a,41H
-	call	EMIT
-	ld	a,54H
-	call	EMIT
-	ld	a,4EH
-	call	EMIT
 	jp	??ENDIF0932
 ??ELSE0931:
 	ld	a,(??AUTO+14)
-	cp	8FH
+	cp	8DH
 	jp	nz,??ELSE0933
+	ld	a,54H
+	call	EMIT
+	ld	a,41H
+	call	EMIT
+	ld	a,4EH
+	call	EMIT
+	jp	??ENDIF0934
+??ELSE0933:
+	ld	a,(??AUTO+14)
+	cp	8EH
+	jp	nz,??ELSE0935
+	ld	a,41H
+	call	EMIT
+	ld	a,54H
+	call	EMIT
+	ld	a,4EH
+	call	EMIT
+	jp	??ENDIF0936
+??ELSE0935:
+	ld	a,(??AUTO+14)
+	cp	8FH
+	jp	nz,??ELSE0937
 	ld	a,46H
 	call	EMIT
 	ld	a,52H
 	call	EMIT
 	ld	a,45H
 	call	EMIT
-	jp	??ENDIF0934
-??ELSE0933:
+	jp	??ENDIF0938
+??ELSE0937:
 	ld	a,(??AUTO+14)
 	cp	90H
-	jp	nz,??ELSE0935
+	jp	nz,??ELSE0939
 	ld	a,49H
 	call	EMIT
 	ld	a,4EH
 	call	EMIT
 	ld	a,50H
 	call	EMIT
-	jp	??ENDIF0936
-??ELSE0935:
+	jp	??ENDIF0940
+??ELSE0939:
 	ld	a,(??AUTO+14)
 	cp	91H
-	jp	nz,??ELSE0937
+	jp	nz,??ELSE0941
 	ld	a,50H
 	call	EMIT
 	ld	a,4FH
 	call	EMIT
 	ld	a,53H
 	call	EMIT
-	jp	??ENDIF0938
-??ELSE0937:
+	jp	??ENDIF0942
+??ELSE0941:
 	ld	a,(??AUTO+14)
 	cp	92H
-	jp	nz,??ELSE0939
+	jp	nz,??ELSE0943
 	ld	a,4CH
 	call	EMIT
 	ld	a,45H
 	call	EMIT
 	ld	a,4EH
 	call	EMIT
-	jp	??ENDIF0940
-??ELSE0939:
+	jp	??ENDIF0944
+??ELSE0943:
 	ld	a,(??AUTO+14)
 	cp	93H
-	jp	nz,??ELSE0941
+	jp	nz,??ELSE0945
 	ld	a,53H
 	call	EMIT
 	ld	a,54H
@@ -8706,33 +8728,33 @@ EMITTOKEN2:
 	call	EMIT
 	ld	a,24H
 	call	EMIT
-	jp	??ENDIF0942
-??ELSE0941:
+	jp	??ENDIF0946
+??ELSE0945:
 	ld	a,(??AUTO+14)
 	cp	94H
-	jp	nz,??ELSE0943
+	jp	nz,??ELSE0947
 	ld	a,56H
 	call	EMIT
 	ld	a,41H
 	call	EMIT
 	ld	a,4CH
 	call	EMIT
-	jp	??ENDIF0944
-??ELSE0943:
+	jp	??ENDIF0948
+??ELSE0947:
 	ld	a,(??AUTO+14)
 	cp	95H
-	jp	nz,??ELSE0945
+	jp	nz,??ELSE0949
 	ld	a,41H
 	call	EMIT
 	ld	a,53H
 	call	EMIT
 	ld	a,43H
 	call	EMIT
-	jp	??ENDIF0946
-??ELSE0945:
+	jp	??ENDIF0950
+??ELSE0949:
 	ld	a,(??AUTO+14)
 	cp	96H
-	jp	nz,??ELSE0947
+	jp	nz,??ELSE0951
 	ld	a,43H
 	call	EMIT
 	ld	a,48H
@@ -8741,11 +8763,11 @@ EMITTOKEN2:
 	call	EMIT
 	ld	a,24H
 	call	EMIT
-	jp	??ENDIF0948
-??ELSE0947:
+	jp	??ENDIF0952
+??ELSE0951:
 	ld	a,(??AUTO+14)
 	cp	97H
-	jp	nz,??ELSE0949
+	jp	nz,??ELSE0953
 	ld	a,50H
 	call	EMIT
 	ld	a,45H
@@ -8754,11 +8776,11 @@ EMITTOKEN2:
 	call	EMIT
 	ld	a,4BH
 	call	EMIT
-	jp	??ENDIF0950
-??ELSE0949:
+	jp	??ENDIF0954
+??ELSE0953:
 	ld	a,(??AUTO+14)
 	cp	98H
-	jp	nz,??ELSE0951
+	jp	nz,??ELSE0955
 	ld	a,53H
 	call	EMIT
 	ld	a,50H
@@ -8771,11 +8793,11 @@ EMITTOKEN2:
 	call	EMIT
 	ld	a,24H
 	call	EMIT
-	jp	??ENDIF0952
-??ELSE0951:
+	jp	??ENDIF0956
+??ELSE0955:
 	ld	a,(??AUTO+14)
 	cp	99H
-	jp	nz,??ELSE0953
+	jp	nz,??ELSE0957
 	ld	a,4FH
 	call	EMIT
 	ld	a,43H
@@ -8784,11 +8806,11 @@ EMITTOKEN2:
 	call	EMIT
 	ld	a,24H
 	call	EMIT
-	jp	??ENDIF0954
-??ELSE0953:
+	jp	??ENDIF0958
+??ELSE0957:
 	ld	a,(??AUTO+14)
 	cp	9AH
-	jp	nz,??ELSE0955
+	jp	nz,??ELSE0959
 	ld	a,48H
 	call	EMIT
 	ld	a,45H
@@ -8797,11 +8819,11 @@ EMITTOKEN2:
 	call	EMIT
 	ld	a,24H
 	call	EMIT
-	jp	??ENDIF0956
-??ELSE0955:
+	jp	??ENDIF0960
+??ELSE0959:
 	ld	a,(??AUTO+14)
 	cp	9BH
-	jp	nz,??ELSE0957
+	jp	nz,??ELSE0961
 	ld	a,4CH
 	call	EMIT
 	ld	a,50H
@@ -8810,11 +8832,11 @@ EMITTOKEN2:
 	call	EMIT
 	ld	a,53H
 	call	EMIT
-	jp	??ENDIF0958
-??ELSE0957:
+	jp	??ENDIF0962
+??ELSE0961:
 	ld	a,(??AUTO+14)
 	cp	9CH
-	jp	nz,??ELSE0959
+	jp	nz,??ELSE0963
 	ld	a,43H
 	call	EMIT
 	ld	a,49H
@@ -8823,11 +8845,11 @@ EMITTOKEN2:
 	call	EMIT
 	ld	a,54H
 	call	EMIT
-	jp	??ENDIF0960
-??ELSE0959:
+	jp	??ENDIF0964
+??ELSE0963:
 	ld	a,(??AUTO+14)
 	cp	9DH
-	jp	nz,??ELSE0961
+	jp	nz,??ELSE0965
 	ld	a,43H
 	call	EMIT
 	ld	a,53H
@@ -8836,11 +8858,11 @@ EMITTOKEN2:
 	call	EMIT
 	ld	a,47H
 	call	EMIT
-	jp	??ENDIF0962
-??ELSE0961:
+	jp	??ENDIF0966
+??ELSE0965:
 	ld	a,(??AUTO+14)
 	cp	9EH
-	jp	nz,??ELSE0963
+	jp	nz,??ELSE0967
 	ld	a,43H
 	call	EMIT
 	ld	a,44H
@@ -8849,78 +8871,56 @@ EMITTOKEN2:
 	call	EMIT
 	ld	a,4CH
 	call	EMIT
-	jp	??ENDIF0964
-??ELSE0963:
+	jp	??ENDIF0968
+??ELSE0967:
 	ld	a,(??AUTO+14)
 	cp	9FH
-	jp	nz,??ELSE0965
+	jp	nz,??ELSE0969
 	ld	a,46H
 	call	EMIT
 	ld	a,49H
 	call	EMIT
 	ld	a,58H
 	call	EMIT
-	jp	??ENDIF0966
-??ELSE0965:
+	jp	??ENDIF0970
+??ELSE0969:
 	ld	a,(??AUTO+14)
 	cp	0ABH
-	jp	nz,??ELSE0967
+	jp	nz,??ELSE0971
 	ld	a,43H
 	call	EMIT
 	ld	a,56H
 	call	EMIT
 	ld	a,49H
 	call	EMIT
-	jp	??ENDIF0968
-??ELSE0967:
+	jp	??ENDIF0972
+??ELSE0971:
 	ld	a,(??AUTO+14)
 	cp	0ACH
-	jp	nz,??ELSE0969
+	jp	nz,??ELSE0973
 	ld	a,43H
 	call	EMIT
 	ld	a,56H
 	call	EMIT
 	ld	a,53H
 	call	EMIT
-	jp	??ENDIF0970
-??ELSE0969:
+	jp	??ENDIF0974
+??ELSE0973:
 	ld	a,(??AUTO+14)
 	cp	0ADH
-	jp	nz,??ELSE0971
+	jp	nz,??ELSE0975
 	ld	a,43H
 	call	EMIT
 	ld	a,56H
 	call	EMIT
 	ld	a,44H
 	call	EMIT
-	jp	??ENDIF0972
-??ELSE0971:
-	ld	a,(??AUTO+14)
-	cp	0AEH
-	jp	nz,??ELSE0973
-	ld	a,45H
-	call	EMIT
-	ld	a,4FH
-	call	EMIT
-	ld	a,46H
-	call	EMIT
-	jp	??ENDIF0974
-??ELSE0973:
-	ld	a,(??AUTO+14)
-	cp	0B0H
-	jp	nz,??ELSE0975
-	ld	a,4CH
-	call	EMIT
-	ld	a,4FH
-	call	EMIT
-	ld	a,43H
-	call	EMIT
 	jp	??ENDIF0976
 ??ELSE0975:
 	ld	a,(??AUTO+14)
-	cp	0B1H
+	cp	0AEH
 	jp	nz,??ELSE0977
-	ld	a,4CH
+	ld	a,45H
 	call	EMIT
 	ld	a,4FH
 	call	EMIT
@@ -8929,8 +8929,30 @@ EMITTOKEN2:
 	jp	??ENDIF0978
 ??ELSE0977:
 	ld	a,(??AUTO+14)
-	cp	0B2H
+	cp	0B0H
 	jp	nz,??ELSE0979
+	ld	a,4CH
+	call	EMIT
+	ld	a,4FH
+	call	EMIT
+	ld	a,43H
+	call	EMIT
+	jp	??ENDIF0980
+??ELSE0979:
+	ld	a,(??AUTO+14)
+	cp	0B1H
+	jp	nz,??ELSE0981
+	ld	a,4CH
+	call	EMIT
+	ld	a,4FH
+	call	EMIT
+	ld	a,46H
+	call	EMIT
+	jp	??ENDIF0982
+??ELSE0981:
+	ld	a,(??AUTO+14)
+	cp	0B2H
+	jp	nz,??ELSE0983
 	ld	a,4DH
 	call	EMIT
 	ld	a,4BH
@@ -8939,11 +8961,11 @@ EMITTOKEN2:
 	call	EMIT
 	ld	a,24H
 	call	EMIT
-	jp	??ENDIF0980
-??ELSE0979:
+	jp	??ENDIF0984
+??ELSE0983:
 	ld	a,(??AUTO+14)
 	cp	0B3H
-	jp	nz,??ELSE0981
+	jp	nz,??ELSE0985
 	ld	a,4DH
 	call	EMIT
 	ld	a,4BH
@@ -8952,11 +8974,11 @@ EMITTOKEN2:
 	call	EMIT
 	ld	a,24H
 	call	EMIT
-	JR ??ENDIF0982
-??ELSE0981:
+	JR ??ENDIF0986
+??ELSE0985:
 	ld	a,(??AUTO+14)
 	cp	0B4H
-	jp	nz,??ELSE0983
+	jp	nz,??ELSE0987
 	ld	a,4DH
 	call	EMIT
 	ld	a,4BH
@@ -8965,8 +8987,8 @@ EMITTOKEN2:
 	call	EMIT
 	ld	a,24H
 	call	EMIT
-	JR ??ENDIF0984
-??ELSE0983:
+	JR ??ENDIF0988
+??ELSE0987:
 	ld	a,5BH
 	call	EMIT
 	ld	a,46H
@@ -8983,6 +9005,8 @@ EMITTOKEN2:
 	call	EMITHEX
 	ld	a,5DH
 	call	EMIT
+??ENDIF0988:
+??ENDIF0986:
 ??ENDIF0984:
 ??ENDIF0982:
 ??ENDIF0980:
@@ -9021,8 +9045,6 @@ EMITTOKEN2:
 ??ENDIF0914:
 ??ENDIF0912:
 ??ENDIF0910:
-??ENDIF0908:
-??ENDIF0906:
 	ld	a,41H
 	ld	(PREVTOK),a
 	ret
@@ -9041,14 +9063,14 @@ UNPROTECT:
 	ld	(??AUTO+5),a
 	ld	hl,1
 	ld	(??AUTO+0),hl
-??WHILE0985:
+??WHILE0989:
 	ld	hl,(??AUTO+0)
 	push	hl
 	ld	hl,(INBUFEND)
 	ex	de,hl
 	pop	hl
 	call	??subde
-	jp	nc,??WEND0986
+	jp	nc,??WEND0990
 	ld	hl,(INBUFPTR)
 	push	hl
 	ld	hl,(??AUTO+0)
@@ -9103,24 +9125,24 @@ UNPROTECT:
 	ld	(??AUTO+4),a
 	ld	a,(??AUTO+4)
     OR A
-	jp	nz,??ENDIF0988
+	jp	nz,??ENDIF0992
 	ld	a,0DH
 	ld	(??AUTO+4),a
-??ENDIF0988:
+??ENDIF0992:
 	ld	a,(??AUTO+5)
 	sub	1
 	ld	(??AUTO+5),a
 	ld	a,(??AUTO+5)
     OR A
-	jp	nz,??ENDIF0990
+	jp	nz,??ENDIF0994
 	ld	a,0BH
 	ld	(??AUTO+5),a
-??ENDIF0990:
+??ENDIF0994:
 	ld	hl,(??AUTO+0)
 	inc	hl
 	ld	(??AUTO+0),hl
-	jp	??WHILE0985
-??WEND0986:
+	jp	??WHILE0989
+??WEND0990:
 	ret
 
 ; Module: MODULE
@@ -9129,17 +9151,17 @@ UNPROTECT:
 DETOKLINE:
 	xor	a
 	ld	(??AUTO+7),a
-??WHILE0991:
+??WHILE0995:
 	ld	a,(??AUTO+7)
 	or	a
-	jp	nz,??WEND0992
+	jp	nz,??WEND0996
 	ld	hl,(BASPOS)
 	push	hl
 	ld	hl,(INBUFEND)
 	ex	de,hl
 	pop	hl
 	call	??subde
-	jp	nc,??WEND0992
+	jp	nc,??WEND0996
 	ld	hl,(INBUFPTR)
 	push	hl
 	ld	hl,(BASPOS)
@@ -9149,38 +9171,38 @@ DETOKLINE:
 	ld	(??AUTO+6),a
 	ld	a,(??AUTO+6)
     OR A
-	jp	nz,??ELSE0993
+	jp	nz,??ELSE0997
 	ld	a,1
 	ld	(??AUTO+7),a
-	jp	??ENDIF0994
-??ELSE0993:
+	jp	??ENDIF0998
+??ELSE0997:
 	ld	a,(??AUTO+6)
 	cp	20H
-	jp	c,??ELSE0995
+	jp	c,??ELSE0999
 	ld	a,(??AUTO+6)
 	cp	7FH
-	jp	c,??SKIP0997
-	jp	z,??SKIP0997
-	JR ??ELSE0995
-??SKIP0997:
+	jp	c,??SKIP1001
+	jp	z,??SKIP1001
+	JR ??ELSE0999
+??SKIP1001:
 	ld	a,(??AUTO+6)
 	cp	20H
-	jp	nz,??ELSE0998
+	jp	nz,??ELSE1002
 	ld	a,(PREVTOK)
 	cp	20H
-	jp	nz,??ELSE0998
-	JP ??ENDIF0996
-??ELSE0998:
+	jp	nz,??ELSE1002
+	JP ??ENDIF1000
+??ELSE1002:
 	ld	a,(??AUTO+6)
 	call	EMIT
 	ld	a,(??AUTO+6)
 	ld	(PREVTOK),a
-??ENDIF0999:
-	jp	??ENDIF0996
-??ELSE0995:
+??ENDIF1003:
+	jp	??ENDIF1000
+??ELSE0999:
 	ld	a,(??AUTO+6)
 	cp	0FFH
-	jp	nz,??ELSE1000
+	jp	nz,??ELSE1004
 	ld	hl,(BASPOS)
 	inc	hl
 	ld	(BASPOS),hl
@@ -9190,7 +9212,7 @@ DETOKLINE:
 	ex	de,hl
 	pop	hl
 	call	??subde
-	jp	nc,??ENDIF1003
+	jp	nc,??ENDIF1007
 	ld	hl,(INBUFPTR)
 	push	hl
 	ld	hl,(BASPOS)
@@ -9198,25 +9220,25 @@ DETOKLINE:
 	add	hl,de
 	ld	a,(hl)
 	call	EMITTOKEN2
-??ENDIF1003:
-	jp	??ENDIF1001
-??ELSE1000:
-	ld	a,(??AUTO+6)
-	cp	80H
-	jp	c,??ELSE1004
-	ld	a,(??AUTO+6)
-	cp	0FEH
-	jp	c,??SKIP1006
-	jp	z,??SKIP1006
-	JR ??ELSE1004
-??SKIP1006:
-	ld	a,(??AUTO+6)
-	call	EMITTOKEN
+??ENDIF1007:
 	jp	??ENDIF1005
 ??ELSE1004:
 	ld	a,(??AUTO+6)
+	cp	80H
+	jp	c,??ELSE1008
+	ld	a,(??AUTO+6)
+	cp	0FEH
+	jp	c,??SKIP1010
+	jp	z,??SKIP1010
+	JR ??ELSE1008
+??SKIP1010:
+	ld	a,(??AUTO+6)
+	call	EMITTOKEN
+	jp	??ENDIF1009
+??ELSE1008:
+	ld	a,(??AUTO+6)
 	cp	0FH
-	jp	nz,??ELSE1007
+	jp	nz,??ELSE1011
 	ld	hl,(BASPOS)
 	inc	hl
 	ld	(BASPOS),hl
@@ -9226,7 +9248,7 @@ DETOKLINE:
 	ex	de,hl
 	pop	hl
 	call	??subde
-	jp	nc,??ENDIF1010
+	jp	nc,??ENDIF1014
 	ld	hl,(INBUFPTR)
 	push	hl
 	ld	hl,(BASPOS)
@@ -9236,18 +9258,18 @@ DETOKLINE:
 	ld	l,a
 	ld	h,0
 	call	EMITNUM
-??ENDIF1010:
+??ENDIF1014:
 	ld	a,30H
 	ld	(PREVTOK),a
-	jp	??ENDIF1008
-??ELSE1007:
+	jp	??ENDIF1012
+??ELSE1011:
 	ld	a,(??AUTO+6)
 	cp	0EH
-	jp	z,??ORTRUE1013
+	jp	z,??ORTRUE1017
 	ld	a,(??AUTO+6)
 	cp	1CH
-	jp	nz,??ELSE1011
-??ORTRUE1013:
+	jp	nz,??ELSE1015
+??ORTRUE1017:
 	ld	hl,(INBUFPTR)
 	push	hl
 	ld	hl,(BASPOS)
@@ -9283,11 +9305,11 @@ DETOKLINE:
 	ld	(BASPOS),hl
 	ld	a,30H
 	ld	(PREVTOK),a
-	jp	??ENDIF1012
-??ELSE1011:
+	jp	??ENDIF1016
+??ELSE1015:
 	ld	a,(??AUTO+6)
 	cp	0CH
-	jp	nz,??ELSE1014
+	jp	nz,??ELSE1018
 	ld	hl,(INBUFPTR)
 	push	hl
 	ld	hl,(BASPOS)
@@ -9323,11 +9345,11 @@ DETOKLINE:
 	ld	(BASPOS),hl
 	ld	a,30H
 	ld	(PREVTOK),a
-	jp	??ENDIF1015
-??ELSE1014:
+	jp	??ENDIF1019
+??ELSE1018:
 	ld	a,(??AUTO+6)
 	cp	0BH
-	jp	nz,??ELSE1016
+	jp	nz,??ELSE1020
 	ld	hl,(INBUFPTR)
 	push	hl
 	ld	hl,(BASPOS)
@@ -9363,11 +9385,11 @@ DETOKLINE:
 	ld	(BASPOS),hl
 	ld	a,30H
 	ld	(PREVTOK),a
-	jp	??ENDIF1017
-??ELSE1016:
+	jp	??ENDIF1021
+??ELSE1020:
 	ld	a,(??AUTO+6)
 	cp	1DH
-	jp	nz,??ELSE1018
+	jp	nz,??ELSE1022
 	ld	a,3FH
 	call	EMIT
 	ld	a,46H
@@ -9384,11 +9406,11 @@ DETOKLINE:
 	ld	(BASPOS),hl
 	ld	a,30H
 	ld	(PREVTOK),a
-	jp	??ENDIF1019
-??ELSE1018:
+	jp	??ENDIF1023
+??ELSE1022:
 	ld	a,(??AUTO+6)
 	cp	1FH
-	jp	nz,??ELSE1020
+	jp	nz,??ELSE1024
 	ld	a,3FH
 	call	EMIT
 	ld	a,46H
@@ -9403,17 +9425,17 @@ DETOKLINE:
 	ld	(BASPOS),hl
 	ld	a,30H
 	ld	(PREVTOK),a
-	JR ??ENDIF1021
-??ELSE1020:
+	JR ??ENDIF1025
+??ELSE1024:
 	ld	a,(??AUTO+6)
 	cp	11H
-	jp	c,??ELSE1022
+	jp	c,??ELSE1026
 	ld	a,(??AUTO+6)
 	cp	1AH
-	jp	c,??SKIP1024
-	jp	z,??SKIP1024
-	JR ??ELSE1022
-??SKIP1024:
+	jp	c,??SKIP1028
+	jp	z,??SKIP1028
+	JR ??ELSE1026
+??SKIP1028:
 	ld	a,(??AUTO+6)
 	sub	11H
 	ld	l,a
@@ -9421,24 +9443,24 @@ DETOKLINE:
 	call	EMITNUM
 	ld	a,30H
 	ld	(PREVTOK),a
-	JR ??ENDIF1023
-??ELSE1022:
+	JR ??ENDIF1027
+??ELSE1026:
+??ENDIF1027:
+??ENDIF1025:
 ??ENDIF1023:
 ??ENDIF1021:
 ??ENDIF1019:
-??ENDIF1017:
-??ENDIF1015:
+??ENDIF1016:
 ??ENDIF1012:
-??ENDIF1008:
+??ENDIF1009:
 ??ENDIF1005:
-??ENDIF1001:
-??ENDIF0996:
-??ENDIF0994:
+??ENDIF1000:
+??ENDIF0998:
 	ld	hl,(BASPOS)
 	inc	hl
 	ld	(BASPOS),hl
-	jp	??WHILE0991
-??WEND0992:
+	jp	??WHILE0995
+??WEND0996:
 	ret
 
 ; Module: MODULE
@@ -9450,14 +9472,14 @@ DETOKENIZEBASIC:
 	ld	hl,(INBUFPTR)
 	ld	a,(hl)
 	cp	0FEH
-	jp	nz,??ENDIF1026
+	jp	nz,??ENDIF1030
 	call	UNPROTECT
-??ENDIF1026:
+??ENDIF1030:
 	ld	hl,1
 	ld	(BASPOS),hl
 	ld	hl,0
 	ld	(OUTBUFPOS),hl
-??WHILE1027:
+??WHILE1031:
 	ld	hl,(BASPOS)
 	inc	hl
 	inc	hl
@@ -9468,7 +9490,7 @@ DETOKENIZEBASIC:
 	ex	de,hl
 	pop	hl
 	call	??subde
-	jp	nc,??WEND1028
+	jp	nc,??WEND1032
 	ld	hl,(INBUFPTR)
 	push	hl
 	ld	hl,(BASPOS)
@@ -9502,11 +9524,11 @@ DETOKENIZEBASIC:
 	call	??subde
 	ld	a,l
 	or	h
-	jp	nz,??ENDIF1030
+	jp	nz,??ENDIF1034
 	call	EMITCRLF
 	ld	a,1
 	ret
-??ENDIF1030:
+??ENDIF1034:
 	ld	hl,(INBUFPTR)
 	push	hl
 	ld	hl,(BASPOS)
@@ -9544,11 +9566,11 @@ DETOKENIZEBASIC:
 	call	??subde
 	ld	a,l
 	or	h
-	jp	nz,??ENDIF1032
+	jp	nz,??ENDIF1036
 	call	EMITCRLF
 	ld	a,1
 	ret
-??ENDIF1032:
+??ENDIF1036:
 	ld	hl,(??AUTO+12)
 	call	EMITNUM
 	ld	a,20H
@@ -9563,8 +9585,8 @@ DETOKENIZEBASIC:
 	ld	(BASPOS),hl
 	call	DETOKLINE
 	call	EMITCRLF
-	jp	??WHILE1027
-??WEND1028:
+	jp	??WHILE1031
+??WEND1032:
 	ld	a,1
 	ret
 
@@ -9580,25 +9602,25 @@ DECOMPRESSFILE:
 	ld	(INPUTLIMIT),hl
 	call	FILLINBUF
 	or	a
-	jp	nz,??ENDIF1034
+	jp	nz,??ENDIF1038
     XOR A
 	ret
-??ENDIF1034:
+??ENDIF1038:
 	ld	hl,(INBUFPTR)
 	ld	a,(hl)
 	cp	76H
-	jp	nz,??ENDIF1036
+	jp	nz,??ENDIF1040
 	ld	hl,(INBUFPTR)
 	ld	de,1
 	add	hl,de
 	ld	a,(hl)
 	cp	0FFH
-	jp	nz,??ENDIF1036
+	jp	nz,??ENDIF1040
 	xor	a
 	ld	(??AUTO+22),a
 	ld	a,4
 	ld	(??AUTO+6),a
-??WHILE1037:
+??WHILE1041:
 	ld	a,(??AUTO+6)
 	ld	l,a
 	ld	h,0
@@ -9606,10 +9628,10 @@ DECOMPRESSFILE:
 	add	hl,de
 	ld	a,(hl)
     OR A
-	jp	z,??WEND1038
+	jp	z,??WEND1042
 	ld	a,(??AUTO+22)
 	cp	0CH
-	jp	nc,??WEND1038
+	jp	nc,??WEND1042
 	ld	a,(??AUTO+6)
 	ld	l,a
 	ld	h,0
@@ -9629,8 +9651,8 @@ DECOMPRESSFILE:
 	ld	a,(??AUTO+6)
 	add	a,1
 	ld	(??AUTO+6),a
-	JR ??WHILE1037
-??WEND1038:
+	JR ??WHILE1041
+??WEND1042:
 	xor	a
 	ld	b,a
 	ld	a,(??AUTO+22)
@@ -9649,7 +9671,7 @@ DECOMPRESSFILE:
 	ld	(??AUTO+6),a
 	ld	a,1
 	ld	(??AUTO+7),a
-??WHILE1039:
+??WHILE1043:
 	ld	a,(??AUTO+6)
 	ld	l,a
 	ld	h,0
@@ -9657,7 +9679,7 @@ DECOMPRESSFILE:
 	add	hl,de
 	ld	a,(hl)
     OR A
-	jp	z,??WEND1040
+	jp	z,??WEND1044
 	ld	a,(??AUTO+6)
 	ld	l,a
 	ld	h,0
@@ -9665,13 +9687,13 @@ DECOMPRESSFILE:
 	add	hl,de
 	ld	a,(hl)
 	cp	2EH
-	jp	z,??WEND1040
+	jp	z,??WEND1044
 	ld	a,(??AUTO+7)
 	cp	8
-	jp	c,??SKIP1041
-	jp	z,??SKIP1041
-	JR ??WEND1040
-??SKIP1041:
+	jp	c,??SKIP1045
+	jp	z,??SKIP1045
+	JR ??WEND1044
+??SKIP1045:
 	ld	a,(??AUTO+6)
 	ld	l,a
 	ld	h,0
@@ -9691,15 +9713,15 @@ DECOMPRESSFILE:
 	ld	a,(??AUTO+7)
 	add	a,1
 	ld	(??AUTO+7),a
-	jp	??WHILE1039
-??WEND1040:
-??WHILE1042:
+	jp	??WHILE1043
+??WEND1044:
+??WHILE1046:
 	ld	a,(??AUTO+7)
 	cp	8
-	jp	c,??SKIP1044
-	jp	z,??SKIP1044
-	JR ??WEND1043
-??SKIP1044:
+	jp	c,??SKIP1048
+	jp	z,??SKIP1048
+	JR ??WEND1047
+??SKIP1048:
 	ld	a,20H
 	ld	b,a
 	ld	a,(??AUTO+7)
@@ -9711,8 +9733,8 @@ DECOMPRESSFILE:
 	ld	a,(??AUTO+7)
 	add	a,1
 	ld	(??AUTO+7),a
-	JR ??WHILE1042
-??WEND1043:
+	JR ??WHILE1046
+??WEND1047:
 	ld	a,(??AUTO+6)
 	ld	l,a
 	ld	h,0
@@ -9720,13 +9742,13 @@ DECOMPRESSFILE:
 	add	hl,de
 	ld	a,(hl)
 	cp	2EH
-	jp	nz,??ENDIF1046
+	jp	nz,??ENDIF1050
 	ld	a,(??AUTO+6)
 	add	a,1
 	ld	(??AUTO+6),a
 	ld	a,9
 	ld	(??AUTO+7),a
-??WHILE1047:
+??WHILE1051:
 	ld	a,(??AUTO+6)
 	ld	l,a
 	ld	h,0
@@ -9734,13 +9756,13 @@ DECOMPRESSFILE:
 	add	hl,de
 	ld	a,(hl)
     OR A
-	jp	z,??WEND1048
+	jp	z,??WEND1052
 	ld	a,(??AUTO+7)
 	cp	0BH
-	jp	c,??SKIP1049
-	jp	z,??SKIP1049
-	JR ??WEND1048
-??SKIP1049:
+	jp	c,??SKIP1053
+	jp	z,??SKIP1053
+	JR ??WEND1052
+??SKIP1053:
 	ld	a,(??AUTO+6)
 	ld	l,a
 	ld	h,0
@@ -9760,16 +9782,16 @@ DECOMPRESSFILE:
 	ld	a,(??AUTO+7)
 	add	a,1
 	ld	(??AUTO+7),a
-	JR ??WHILE1047
-??WEND1048:
-??ENDIF1046:
-??WHILE1050:
+	JR ??WHILE1051
+??WEND1052:
+??ENDIF1050:
+??WHILE1054:
 	ld	a,(??AUTO+7)
 	cp	0BH
-	jp	c,??SKIP1052
-	jp	z,??SKIP1052
-	JR ??WEND1051
-??SKIP1052:
+	jp	c,??SKIP1056
+	jp	z,??SKIP1056
+	JR ??WEND1055
+??SKIP1056:
 	ld	a,20H
 	ld	b,a
 	ld	a,(??AUTO+7)
@@ -9781,13 +9803,13 @@ DECOMPRESSFILE:
 	ld	a,(??AUTO+7)
 	add	a,1
 	ld	(??AUTO+7),a
-	JR ??WHILE1050
-??WEND1051:
+	JR ??WHILE1054
+??WEND1055:
 	ld	hl,@DECOMPRESSFILE$MSGCREATING
 	call	PRINTSTR
 	xor	a
 	ld	(??AUTO+6),a
-??WHILE1053:
+??WHILE1057:
 	ld	a,(??AUTO+6)
 	ld	l,a
 	ld	h,0
@@ -9795,7 +9817,7 @@ DECOMPRESSFILE:
 	add	hl,de
 	ld	a,(hl)
     OR A
-	jp	z,??WEND1054
+	jp	z,??WEND1058
 	ld	a,(??AUTO+6)
 	ld	l,a
 	ld	h,0
@@ -9806,60 +9828,60 @@ DECOMPRESSFILE:
 	ld	a,(??AUTO+6)
 	add	a,1
 	ld	(??AUTO+6),a
-	JR ??WHILE1053
-??WEND1054:
+	JR ??WHILE1057
+??WEND1058:
 	ld	hl,(OFCBPTR)
 	call	DELETEFILE
 	ld	hl,(OFCBPTR)
 	call	MAKEFILE
 	cp	0FFH
-	jp	nz,??ENDIF1056
-	ld	hl,??DATA1057
+	jp	nz,??ENDIF1060
+	ld	hl,??DATA1061
 	call	PRINTSTR
     XOR A
 	ret
-??ENDIF1056:
+??ENDIF1060:
 	ld	hl,0
 	ld	(OUTBUFPOS),hl
 	call	UNSQUEEZE
 	ld	(??AUTO+8),a
 	ld	a,(??AUTO+8)
 	or	a
-	jp	z,??ENDIF1059
+	jp	z,??ENDIF1063
 	call	FLUSHOUTBUF
 	ld	(??AUTO+8),a
-??ENDIF1059:
+??ENDIF1063:
 	ld	hl,(OFCBPTR)
 	call	CLOSEFILE
 	ld	a,(??AUTO+8)
 	or	a
-	jp	z,??ELSE1060
+	jp	z,??ELSE1064
 	ld	hl,@DECOMPRESSFILE$MSGOK
 	call	PRINTSTR
-	JR ??ENDIF1061
-??ELSE1060:
+	JR ??ENDIF1065
+??ELSE1064:
 	ld	hl,@DECOMPRESSFILE$MSGERR
 	call	PRINTSTR
-??ENDIF1061:
+??ENDIF1065:
 	call	CRLF
 	ld	a,(??AUTO+8)
 	ret
-??ENDIF1036:
+??ENDIF1040:
 	ld	hl,(INBUFPTR)
 	ld	a,(hl)
 	cp	76H
-	jp	nz,??ENDIF1063
+	jp	nz,??ENDIF1067
 	ld	hl,(INBUFPTR)
 	ld	de,1
 	add	hl,de
 	ld	a,(hl)
 	cp	0FEH
-	jp	nz,??ENDIF1063
+	jp	nz,??ENDIF1067
 	xor	a
 	ld	(??AUTO+22),a
 	ld	a,2
 	ld	(??AUTO+6),a
-??WHILE1064:
+??WHILE1068:
 	ld	a,(??AUTO+6)
 	ld	l,a
 	ld	h,0
@@ -9867,10 +9889,10 @@ DECOMPRESSFILE:
 	add	hl,de
 	ld	a,(hl)
     OR A
-	jp	z,??WEND1065
+	jp	z,??WEND1069
 	ld	a,(??AUTO+22)
 	cp	0CH
-	jp	nc,??WEND1065
+	jp	nc,??WEND1069
 	ld	a,(??AUTO+6)
 	ld	l,a
 	ld	h,0
@@ -9890,8 +9912,8 @@ DECOMPRESSFILE:
 	ld	a,(??AUTO+6)
 	add	a,1
 	ld	(??AUTO+6),a
-	JR ??WHILE1064
-??WEND1065:
+	JR ??WHILE1068
+??WEND1069:
 	xor	a
 	ld	b,a
 	ld	a,(??AUTO+22)
@@ -9900,6 +9922,14 @@ DECOMPRESSFILE:
 	ld	de,??AUTO+9
 	add	hl,de
 	ld	(hl),b
+	ld	a,(??AUTO+6)
+	add	a,2
+	ld	l,a
+	ld	h,0
+	ld	de,(INBUFPTR)
+	add	hl,de
+	ld	a,(hl)
+	ld	(??AUTO+23),a
 	ld	hl,(OFCBPTR)
 	ld	(??AUTO+150),hl
 	ld	hl,24H
@@ -9910,7 +9940,7 @@ DECOMPRESSFILE:
 	ld	(??AUTO+6),a
 	ld	a,1
 	ld	(??AUTO+7),a
-??WHILE1066:
+??WHILE1070:
 	ld	a,(??AUTO+6)
 	ld	l,a
 	ld	h,0
@@ -9918,7 +9948,7 @@ DECOMPRESSFILE:
 	add	hl,de
 	ld	a,(hl)
     OR A
-	jp	z,??WEND1067
+	jp	z,??WEND1071
 	ld	a,(??AUTO+6)
 	ld	l,a
 	ld	h,0
@@ -9926,13 +9956,13 @@ DECOMPRESSFILE:
 	add	hl,de
 	ld	a,(hl)
 	cp	2EH
-	jp	z,??WEND1067
+	jp	z,??WEND1071
 	ld	a,(??AUTO+7)
 	cp	8
-	jp	c,??SKIP1068
-	jp	z,??SKIP1068
-	JR ??WEND1067
-??SKIP1068:
+	jp	c,??SKIP1072
+	jp	z,??SKIP1072
+	JR ??WEND1071
+??SKIP1072:
 	ld	a,(??AUTO+6)
 	ld	l,a
 	ld	h,0
@@ -9952,15 +9982,15 @@ DECOMPRESSFILE:
 	ld	a,(??AUTO+7)
 	add	a,1
 	ld	(??AUTO+7),a
-	jp	??WHILE1066
-??WEND1067:
-??WHILE1069:
+	jp	??WHILE1070
+??WEND1071:
+??WHILE1073:
 	ld	a,(??AUTO+7)
 	cp	8
-	jp	c,??SKIP1071
-	jp	z,??SKIP1071
-	JR ??WEND1070
-??SKIP1071:
+	jp	c,??SKIP1075
+	jp	z,??SKIP1075
+	JR ??WEND1074
+??SKIP1075:
 	ld	a,20H
 	ld	b,a
 	ld	a,(??AUTO+7)
@@ -9972,8 +10002,8 @@ DECOMPRESSFILE:
 	ld	a,(??AUTO+7)
 	add	a,1
 	ld	(??AUTO+7),a
-	JR ??WHILE1069
-??WEND1070:
+	JR ??WHILE1073
+??WEND1074:
 	ld	a,(??AUTO+6)
 	ld	l,a
 	ld	h,0
@@ -9981,13 +10011,13 @@ DECOMPRESSFILE:
 	add	hl,de
 	ld	a,(hl)
 	cp	2EH
-	jp	nz,??ENDIF1073
+	jp	nz,??ENDIF1077
 	ld	a,(??AUTO+6)
 	add	a,1
 	ld	(??AUTO+6),a
 	ld	a,9
 	ld	(??AUTO+7),a
-??WHILE1074:
+??WHILE1078:
 	ld	a,(??AUTO+6)
 	ld	l,a
 	ld	h,0
@@ -9995,13 +10025,13 @@ DECOMPRESSFILE:
 	add	hl,de
 	ld	a,(hl)
     OR A
-	jp	z,??WEND1075
+	jp	z,??WEND1079
 	ld	a,(??AUTO+7)
 	cp	0BH
-	jp	c,??SKIP1076
-	jp	z,??SKIP1076
-	JR ??WEND1075
-??SKIP1076:
+	jp	c,??SKIP1080
+	jp	z,??SKIP1080
+	JR ??WEND1079
+??SKIP1080:
 	ld	a,(??AUTO+6)
 	ld	l,a
 	ld	h,0
@@ -10021,16 +10051,16 @@ DECOMPRESSFILE:
 	ld	a,(??AUTO+7)
 	add	a,1
 	ld	(??AUTO+7),a
-	JR ??WHILE1074
-??WEND1075:
-??ENDIF1073:
-??WHILE1077:
+	JR ??WHILE1078
+??WEND1079:
+??ENDIF1077:
+??WHILE1081:
 	ld	a,(??AUTO+7)
 	cp	0BH
-	jp	c,??SKIP1079
-	jp	z,??SKIP1079
-	JR ??WEND1078
-??SKIP1079:
+	jp	c,??SKIP1083
+	jp	z,??SKIP1083
+	JR ??WEND1082
+??SKIP1083:
 	ld	a,20H
 	ld	b,a
 	ld	a,(??AUTO+7)
@@ -10042,13 +10072,13 @@ DECOMPRESSFILE:
 	ld	a,(??AUTO+7)
 	add	a,1
 	ld	(??AUTO+7),a
-	JR ??WHILE1077
-??WEND1078:
+	JR ??WHILE1081
+??WEND1082:
 	ld	hl,@DECOMPRESSFILE$MSGCREATING
 	call	PRINTSTR
 	xor	a
 	ld	(??AUTO+6),a
-??WHILE1080:
+??WHILE1084:
 	ld	a,(??AUTO+6)
 	ld	l,a
 	ld	h,0
@@ -10056,7 +10086,7 @@ DECOMPRESSFILE:
 	add	hl,de
 	ld	a,(hl)
     OR A
-	jp	z,??WEND1081
+	jp	z,??WEND1085
 	ld	a,(??AUTO+6)
 	ld	l,a
 	ld	h,0
@@ -10067,60 +10097,70 @@ DECOMPRESSFILE:
 	ld	a,(??AUTO+6)
 	add	a,1
 	ld	(??AUTO+6),a
-	JR ??WHILE1080
-??WEND1081:
+	JR ??WHILE1084
+??WEND1085:
+	ld	a,(??AUTO+23)
+	cp	20H
+	jp	c,??ELSE1086
+	ld	hl,??DATA1088
+	call	PRINTSTR
+	JR ??ENDIF1087
+??ELSE1086:
+	ld	hl,??DATA1089
+	call	PRINTSTR
+??ENDIF1087:
 	ld	hl,(OFCBPTR)
 	call	DELETEFILE
 	ld	hl,(OFCBPTR)
 	call	MAKEFILE
 	cp	0FFH
-	jp	nz,??ENDIF1083
-	ld	hl,??DATA1084
+	jp	nz,??ENDIF1091
+	ld	hl,??DATA1092
 	call	PRINTSTR
     XOR A
 	ret
-??ENDIF1083:
+??ENDIF1091:
 	ld	hl,0
 	ld	(OUTBUFPOS),hl
 	call	UNCRUNCH
 	ld	(??AUTO+8),a
 	ld	a,(??AUTO+8)
 	or	a
-	jp	z,??ENDIF1086
+	jp	z,??ENDIF1094
 	call	FLUSHOUTBUF
 	ld	(??AUTO+8),a
-??ENDIF1086:
+??ENDIF1094:
 	ld	hl,(OFCBPTR)
 	call	CLOSEFILE
 	ld	a,(??AUTO+8)
 	or	a
-	jp	z,??ELSE1087
+	jp	z,??ELSE1095
 	ld	hl,@DECOMPRESSFILE$MSGOK
 	call	PRINTSTR
-	JR ??ENDIF1088
-??ELSE1087:
+	JR ??ENDIF1096
+??ELSE1095:
 	ld	hl,@DECOMPRESSFILE$MSGERR
 	call	PRINTSTR
-??ENDIF1088:
+??ENDIF1096:
 	call	CRLF
 	ld	a,(??AUTO+8)
 	ret
-??ENDIF1063:
+??ENDIF1067:
 	ld	hl,(INBUFPTR)
 	ld	a,(hl)
 	cp	76H
-	jp	nz,??ENDIF1090
+	jp	nz,??ENDIF1098
 	ld	hl,(INBUFPTR)
 	ld	de,1
 	add	hl,de
 	ld	a,(hl)
 	cp	0FDH
-	jp	nz,??ENDIF1090
+	jp	nz,??ENDIF1098
 	xor	a
 	ld	(??AUTO+22),a
 	ld	a,2
 	ld	(??AUTO+6),a
-??WHILE1091:
+??WHILE1099:
 	ld	a,(??AUTO+6)
 	ld	l,a
 	ld	h,0
@@ -10128,10 +10168,19 @@ DECOMPRESSFILE:
 	add	hl,de
 	ld	a,(hl)
     OR A
-	jp	z,??WEND1092
+	jp	z,??WEND1100
+	ld	a,(??AUTO+6)
+	ld	l,a
+	ld	h,0
+	ld	de,(INBUFPTR)
+	add	hl,de
+	ld	a,(hl)
+	and	80H
+    OR A
+	jp	nz,??WEND1100
 	ld	a,(??AUTO+22)
 	cp	0CH
-	jp	nc,??WEND1092
+	jp	nc,??WEND1100
 	ld	a,(??AUTO+6)
 	ld	l,a
 	ld	h,0
@@ -10151,8 +10200,41 @@ DECOMPRESSFILE:
 	ld	a,(??AUTO+6)
 	add	a,1
 	ld	(??AUTO+6),a
-	JR ??WHILE1091
-??WEND1092:
+	jp	??WHILE1099
+??WEND1100:
+	ld	a,(??AUTO+6)
+	ld	l,a
+	ld	h,0
+	ld	de,(INBUFPTR)
+	add	hl,de
+	ld	a,(hl)
+	and	80H
+    OR A
+	jp	z,??ENDIF1102
+	ld	a,(??AUTO+22)
+	cp	0CH
+	jp	nc,??ENDIF1102
+	ld	a,(??AUTO+6)
+	ld	l,a
+	ld	h,0
+	ld	de,(INBUFPTR)
+	add	hl,de
+	ld	a,(hl)
+	and	7FH
+	ld	b,a
+	ld	a,(??AUTO+22)
+	ld	l,a
+	ld	h,0
+	ld	de,??AUTO+9
+	add	hl,de
+	ld	(hl),b
+	ld	a,(??AUTO+22)
+	add	a,1
+	ld	(??AUTO+22),a
+	ld	a,(??AUTO+6)
+	add	a,1
+	ld	(??AUTO+6),a
+??ENDIF1102:
 	xor	a
 	ld	b,a
 	ld	a,(??AUTO+22)
@@ -10161,6 +10243,28 @@ DECOMPRESSFILE:
 	ld	de,??AUTO+9
 	add	hl,de
 	ld	(hl),b
+??WHILE1103:
+	ld	a,(??AUTO+6)
+	ld	l,a
+	ld	h,0
+	ld	de,(INBUFPTR)
+	add	hl,de
+	ld	a,(hl)
+    OR A
+	jp	z,??WEND1104
+	ld	a,(??AUTO+6)
+	add	a,1
+	ld	(??AUTO+6),a
+	JR ??WHILE1103
+??WEND1104:
+	ld	a,(??AUTO+6)
+	add	a,1
+	ld	l,a
+	ld	h,0
+	ld	de,(INBUFPTR)
+	add	hl,de
+	ld	a,(hl)
+	ld	(??AUTO+24),a
 	ld	hl,(OFCBPTR)
 	ld	(??AUTO+150),hl
 	ld	hl,24H
@@ -10171,7 +10275,7 @@ DECOMPRESSFILE:
 	ld	(??AUTO+6),a
 	ld	a,1
 	ld	(??AUTO+7),a
-??WHILE1093:
+??WHILE1105:
 	ld	a,(??AUTO+6)
 	ld	l,a
 	ld	h,0
@@ -10179,7 +10283,7 @@ DECOMPRESSFILE:
 	add	hl,de
 	ld	a,(hl)
     OR A
-	jp	z,??WEND1094
+	jp	z,??WEND1106
 	ld	a,(??AUTO+6)
 	ld	l,a
 	ld	h,0
@@ -10187,13 +10291,13 @@ DECOMPRESSFILE:
 	add	hl,de
 	ld	a,(hl)
 	cp	2EH
-	jp	z,??WEND1094
+	jp	z,??WEND1106
 	ld	a,(??AUTO+7)
 	cp	8
-	jp	c,??SKIP1095
-	jp	z,??SKIP1095
-	JR ??WEND1094
-??SKIP1095:
+	jp	c,??SKIP1107
+	jp	z,??SKIP1107
+	JR ??WEND1106
+??SKIP1107:
 	ld	a,(??AUTO+6)
 	ld	l,a
 	ld	h,0
@@ -10213,15 +10317,15 @@ DECOMPRESSFILE:
 	ld	a,(??AUTO+7)
 	add	a,1
 	ld	(??AUTO+7),a
-	jp	??WHILE1093
-??WEND1094:
-??WHILE1096:
+	jp	??WHILE1105
+??WEND1106:
+??WHILE1108:
 	ld	a,(??AUTO+7)
 	cp	8
-	jp	c,??SKIP1098
-	jp	z,??SKIP1098
-	JR ??WEND1097
-??SKIP1098:
+	jp	c,??SKIP1110
+	jp	z,??SKIP1110
+	JR ??WEND1109
+??SKIP1110:
 	ld	a,20H
 	ld	b,a
 	ld	a,(??AUTO+7)
@@ -10233,8 +10337,8 @@ DECOMPRESSFILE:
 	ld	a,(??AUTO+7)
 	add	a,1
 	ld	(??AUTO+7),a
-	JR ??WHILE1096
-??WEND1097:
+	JR ??WHILE1108
+??WEND1109:
 	ld	a,(??AUTO+6)
 	ld	l,a
 	ld	h,0
@@ -10242,13 +10346,13 @@ DECOMPRESSFILE:
 	add	hl,de
 	ld	a,(hl)
 	cp	2EH
-	jp	nz,??ENDIF1100
+	jp	nz,??ENDIF1112
 	ld	a,(??AUTO+6)
 	add	a,1
 	ld	(??AUTO+6),a
 	ld	a,9
 	ld	(??AUTO+7),a
-??WHILE1101:
+??WHILE1113:
 	ld	a,(??AUTO+6)
 	ld	l,a
 	ld	h,0
@@ -10256,13 +10360,13 @@ DECOMPRESSFILE:
 	add	hl,de
 	ld	a,(hl)
     OR A
-	jp	z,??WEND1102
+	jp	z,??WEND1114
 	ld	a,(??AUTO+7)
 	cp	0BH
-	jp	c,??SKIP1103
-	jp	z,??SKIP1103
-	JR ??WEND1102
-??SKIP1103:
+	jp	c,??SKIP1115
+	jp	z,??SKIP1115
+	JR ??WEND1114
+??SKIP1115:
 	ld	a,(??AUTO+6)
 	ld	l,a
 	ld	h,0
@@ -10282,16 +10386,16 @@ DECOMPRESSFILE:
 	ld	a,(??AUTO+7)
 	add	a,1
 	ld	(??AUTO+7),a
-	JR ??WHILE1101
-??WEND1102:
-??ENDIF1100:
-??WHILE1104:
+	JR ??WHILE1113
+??WEND1114:
+??ENDIF1112:
+??WHILE1116:
 	ld	a,(??AUTO+7)
 	cp	0BH
-	jp	c,??SKIP1106
-	jp	z,??SKIP1106
-	JR ??WEND1105
-??SKIP1106:
+	jp	c,??SKIP1118
+	jp	z,??SKIP1118
+	JR ??WEND1117
+??SKIP1118:
 	ld	a,20H
 	ld	b,a
 	ld	a,(??AUTO+7)
@@ -10303,13 +10407,13 @@ DECOMPRESSFILE:
 	ld	a,(??AUTO+7)
 	add	a,1
 	ld	(??AUTO+7),a
-	JR ??WHILE1104
-??WEND1105:
+	JR ??WHILE1116
+??WEND1117:
 	ld	hl,@DECOMPRESSFILE$MSGCREATING
 	call	PRINTSTR
 	xor	a
 	ld	(??AUTO+6),a
-??WHILE1107:
+??WHILE1119:
 	ld	a,(??AUTO+6)
 	ld	l,a
 	ld	h,0
@@ -10317,7 +10421,7 @@ DECOMPRESSFILE:
 	add	hl,de
 	ld	a,(hl)
     OR A
-	jp	z,??WEND1108
+	jp	z,??WEND1120
 	ld	a,(??AUTO+6)
 	ld	l,a
 	ld	h,0
@@ -10328,46 +10432,56 @@ DECOMPRESSFILE:
 	ld	a,(??AUTO+6)
 	add	a,1
 	ld	(??AUTO+6),a
-	JR ??WHILE1107
-??WEND1108:
+	JR ??WHILE1119
+??WEND1120:
+	ld	a,(??AUTO+24)
+	cp	20H
+	jp	c,??ELSE1121
+	ld	hl,??DATA1123
+	call	PRINTSTR
+	JR ??ENDIF1122
+??ELSE1121:
+	ld	hl,??DATA1124
+	call	PRINTSTR
+??ENDIF1122:
 	ld	hl,(OFCBPTR)
 	call	DELETEFILE
 	ld	hl,(OFCBPTR)
 	call	MAKEFILE
 	cp	0FFH
-	jp	nz,??ENDIF1110
-	ld	hl,??DATA1111
+	jp	nz,??ENDIF1126
+	ld	hl,??DATA1127
 	call	PRINTSTR
     XOR A
 	ret
-??ENDIF1110:
+??ENDIF1126:
 	ld	hl,0
 	ld	(OUTBUFPOS),hl
 	call	UNCRLZH
 	ld	(??AUTO+8),a
 	ld	a,(??AUTO+8)
 	or	a
-	jp	z,??ENDIF1113
+	jp	z,??ENDIF1129
 	call	FLUSHOUTBUF
 	ld	(??AUTO+8),a
-??ENDIF1113:
+??ENDIF1129:
 	ld	hl,(OFCBPTR)
 	call	CLOSEFILE
 	ld	a,(??AUTO+8)
 	or	a
-	jp	z,??ELSE1114
+	jp	z,??ELSE1130
 	ld	hl,@DECOMPRESSFILE$MSGOK
 	call	PRINTSTR
-	JR ??ENDIF1115
-??ELSE1114:
+	JR ??ENDIF1131
+??ELSE1130:
 	ld	hl,@DECOMPRESSFILE$MSGERR
 	call	PRINTSTR
-??ENDIF1115:
+??ENDIF1131:
 	call	CRLF
 	ld	a,(??AUTO+8)
 	ret
-??ENDIF1090:
-	ld	hl,??DATA1116
+??ENDIF1098:
+	ld	hl,??DATA1132
 	call	PRINTSTR
 	call	CRLF
     XOR A
@@ -10431,7 +10545,7 @@ MAIN:
 	add	hl,de
 	ld	a,(hl)
 	cp	20H
-	jp	nz,??ENDIF1118
+	jp	nz,??ENDIF1134
 	call	CRLF
 	ld	hl,@MAIN$MSGUSAGE
 	call	PRINTSTR
@@ -10440,7 +10554,7 @@ MAIN:
 	call	PRINTSTR
 	call	CRLF
 	ret
-??ENDIF1118:
+??ENDIF1134:
 	ld	hl,(FCBPTR)
 	ld	de,9
 	add	hl,de
@@ -10480,24 +10594,24 @@ MAIN:
 	ld	(??AUTO+111),a
 	ld	a,(??AUTO+111)
 	cp	0FFH
-	jp	nz,??ENDIF1120
+	jp	nz,??ENDIF1136
 	call	CRLF
 	ld	hl,@MAIN$MSGNOOPEN
 	call	PRINTSTR
 	call	CRLF
 	ret
-??ENDIF1120:
+??ENDIF1136:
 	ld	hl,0
 	ld	(INBUFPOS),hl
 	ld	hl,0
 	ld	(INBUFEND),hl
 	call	FILLINBUF
 	or	a
-	jp	nz,??ENDIF1122
+	jp	nz,??ENDIF1138
 	ld	hl,(IFCBPTR)
 	call	CLOSEFILE
 	ret
-??ENDIF1122:
+??ENDIF1138:
 	ld	hl,(INBUFPTR)
 	ld	a,(hl)
 	ld	(??AUTO+119),a
@@ -10515,91 +10629,91 @@ MAIN:
 	ld	hl,??AUTO+119
 	ld	a,(hl)
     OR A
-	jp	nz,??ENDIF1124
+	jp	nz,??ENDIF1140
 	ld	hl,(INBUFPTR)
 	ld	de,1
 	add	hl,de
 	ld	a,(hl)
 	cp	20H
-	jp	nz,??ENDIF1124
+	jp	nz,??ENDIF1140
 	ld	a,1
 	ld	(??AUTO+116),a
-??ENDIF1124:
+??ENDIF1140:
 	ld	hl,??AUTO+119
 	ld	a,(hl)
 	cp	1AH
-	jp	nz,??ENDIF1126
+	jp	nz,??ENDIF1142
 	ld	hl,??AUTO+119+1
 	ld	a,(hl)
 	cp	1
-	jp	c,??ENDIF1126
+	jp	c,??ENDIF1142
 	ld	hl,??AUTO+119+1
 	ld	a,(hl)
 	cp	9
-	jp	c,??SKIP1127
-	jp	z,??SKIP1127
-	JR ??ENDIF1126
-??SKIP1127:
+	jp	c,??SKIP1143
+	jp	z,??SKIP1143
+	JR ??ENDIF1142
+??SKIP1143:
 	ld	a,1
 	ld	(??AUTO+117),a
-??ENDIF1126:
+??ENDIF1142:
 	ld	hl,??AUTO+119
 	ld	a,(hl)
 	cp	0FFH
-	jp	z,??ORTRUE1130
+	jp	z,??ORTRUE1146
 	ld	hl,??AUTO+119
 	ld	a,(hl)
 	cp	0FEH
-	jp	nz,??ENDIF1129
-??ORTRUE1130:
+	jp	nz,??ENDIF1145
+??ORTRUE1146:
 	ld	a,1
 	ld	(??AUTO+118),a
-??ENDIF1129:
+??ENDIF1145:
 	ld	hl,??AUTO+112
 	ld	a,(hl)
 	cp	4CH
-	jp	nz,??ENDIF1132
+	jp	nz,??ENDIF1148
 	ld	hl,??AUTO+112+1
 	ld	a,(hl)
 	cp	42H
-	jp	nz,??ENDIF1132
+	jp	nz,??ENDIF1148
 	ld	hl,??AUTO+112+2
 	ld	a,(hl)
 	cp	52H
-	jp	nz,??ENDIF1132
+	jp	nz,??ENDIF1148
 	ld	a,1
 	ld	(??AUTO+116),a
-??ENDIF1132:
+??ENDIF1148:
 	ld	hl,??AUTO+112
 	ld	a,(hl)
 	cp	41H
-	jp	nz,??ENDIF1134
+	jp	nz,??ENDIF1150
 	ld	hl,??AUTO+112+1
 	ld	a,(hl)
 	cp	52H
-	jp	nz,??ENDIF1134
+	jp	nz,??ENDIF1150
 	ld	hl,??AUTO+112+2
 	ld	a,(hl)
 	cp	43H
-	jp	nz,??ENDIF1134
+	jp	nz,??ENDIF1150
 	ld	a,1
 	ld	(??AUTO+117),a
-??ENDIF1134:
+??ENDIF1150:
 	ld	hl,??AUTO+112
 	ld	a,(hl)
 	cp	42H
-	jp	nz,??ENDIF1136
+	jp	nz,??ENDIF1152
 	ld	hl,??AUTO+112+1
 	ld	a,(hl)
 	cp	41H
-	jp	nz,??ENDIF1136
+	jp	nz,??ENDIF1152
 	ld	hl,??AUTO+112+2
 	ld	a,(hl)
 	cp	53H
-	jp	nz,??ENDIF1136
+	jp	nz,??ENDIF1152
 	ld	a,1
 	ld	(??AUTO+118),a
-??ENDIF1136:
+??ENDIF1152:
 	call	CRLF
 	ld	hl,@MAIN$MSGEXTRACT
 	call	PRINTSTR
@@ -10619,15 +10733,15 @@ MAIN:
 	ld	(??AUTO+111),a
 	ld	a,(??AUTO+111)
 	cp	0FFH
-	jp	nz,??ENDIF1138
+	jp	nz,??ENDIF1154
 	ld	hl,@MAIN$MSGNOOPEN
 	call	PRINTSTR
 	call	CRLF
 	ret
-??ENDIF1138:
+??ENDIF1154:
 	ld	a,(??AUTO+118)
 	or	a
-	jp	z,??ELSE1139
+	jp	z,??ELSE1155
 	call	CRLF
 	ld	hl,@MAIN$MSGDETOK
 	call	PRINTSTR
@@ -10640,14 +10754,14 @@ MAIN:
 	ld	(INPUTLIMIT),hl
 	call	FILLINBUF
 	or	a
-	jp	nz,??ENDIF1142
+	jp	nz,??ENDIF1158
 	ld	hl,@MAIN$MSGERR
 	call	PRINTSTR
 	call	CRLF
 	ld	hl,(IFCBPTR)
 	call	CLOSEFILE
 	ret
-??ENDIF1142:
+??ENDIF1158:
 	ld	hl,(OFCBPTR)
 	ld	(??AUTO+150),hl
 	ld	hl,24H
@@ -10657,8 +10771,8 @@ MAIN:
 	ld	hl,1
 	ld	a,l
 	ld	(??AUTO+110),a
-	JR ??TEST1144
-??FOR1143:
+	JR ??TEST1160
+??FOR1159:
 	ld	a,(??AUTO+110)
 	ld	l,a
 	ld	h,0
@@ -10672,15 +10786,15 @@ MAIN:
 	ld	de,(OFCBPTR)
 	add	hl,de
 	ld	(hl),b
-??INCR1145:
+??INCR1161:
 	ld	a,(??AUTO+110)
 	inc	a
 	ld	(??AUTO+110),a
-??TEST1144:
+??TEST1160:
 	ld	a,(??AUTO+110)
 	cp	9
-	jr	C,??FOR1143
-??NEXT1146:
+	jr	C,??FOR1159
+??NEXT1162:
 	ld	a,54H
 	ld	b,a
 	ld	hl,(OFCBPTR)
@@ -10704,8 +10818,8 @@ MAIN:
 	ld	hl,1
 	ld	a,l
 	ld	(??AUTO+110),a
-	JR ??TEST1148
-??FOR1147:
+	JR ??TEST1164
+??FOR1163:
 	ld	a,(??AUTO+110)
 	ld	l,a
 	ld	h,0
@@ -10713,7 +10827,7 @@ MAIN:
 	add	hl,de
 	ld	a,(hl)
 	cp	20H
-	jp	z,??ENDIF1152
+	jp	z,??ENDIF1168
 	ld	a,(??AUTO+110)
 	ld	l,a
 	ld	h,0
@@ -10721,23 +10835,23 @@ MAIN:
 	add	hl,de
 	ld	a,(hl)
 	call	PRINTCHAR
-??ENDIF1152:
-??INCR1149:
+??ENDIF1168:
+??INCR1165:
 	ld	a,(??AUTO+110)
 	inc	a
 	ld	(??AUTO+110),a
-??TEST1148:
+??TEST1164:
 	ld	a,(??AUTO+110)
 	cp	9
-	jr	C,??FOR1147
-??NEXT1150:
+	jr	C,??FOR1163
+??NEXT1166:
 	ld	a,2EH
 	call	PRINTCHAR
 	ld	hl,9
 	ld	a,l
 	ld	(??AUTO+110),a
-	JR ??TEST1154
-??FOR1153:
+	JR ??TEST1170
+??FOR1169:
 	ld	a,(??AUTO+110)
 	ld	l,a
 	ld	h,0
@@ -10745,82 +10859,82 @@ MAIN:
 	add	hl,de
 	ld	a,(hl)
 	call	PRINTCHAR
-??INCR1155:
+??INCR1171:
 	ld	a,(??AUTO+110)
 	inc	a
 	ld	(??AUTO+110),a
-??TEST1154:
+??TEST1170:
 	ld	a,(??AUTO+110)
 	cp	0CH
-	jr	C,??FOR1153
-??NEXT1156:
+	jr	C,??FOR1169
+??NEXT1172:
 	ld	hl,(OFCBPTR)
 	call	DELETEFILE
 	ld	hl,(OFCBPTR)
 	call	MAKEFILE
 	cp	0FFH
-	jp	nz,??ENDIF1158
-	ld	hl,??DATA1159
+	jp	nz,??ENDIF1174
+	ld	hl,??DATA1175
 	call	PRINTSTR
 	call	CRLF
 	ld	hl,(IFCBPTR)
 	call	CLOSEFILE
 	ret
-??ENDIF1158:
+??ENDIF1174:
 	ld	hl,0
 	ld	(OUTBUFPOS),hl
 	call	DETOKENIZEBASIC
 	ld	(??AUTO+111),a
 	ld	a,(??AUTO+111)
 	or	a
-	jp	z,??ENDIF1161
+	jp	z,??ENDIF1177
 	call	FLUSHOUTBUF
 	ld	(??AUTO+111),a
-??ENDIF1161:
+??ENDIF1177:
 	ld	hl,(OFCBPTR)
 	call	CLOSEFILE
 	ld	a,(??AUTO+111)
 	or	a
-	jp	z,??ELSE1162
+	jp	z,??ELSE1178
 	ld	hl,@MAIN$MSGOK
 	call	PRINTSTR
 	ld	a,1
 	ld	(FILECOUNT),a
-	JR ??ENDIF1163
-??ELSE1162:
+	JR ??ENDIF1179
+??ELSE1178:
 	ld	hl,@MAIN$MSGERR
 	call	PRINTSTR
-??ENDIF1163:
+??ENDIF1179:
 	call	CRLF
-	jp	??ENDIF1140
-??ELSE1139:
+	jp	??ENDIF1156
+??ELSE1155:
 	ld	a,(??AUTO+116)
 	or	a
-	jp	z,??ELSE1164
+	jp	z,??ELSE1180
 	call	EXTRACTLBR
 	ld	(??AUTO+111),a
-	jp	??ENDIF1165
-??ELSE1164:
+	jp	??ENDIF1181
+??ELSE1180:
 	ld	a,(??AUTO+117)
 	or	a
-	jp	z,??ELSE1166
+	jp	z,??ELSE1182
 	ld	hl,0
 	ld	(INBUFPOS),hl
 	ld	hl,0
 	ld	(INBUFEND),hl
 	call	EXTRACTARC
 	ld	(??AUTO+111),a
-	JR ??ENDIF1167
-??ELSE1166:
+	JR ??ENDIF1183
+??ELSE1182:
 	ld	hl,??AUTO+119
 	ld	a,(hl)
 	cp	76H
-	jp	z,??ORTRUE1170
+	jp	z,??ORTRUE1186
 	ld	hl,??AUTO+119
 	ld	a,(hl)
 	cp	76H
-	jp	nz,??ELSE1168
-??ORTRUE1170:
+	jp	nz,??ELSE1184
+??ORTRUE1186:
 	ld	hl,0
 	ld	(INBUFPOS),hl
 	ld	hl,0
@@ -10829,18 +10943,18 @@ MAIN:
 	ld	(??AUTO+111),a
 	ld	a,(??AUTO+111)
 	or	a
-	jp	z,??ENDIF1172
+	jp	z,??ENDIF1188
 	ld	a,1
 	ld	(FILECOUNT),a
-??ENDIF1172:
-	JR ??ENDIF1169
-??ELSE1168:
+??ENDIF1188:
+	JR ??ENDIF1185
+??ELSE1184:
 	call	EXTRACTLBR
 	ld	(??AUTO+111),a
-??ENDIF1169:
-??ENDIF1167:
-??ENDIF1165:
-??ENDIF1140:
+??ENDIF1185:
+??ENDIF1183:
+??ENDIF1181:
+??ENDIF1156:
 	ld	hl,(IFCBPTR)
 	call	CLOSEFILE
 	call	CRLF
@@ -11028,17 +11142,17 @@ CPMEOF:	EQU	1AH
 	db	'Bad Huffman tree$'
 @EXTRACTARCMEMBER$MSGMETHOD:
 	db	'Unsupported ARC method$'
-??DATA0509:
+??DATA0513:
 	db	0DH
 	db	0AH
 	db	'Cannot create file$'
-??DATA0526:
+??DATA0530:
 	db	0DH
 	db	0AH
 	db	'  $'
-??DATA0535:
+??DATA0539:
 	db	' OK$'
-??DATA0536:
+??DATA0540:
 	db	0DH
 	db	0AH
 	db	'  Error$'
@@ -11058,13 +11172,21 @@ CPMEOF:	EQU	1AH
 	db	' OK$'
 @DECOMPRESSFILE$MSGERR:
 	db	' Error$'
-??DATA1057:
+??DATA1061:
 	db	' - cannot create$'
-??DATA1084:
+??DATA1088:
+	db	' [Crunch V2]$'
+??DATA1089:
+	db	' [Crunch V1]$'
+??DATA1092:
 	db	' - cannot create$'
-??DATA1111:
+??DATA1123:
+	db	' [CrLZH V2.0]$'
+??DATA1124:
+	db	' [CrLZH V1.x]$'
+??DATA1127:
 	db	' - cannot create$'
-??DATA1116:
+??DATA1132:
 	db	'Unknown compression format$'
 @MAIN$MSGBANNER:
 	db	'80UN - CP/M Archive Unpacker v2.2$'
@@ -11086,7 +11208,7 @@ CPMEOF:	EQU	1AH
 	db	' OK$'
 @MAIN$MSGERR:
 	db	' Error$'
-??DATA1159:
+??DATA1175:
 	db	' - cannot create$'
 
 ; Shared automatic storage (166 bytes)

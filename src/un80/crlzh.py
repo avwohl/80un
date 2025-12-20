@@ -502,3 +502,37 @@ def get_crlzh_filename(data: bytes) -> str | None:
         return filename if filename else None
     except CrLZHError:
         return None
+
+
+def get_crlzh_info(data: bytes) -> dict | None:
+    """
+    Get detailed info about a CrLZH file.
+
+    Args:
+        data: CrLZH file data
+
+    Returns:
+        Dictionary with version info, or None if not valid
+    """
+    try:
+        filename, data_offset = parse_header(data)
+
+        # Read version bytes from data stream
+        if data_offset + 2 > len(data):
+            return None
+
+        version1 = data[data_offset]
+        version2 = data[data_offset + 1]
+
+        is_v2 = version1 >= 0x20
+        version_str = "2.0" if is_v2 else f"1.x (0x{version1:02X})"
+
+        return {
+            'filename': filename,
+            'version': version1,
+            'version_str': version_str,
+            'position_bits': 5 if is_v2 else 6,
+            'description': f"V{version_str} ({'11-bit' if is_v2 else '12-bit'} positions)",
+        }
+    except CrLZHError:
+        return None

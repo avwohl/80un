@@ -20,9 +20,9 @@ from .cpm import detect_compression, strip_cpm_eof, crlf_to_lf
 from .lbr import list_lbr, extract_lbr
 from .arc import list_arc, extract_arc
 from .squeeze import unsqueeze, get_squeezed_filename
-from .crunch import uncrunch, get_crunched_filename
-from .crlzh import uncrlzh, get_crlzh_filename
-from .bas import is_tokenized_basic, detokenize_bytes
+from .crunch import uncrunch, get_crunched_filename, get_crunch_info
+from .crlzh import uncrlzh, get_crlzh_filename, get_crlzh_info
+from .bas import is_tokenized_basic, is_protected_basic, detokenize_bytes
 
 
 def detect_format(path: Path) -> str | None:
@@ -91,25 +91,93 @@ def get_output_filename(path: Path, compression: str) -> str:
     return stem + '.out'
 
 
-def cmd_list(path: Path, format_type: str) -> int:
+def cmd_list(path: Path, format_type: str, verbose: bool = False) -> int:
     """List archive contents."""
     if format_type == 'lbr':
         entries = list_lbr(path)
-        print(f"{'Filename':<16} {'Size':>8} {'Sectors':>8}")
-        print('-' * 36)
+        if verbose:
+            print(f"{'Filename':<16} {'Size':>8} {'Sectors':>8} {'Compression':<16}")
+            print('-' * 52)
+        else:
+            print(f"{'Filename':<16} {'Size':>8} {'Sectors':>8}")
+            print('-' * 36)
         for entry in entries:
             size = entry.data_size
-            print(f"{entry.filename:<16} {size:>8} {entry.length:>8}")
+            if verbose:
+                # Detect compression type of member
+                member_data = entry.get_data(path) if hasattr(entry, 'get_data') else None
+                if member_data:
+                    comp = detect_compression(member_data)
+                    comp_str = comp if comp else 'stored'
+                else:
+                    comp_str = '?'
+                print(f"{entry.filename:<16} {size:>8} {entry.length:>8} {comp_str:<16}")
+            else:
+                print(f"{entry.filename:<16} {size:>8} {entry.length:>8}")
         print(f"\n{len(entries)} file(s)")
 
     elif format_type == 'arc':
         entries = list_arc(path)
-        print(f"{'Filename':<16} {'Original':>10} {'Compressed':>12} {'Method':<12}")
-        print('-' * 54)
-        for entry in entries:
-            print(f"{entry.filename:<16} {entry.original_size:>10} "
-                  f"{entry.compressed_size:>12} {entry.method_name:<12}")
+        if verbose:
+            print(f"{'Filename':<16} {'Original':>10} {'Compressed':>12} {'Method':<16}")
+            print('-' * 58)
+            for entry in entries:
+                method_detail = f"{entry.method}: {entry.method_name}"
+                print(f"{entry.filename:<16} {entry.original_size:>10} "
+                      f"{entry.compressed_size:>12} {method_detail:<16}")
+        else:
+            print(f"{'Filename':<16} {'Original':>10} {'Compressed':>12} {'Method':<12}")
+            print('-' * 54)
+            for entry in entries:
+                print(f"{entry.filename:<16} {entry.original_size:>10} "
+                      f"{entry.compressed_size:>12} {entry.method_name:<12}")
         print(f"\n{len(entries)} file(s)")
+
+    elif format_type in ('squeeze', 'crunch', 'crlzh'):
+        # Show info for single compressed file
+        with open(path, 'rb') as f:
+            data = f.read()
+
+        if format_type == 'squeeze':
+            name = get_squeezed_filename(data)
+            print(f"Format: Squeeze (Huffman + RLE)")
+            print(f"Original filename: {name or 'unknown'}")
+
+        elif format_type == 'crunch':
+            info = get_crunch_info(data)
+            if info:
+                print(f"Format: Crunch {info['description']}")
+                print(f"Original filename: {info['filename']}")
+                if verbose:
+                    print(f"Siglevel: 0x{info['siglevel']:02X}")
+                    print(f"Code bits: {info['bits']}")
+            else:
+                print(f"Format: Crunch (cannot parse header)")
+
+        elif format_type == 'crlzh':
+            info = get_crlzh_info(data)
+            if info:
+                print(f"Format: CrLZH {info['description']}")
+                print(f"Original filename: {info['filename']}")
+                if verbose:
+                    print(f"Version byte: 0x{info['version']:02X}")
+                    print(f"Position bits: {info['position_bits']}")
+            else:
+                print(f"Format: CrLZH (cannot parse header)")
+
+    elif format_type == 'bas':
+        with open(path, 'rb') as f:
+            data = f.read()
+
+        if is_protected_basic(data):
+            print(f"Format: MBASIC Protected (0xFE)")
+            print(f"Status: Encrypted with 143-byte XOR cycle")
+        elif is_tokenized_basic(data):
+            print(f"Format: MBASIC Tokenized (0xFF)")
+            print(f"Status: Binary tokenized")
+        else:
+            print(f"Format: MBASIC ASCII")
+            print(f"Status: Plain text source")
 
     else:
         print(f"Cannot list contents of {format_type} files", file=sys.stderr)
@@ -347,6 +415,11 @@ def main(argv: list[str] | None = None) -> int:
         action='store_true',
         help='Do not overwrite existing files',
     )
+    parser.add_argument(
+        '-v', '--verbose',
+        action='store_true',
+        help='Show detailed version/method info',
+    )
 
     args = parser.parse_args(argv)
 
@@ -367,7 +440,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         if args.list:
-            return cmd_list(args.file, format_type)
+            return cmd_list(args.file, format_type, args.verbose)
         else:
             return cmd_extract(args.file, args.output, format_type, args.text, args.no_clobber)
     except Exception as e:
