@@ -35,6 +35,10 @@ declare file$count byte external;
  * LBR Archive Extraction
  *========================================================*/
 
+/* External for directory buffer */
+declare work$ptr address external;
+declare work based work$ptr (1) byte;
+
 /* Extract files from LBR archive */
 extract$lbr: procedure byte public;
     declare msg$badlbr data('Invalid LBR file$');
@@ -52,21 +56,26 @@ extract$lbr: procedure byte public;
     declare member$index address;
     declare member$length address;
 
-    /* Pointers for directory entries */
+    /* Pointers for directory entries - use work buffer for directory */
+    declare dir$ptr address;
     declare ent$ptr address;
     declare ent based ent$ptr (32) byte;
 
-    /* Read and buffer directory */
+    /* Read directory into work buffer (up to 32 sectors = 4K) */
+    dir$ptr = work$ptr;
     inbuf$pos = 0;
     inbuf$end = 0;
     input$limit = 0ffffh;  /* No limit for LBR */
-    if not fill$inbuf then do;
+
+    /* Read first sector to get directory size */
+    call setdmaaddr(dir$ptr);
+    if readfile(ifcb$ptr) <> 0 then do;
         call printstr(.msg$badlbr);
         return 0;
     end;
 
     /* Check first entry (directory itself) */
-    ent$ptr = inbuf$ptr;
+    ent$ptr = dir$ptr;
     if ent(0) <> 0 then do;
         call printstr(.msg$badlbr);
         return 0;
@@ -79,6 +88,16 @@ extract$lbr: procedure byte public;
         return 0;
     end;
 
+    /* Read remaining directory sectors into work buffer */
+    k = 1;
+    do while k < dir$sectors;
+        call setdmaaddr(dir$ptr + shl(k, 7));  /* k * 128 */
+        if readfile(ifcb$ptr) <> 0 then
+            k = dir$sectors;  /* Exit on error */
+        else
+            k = k + 1;
+    end;
+
     max$entries = shl(dir$sectors, 2);
 
     /* Save the original FCB for reopening */
@@ -89,12 +108,9 @@ extract$lbr: procedure byte public;
     entry$num = 1;
 
     do while entry$num < max$entries;
-        ent$ptr = inbuf$ptr + (entry$num * 32);
+        ent$ptr = dir$ptr + shl(entry$num, 5);  /* entry_num * 32 */
 
-        if ent$ptr >= inbuf$ptr + inbuf$end then do;
-            entry$num = max$entries;
-        end;
-        else do;
+        do;
             if ent(0) = 0ffh then do;
                 entry$num = max$entries;
             end;
@@ -199,21 +215,8 @@ extract$lbr: procedure byte public;
                                 call printstr(.msg$ok);
                                 call crlf;
 
-                                /* Reload directory after extracting */
+                                /* Directory already in work buffer - just close input */
                                 call closefile(ifcb$ptr);
-                                call copymem(.saved$fcb, ifcb$ptr, 12);
-                                call fillmem(ifcb$ptr + 12, 24, 0);
-                                result = openfile(ifcb$ptr);
-                                if result <> 0ffh then do;
-                                    inbuf$pos = 0;
-                                    inbuf$end = 0;
-                                    input$limit = 0ffffh;
-                                    result = fill$inbuf;
-                                end;
-                                else do;
-                                    /* Reopen failed - exit loop */
-                                    entry$num = max$entries;
-                                end;
                             end;
                         end;
                     end;
@@ -228,8 +231,8 @@ extract$lbr: procedure byte public;
                 /* Deleted entry, skip */
                 entry$num = entry$num + 1;
             end;
-        end;
-    end;
+        end;  /* do block */
+    end;  /* while entry$num */
 
     return 1;
 end extract$lbr;
