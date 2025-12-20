@@ -460,6 +460,16 @@ make test       # Test with sample archives
 make clean      # Remove build artifacts
 ```
 
+### Developer Notes: EOL Handling
+
+When testing the PL/M version with [cpmemu](https://github.com/avwohl/cpmemu), be aware that the emulator performs automatic line-ending conversion for text files. Files with extensions like `.MAC`, `.ASM`, `.TXT` are detected as text and have CR+LF converted to LF when written to the Unix filesystem.
+
+To get raw binary output for testing, create a config file with `default_mode = binary` and `eol_convert = false`. See `CLAUDE.md` for details.
+
+The Python and PL/M decompressors produce **identical output** when:
+- Python: raw output (no `--text` flag)
+- PL/M: via cpmemu with binary mode enabled
+
 ### Source Files
 
 PL/M-80 source is in `src/plm/`:
@@ -496,3 +506,4 @@ Sample archives for testing can be found at:
 
 - [CP/M information archive](https://www.seasip.info/Cpm/) - CP/M documentation
 - [Walnut Creek CP/M CD-ROM](http://www.classiccmp.org/cpmarchives/) - Large CP/M software archive
+- [Fred Jan Kraan's PX-8 Archives](https://electrickery.nl/comp/px8/archs.html) - CP/M decompression utilities including CrLZH samples

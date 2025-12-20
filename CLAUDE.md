@@ -39,3 +39,28 @@ make clean    # Remove intermediate files
 - FCB at 005CH, DMA buffer at 0080H
 - BDOS entry at 0005H
 - TPA (program area) starts at 0100H
+
+## Testing with cpmemu
+
+**IMPORTANT:** cpmemu performs automatic EOL conversion for text files.
+
+By default, cpmemu detects files with text extensions (.MAC, .ASM, .TXT, .BAS, etc.)
+and converts CR+LF to LF when writing to the Unix filesystem. This can cause test
+failures when comparing PL/M output against Python raw output.
+
+To test with binary mode (no EOL conversion), use a config file:
+
+```bash
+# test-binary.cfg
+program = 80un.com
+default_mode = binary
+eol_convert = false
+```
+
+Then run: `cpmemu test-binary.cfg TESTFILE.MYC`
+
+When comparing decompressor output:
+- Python `uncrlzh()` returns raw bytes with CR+LF (CP/M format)
+- Python with `--text` flag converts CR+LF to LF (Unix format)
+- PL/M via cpmemu (default) outputs LF only (due to emulator conversion)
+- PL/M via cpmemu (binary mode) outputs CR+LF (matches Python raw)
