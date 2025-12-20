@@ -54,7 +54,7 @@ Requires Python 3.8 or later. No external dependencies.
 |--------|------------|-------------|-------------|
 | **Squeeze** | `.?q?` | `76 FF` | Huffman coding with run-length encoding. Devised by Richard Greenlaw, 1981. |
 | **Crunch** | `.?z?` | `76 FE` | LZW compression similar to Unix compress. More efficient than squeeze. |
-| **CrLZH** | `.?y?` | `76 FD` | LZH compression (Lempel-Ziv + Huffman). Most efficient CP/M compression. (Experimental) |
+| **CrLZH** | `.?y?` | `76 FD` | LZH compression (Lempel-Ziv + Huffman). Most efficient CP/M compression. |
 
 ### CP/M File Naming Convention
 
@@ -336,7 +336,7 @@ The file may be corrupted, truncated, or not actually in the detected format. Tr
 
 ### CrLZH decompression produces partial or garbled output
 
-CrLZH support is experimental. The exact position encoding algorithm used by CrLZH is not fully documented, and some files may not decompress correctly. The original CP/M utilities (UCRLZH20.COM) can be used as a fallback via an emulator.
+CrLZH uses a complex LZSS algorithm with adaptive Huffman coding. If decompression fails, verify the file isn't corrupted or truncated. Both V1.x and V2.0 versions are supported.
 
 ### Files extract with wrong names
 
@@ -395,7 +395,7 @@ Extract an LBR archive:
 ```
 A>80UN MYLIB.LBR
 
-80UN - CP/M Archive Unpacker v2.1
+80UN - CP/M Archive Unpacker v2.3
 
 Extracting:
   README.TXT OK
@@ -409,7 +409,7 @@ Extract an ARC archive:
 ```
 A>80UN SOFTWARE.ARC
 
-80UN - CP/M Archive Unpacker v2.1
+80UN - CP/M Archive Unpacker v2.3
 
 Extracting:
   INSTALL.DOC OK
@@ -423,7 +423,7 @@ Decompress a squeezed file:
 ```
 A>80UN MANUAL.TQT
 
-80UN - CP/M Archive Unpacker v2.1
+80UN - CP/M Archive Unpacker v2.3
 
 Extracting:
 Creating: MANUAL.TXT OK
@@ -435,7 +435,7 @@ Decompress a crunched file:
 ```
 A>80UN SOURCE.AZM
 
-80UN - CP/M Archive Unpacker v2.1
+80UN - CP/M Archive Unpacker v2.3
 
 Extracting:
 Creating: SOURCE.ASM OK
@@ -484,14 +484,55 @@ PL/M-80 source is in `src/plm/`:
 | `lzh.plm` | LZSS decompressor |
 | `arc.plm` | ARC archive extractor |
 | `lbr.plm` | LBR archive extractor |
-| `main.plm` | Main program logic |
+| `bas.plm` | MBASIC detokenizer |
+| `main.plm` | 80UN main program |
+| `basmain.plm` | 80UNBAS main program |
 | `heap.asm` | Heap allocation bridge |
 
 ### Requirements
 
 - CP/M 2.2 or compatible (MP/M, ZCPR, etc.)
-- ~40KB TPA (Transient Program Area)
+- ~62KB TPA (Transient Program Area) for 80UN.COM
+- ~18KB TPA for 80UNBAS.COM
 - Z80 processor
+
+### Memory-Constrained Systems
+
+80UN.COM requires approximately 62KB of TPA to support ARC method 9 (squashed) with its 8192-entry LZW dictionary. For systems with limited memory, 80UNBAS.COM is provided as a separate utility for MBASIC detokenization, requiring only ~18KB TPA.
+
+---
+
+## 80UNBAS.COM - MBASIC Detokenizer
+
+A companion utility that converts tokenized MBASIC files to ASCII text.
+
+### Usage
+
+```
+A>80UNBAS PROGRAM.BAS
+
+80UNBAS - MBASIC Detokenizer v2.3
+
+Creating: PROGRAM.TXT OK
+```
+
+### Supported Formats
+
+| Magic | Type | Description |
+|-------|------|-------------|
+| `0xFF` | Standard | Normal tokenized MBASIC file |
+| `0xFE` | Protected | Protected (encrypted) MBASIC file |
+
+Note: "Protected" files are only lightly scrambled; 80UNBAS fully decrypts and detokenizes them.
+
+### Building
+
+80UNBAS is built alongside 80UN:
+
+```bash
+make           # Builds both 80un.com and 80unbas.com
+make test-bas  # Test BASIC detokenizer
+```
 
 ---
 
@@ -509,11 +550,11 @@ The test suite needs additional sample files to achieve complete coverage:
 | Format | What's Tested | What's Missing |
 |--------|---------------|----------------|
 | **Squeeze** | ✅ Complete | - |
-| **Crunch** | V2.x only (siglevel ≥ 0x20) | V1.x samples (fixed 12-bit codes) |
+| **Crunch** | ✅ V2.x (siglevel ≥ 0x20) | V1.x samples (fixed 12-bit codes) |
 | **CrLZH** | ✅ V1.x and V2.0 | - |
-| **ARC** | Methods 2, 3, 8, 9 | Methods 1, 4-7 (stored old, squeezed, old crunched) |
-| **LBR** | Archive structure | Member compression type verification |
-| **MBASIC** | Both variants (synthetic) | Real tokenized file samples |
+| **ARC** | ✅ Methods 2, 3, 8, 9 | Methods 1, 4-7 (stored old, squeezed, old crunched) |
+| **LBR** | ✅ Archive with nested compression | - |
+| **MBASIC** | ✅ Standard (0xFF) and Protected (0xFE) | - |
 
 Use `-v` with `-l` to check file versions: `80un file.czm -l -v`
 

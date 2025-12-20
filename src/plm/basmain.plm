@@ -1,0 +1,162 @@
+/*
+ * basmain.plm - 80UNBAS Main Program
+ *
+ * MBASIC Tokenized File Detokenizer
+ * Converts .BAS files (0xFF/0xFE magic) to ASCII text
+ *
+ * This is a separate program to save memory in the main 80UN.
+ */
+
+declare
+    mbasic$magic  literally '0FFH',
+    mbasic$prot   literally '0FEH',
+    cpm$eof       literally '01AH';
+
+/* External declarations from common.plm */
+declare fcb$ptr address external;
+declare fcb based fcb$ptr (36) byte;
+declare ifcb$ptr address external;
+declare ifcb based ifcb$ptr (36) byte;
+declare ofcb$ptr address external;
+declare ofcb based ofcb$ptr (36) byte;
+declare dma$ptr address external;
+declare dma based dma$ptr (128) byte;
+declare inbuf$ptr address external;
+declare inbuf based inbuf$ptr (1) byte;
+declare inbuf$size address external;
+declare inbuf$pos address external;
+declare inbuf$end address external;
+declare outbuf$ptr address external;
+declare outbuf$size address external;
+declare outbuf$pos address external;
+declare input$limit address external;
+
+/* Linker provides __END__ at end of all code/data - bridged via heap.asm */
+declare heap$base address external;
+
+main: procedure public;
+    declare msg$banner data('80UNBAS - MBASIC Detokenizer v2.3$');
+    declare msg$usage data('Usage: 80UNBAS filename.BAS$');
+    declare msg$noopen data('Cannot open input file$');
+    declare msg$notbas data('Not a tokenized BASIC file$');
+    declare msg$creating data('Creating: $');
+    declare msg$ok data(' OK$');
+    declare msg$err data(' Error$');
+
+    declare (i, j, result) byte;
+    declare magic (2) byte;
+    declare base address;
+
+    /* Initialize pointers */
+    fcb$ptr = 005ch;
+    dma$ptr = 0080h;
+
+    /* Allocate buffers after program
+     * 80UNBAS needs much less memory than 80UN:
+     *   IFCB:      36 bytes
+     *   OFCB:      36 bytes
+     *   INBUF:     4096 bytes (need to hold entire BASIC file)
+     *   OUTBUF:    4096 bytes
+     * Total: ~8K from base
+     */
+    base = heap$base;
+    ifcb$ptr = base;
+    ofcb$ptr = ifcb$ptr + 36;
+    inbuf$ptr = ofcb$ptr + 36;
+    inbuf$size = 4096;
+    outbuf$ptr = inbuf$ptr + 4096;
+    outbuf$size = 4096;
+
+    /* Print banner */
+    call crlf;
+    call printstr(.msg$banner);
+    call crlf;
+
+    /* Check if filename provided */
+    if fcb(1) = ' ' then do;
+        call crlf;
+        call printstr(.msg$usage);
+        call crlf;
+        return;
+    end;
+
+    /* Copy FCB to working area */
+    call copymem(fcb$ptr, ifcb$ptr, 36);
+    call fillmem(ofcb$ptr, 36, 0);
+
+    /* Open input file */
+    call setdmaaddr(dma$ptr);
+    result = openfile(ifcb$ptr);
+    if result = 0ffh then do;
+        call crlf;
+        call printstr(.msg$noopen);
+        call crlf;
+        return;
+    end;
+
+    /* Read file into buffer */
+    inbuf$pos = 0;
+    inbuf$end = 0;
+    input$limit = 0ffffh;
+    if not fill$inbuf then do;
+        call printstr(.msg$err);
+        call crlf;
+        call closefile(ifcb$ptr);
+        return;
+    end;
+
+    /* Check magic bytes */
+    magic(0) = inbuf(0);
+    magic(1) = inbuf(1);
+
+    if magic(0) <> mbasic$magic and magic(0) <> mbasic$prot then do;
+        call crlf;
+        call printstr(.msg$notbas);
+        call crlf;
+        call closefile(ifcb$ptr);
+        return;
+    end;
+
+    call crlf;
+
+    /* Set up output FCB - change extension to .TXT */
+    call fillmem(ofcb$ptr, 36, 0);
+    do j = 1 to 8;
+        ofcb(j) = ifcb(j);
+    end;
+    ofcb(9) = 'T';
+    ofcb(10) = 'X';
+    ofcb(11) = 'T';
+
+    call printstr(.msg$creating);
+    do j = 1 to 8;
+        if ofcb(j) <> ' ' then call printchar(ofcb(j));
+    end;
+    call printchar('.');
+    do j = 9 to 11;
+        call printchar(ofcb(j));
+    end;
+
+    call deletefile(ofcb$ptr);
+    if makefile(ofcb$ptr) = 0ffh then do;
+        call printstr(.(' - cannot create$'));
+        call crlf;
+        call closefile(ifcb$ptr);
+        return;
+    end;
+
+    outbuf$pos = 0;
+    result = detokenize$basic;
+    if result then result = flush$outbuf;
+    call closefile(ofcb$ptr);
+    call closefile(ifcb$ptr);
+
+    if result then
+        call printstr(.msg$ok);
+    else
+        call printstr(.msg$err);
+    call crlf;
+
+end main;
+
+eof

@@ -8,7 +8,6 @@
  *   - Squeezed files (.?Q? - Huffman + RLE)
  *   - Crunched files (.?Z? - LZW + RLE)
  *   - CrLZH files (.?Y? - LZSS)
- *   - MBASIC tokenized files (.BAS - 0xFF/0xFE magic)
  *
  * To build:
  *   uplm80 common.plm -o common.mac
@@ -34,8 +33,6 @@ declare
     magic$lzh$lo  literally '0FDH',   /* CrLZH: 76 FD */
     magic$lzh$hi  literally '076H',
     arc$marker    literally '01AH',   /* ARC: 1A xx */
-    mbasic$magic  literally '0FFH',   /* MBASIC tokenized */
-    mbasic$prot   literally '0FEH',   /* MBASIC protected */
     cpm$eof       literally '01AH';   /* CP/M EOF marker */
 
 /* External declarations from common.plm */
@@ -318,22 +315,17 @@ end decompress$file;
 declare heap$base address external;
 
 main: procedure public;
-    declare msg$banner data('80UN - CP/M Archive Unpacker v2.2$');
+    declare msg$banner data('80UN - CP/M Archive Unpacker v2.3$');
     declare msg$usage data('Usage: 80UN filename$');
-    declare msg$formats data('Supports: LBR, ARC, .?Q?, .?Z?, .?Y?, .BAS$');
+    declare msg$formats data('Supports: LBR, ARC, .?Q?, .?Z?, .?Y?$');
     declare msg$noopen data('Cannot open input file$');
     declare msg$extract data('Extracting:$');
     declare msg$done data(' file(s) extracted$');
-    declare msg$detok data('Detokenizing:$');
-    declare msg$creating data('Creating: $');
-    declare msg$ok data(' OK$');
-    declare msg$err data(' Error$');
 
     declare (i, j, result) byte;
     declare ext (4) byte;
     declare is$lbr byte;
     declare is$arc byte;
-    declare is$bas byte;
     declare magic (2) byte;
     declare base address;
 
@@ -416,7 +408,6 @@ main: procedure public;
     /* Detect format by magic bytes */
     is$lbr = 0;
     is$arc = 0;
-    is$bas = 0;
 
     /* LBR: First byte = 0x00 (active entry), followed by spaces */
     if magic(0) = 0 and inbuf(1) = ' ' then
@@ -426,17 +417,11 @@ main: procedure public;
     if magic(0) = arc$marker and magic(1) >= 1 and magic(1) <= 9 then
         is$arc = 1;
 
-    /* MBASIC: First byte = 0xFF (tokenized) or 0xFE (protected) */
-    if magic(0) = mbasic$magic or magic(0) = mbasic$prot then
-        is$bas = 1;
-
     /* Also check extension */
     if ext(0) = 'L' and ext(1) = 'B' and ext(2) = 'R' then
         is$lbr = 1;
     if ext(0) = 'A' and ext(1) = 'R' and ext(2) = 'C' then
         is$arc = 1;
-    if ext(0) = 'B' and ext(1) = 'A' and ext(2) = 'S' then
-        is$bas = 1;
 
     call crlf;
     call printstr(.msg$extract);
@@ -454,65 +439,7 @@ main: procedure public;
         return;
     end;
 
-    if is$bas then do;
-        /* MBASIC tokenized file - detokenize to ASCII */
-        call crlf;
-        call printstr(.msg$detok);
-        call crlf;
-
-        /* Read entire file into buffer */
-        inbuf$pos = 0;
-        inbuf$end = 0;
-        input$limit = 0ffffh;
-        if not fill$inbuf then do;
-            call printstr(.msg$err);
-            call crlf;
-            call closefile(ifcb$ptr);
-            return;
-        end;
-
-        /* Set up output FCB - change extension from .BAS to .TXT */
-        call fillmem(ofcb$ptr, 36, 0);
-        /* Copy filename from input FCB */
-        do j = 1 to 8;
-            ofcb(j) = ifcb(j);
-        end;
-        /* Set extension to TXT */
-        ofcb(9) = 'T';
-        ofcb(10) = 'X';
-        ofcb(11) = 'T';
-
-        call printstr(.msg$creating);
-        do j = 1 to 8;
-            if ofcb(j) <> ' ' then call printchar(ofcb(j));
-        end;
-        call printchar('.');
-        do j = 9 to 11;
-            call printchar(ofcb(j));
-        end;
-
-        call deletefile(ofcb$ptr);
-        if makefile(ofcb$ptr) = 0ffh then do;
-            call printstr(.(' - cannot create$'));
-            call crlf;
-            call closefile(ifcb$ptr);
-            return;
-        end;
-
-        outbuf$pos = 0;
-        result = detokenize$basic;
-        if result then result = flush$outbuf;
-        call closefile(ofcb$ptr);
-
-        if result then do;
-            call printstr(.msg$ok);
-            file$count = 1;
-        end;
-        else
-            call printstr(.msg$err);
-        call crlf;
-    end;
-    else if is$lbr then do;
+    if is$lbr then do;
         result = extract$lbr;
     end;
     else if is$arc then do;
