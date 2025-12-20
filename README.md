@@ -502,6 +502,23 @@ Sample archives for testing can be found at:
 - [Zimmers.net CP/M Archivers](https://www.zimmers.net/anonftp/pub/cpm/archivers/) - ARK, LBR, CrLZH tools and archives
 - [Chaos Cottage BBS CP/M Files](https://www.chiark.greenend.org.uk/~jacobn/cpm/cpmfiles.html) - Various CP/M archives including ARK and LZH samples
 
+### Test Coverage Gaps
+
+The test suite needs additional sample files to achieve complete coverage:
+
+| Format | What's Tested | What's Missing |
+|--------|---------------|----------------|
+| **Squeeze** | ✅ Complete | - |
+| **Crunch** | V2.x only (siglevel ≥ 0x20) | V1.x samples (fixed 12-bit codes) |
+| **CrLZH** | V2.0 only (version ≥ 0x20) | V1.x samples (6-bit position encoding) |
+| **ARC** | Method 8 only | Methods 1-7, 9 (stored, packed, squeezed, old crunched, squashed) |
+| **LBR** | Archive structure | Member compression type verification |
+| **MBASIC** | Both variants (synthetic) | Real tokenized file samples |
+
+Use `-v` with `-l` to check file versions: `80un file.czm -l -v`
+
+Contributions of test files with missing versions/methods are welcome.
+
 ## See Also
 
 - [CP/M information archive](https://www.seasip.info/Cpm/) - CP/M documentation
