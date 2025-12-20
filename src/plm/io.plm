@@ -12,10 +12,12 @@ declare ifcb$ptr address external;
 declare ofcb$ptr address external;
 declare inbuf$ptr address external;
 declare inbuf based inbuf$ptr (1) byte;
+declare inbuf$size address external;
 declare inbuf$pos address external;
 declare inbuf$end address external;
 declare outbuf$ptr address external;
 declare outbuf based outbuf$ptr (1) byte;
+declare outbuf$size address external;
 declare outbuf$pos address external;
 declare input$limit address external;
 declare bit$buffer address external;
@@ -31,13 +33,17 @@ declare bits$left byte external;
 fill$inbuf: procedure byte public;
     declare result byte;
     declare loop$cnt byte;
+    declare max$sectors byte;
 
     inbuf$pos = 0;
     inbuf$end = 0;
 
-    /* Read up to 32 sectors (4K) */
+    /* Read sectors up to buffer size */
+    max$sectors = low(shr(inbuf$size, 7));  /* inbuf$size / 128 */
+    if max$sectors = 0 then max$sectors = 1;
+
     loop$cnt = 0;
-    do while loop$cnt < 32;
+    do while loop$cnt < max$sectors;
         call setdmaaddr(inbuf$ptr + shl(loop$cnt, 7));
         result = readfile(ifcb$ptr);
         if result <> 0 then
@@ -134,7 +140,7 @@ putbyte: procedure(b) byte public;
     outbuf(p - outbuf$ptr) = b;
     outbuf$pos = outbuf$pos + 1;
 
-    if outbuf$pos >= 4096 then
+    if outbuf$pos >= outbuf$size then
         return flush$outbuf;
 
     return 1;

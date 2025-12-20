@@ -358,13 +358,13 @@ main: procedure public;
     ifcb$ptr = base;
     ofcb$ptr = ifcb$ptr + 36;
     inbuf$ptr = ofcb$ptr + 36;
-    inbuf$size = 4096;
-    outbuf$ptr = inbuf$ptr + 4096;
-    outbuf$size = 4096;
-    huff$tree$ptr = outbuf$ptr + 4096;
+    inbuf$size = 128;
+    outbuf$ptr = inbuf$ptr + 128;
+    outbuf$size = 128;
+    huff$tree$ptr = outbuf$ptr + 128;
     lzw$prefix$ptr = huff$tree$ptr + 1024;
-    lzw$suffix$ptr = lzw$prefix$ptr + 8192;
-    ring$ptr = lzw$suffix$ptr + 4096;
+    lzw$suffix$ptr = lzw$prefix$ptr + 16384;  /* 8192 entries × 2 for method 9 */
+    ring$ptr = lzw$suffix$ptr + 8192;          /* 8192 entries × 1 for method 9 */
     work$ptr = ring$ptr + 4096;
 
     /* Print banner */

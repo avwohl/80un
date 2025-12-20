@@ -105,12 +105,16 @@ lzw$first$byte: procedure(code) byte public;
     return low(code);
 end lzw$first$byte;
 
-/* Add entry to LZW dictionary (12-bit max, 4096 codes) */
+/* Add entry to LZW dictionary (up to lzw$max$bits limit) */
 lzw$add$entry: procedure(prefix, suffix) public;
     declare prefix address;
     declare suffix byte;
+    declare max$entries address;
 
-    if lzw$next$code < 4096 then do;
+    /* Calculate max entries from lzw$max$bits */
+    max$entries = shl(1, lzw$max$bits);
+
+    if lzw$next$code < max$entries then do;
         call writeword(lzw$prefix$ptr + shl(lzw$next$code, 1), prefix);
         lzw$suffix(lzw$next$code) = suffix;
         lzw$next$code = lzw$next$code + 1;

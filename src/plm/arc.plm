@@ -332,13 +332,10 @@ arc$decomp$squashed: procedure byte;
             end;
 
             if not first$flag and prev$code <> 0ffffh and not done then do;
-                /* Limit to 4096 entries due to memory constraints */
-                if lzw$next$code < 4096 then do;
-                    call lzw$add$entry(prev$code, fb);
-                    max$code = shl(1, lzw$code$size) - 1;
-                    if lzw$next$code > max$code and lzw$code$size < 13 then
-                        lzw$code$size = lzw$code$size + 1;
-                end;
+                call lzw$add$entry(prev$code, fb);
+                max$code = shl(1, lzw$code$size) - 1;
+                if lzw$next$code > max$code and lzw$code$size < lzw$max$bits then
+                    lzw$code$size = lzw$code$size + 1;
             end;
 
             prev$code = code;
