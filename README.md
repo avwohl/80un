@@ -578,4 +578,7 @@ Contributions of test files with missing versions/methods are welcome.
 - [upeepz80](https://github.com/avwohl/upeepz80) - Universal peephole optimizer for Z80 compilers
 - [uplm80](https://github.com/avwohl/uplm80) - PL/M-80 compiler targeting Intel 8080 and Zilog Z80 assembly language
 - [z80cpmw](https://github.com/avwohl/z80cpmw) - Z80 CP/M emulator for Windows (RomWBW)
+- [CP/M information archive](https://www.seasip.info/Cpm/) - CP/M documentation
+- [Walnut Creek CP/M CD-ROM](http://www.classiccmp.org/cpmarchives/) - Large CP/M software archive
+- [Fred Jan Kraan's PX-8 Archives](https://electrickery.nl/comp/px8/archs.html) - CP/M decompression utilities including CrLZH samples
 
