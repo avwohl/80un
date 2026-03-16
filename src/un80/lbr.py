@@ -132,8 +132,10 @@ def read_directory(f: BinaryIO) -> list[LbrEntry]:
         raise ValueError("File too small to be an LBR")
 
     dir_entry = parse_entry(first_sector[:ENTRY_SIZE])
-    if not dir_entry.is_directory:
-        raise ValueError("First entry is not a directory entry")
+    if dir_entry.status != STATUS_ACTIVE:
+        raise ValueError("First entry is not a valid directory entry")
+    if dir_entry.length == 0 or dir_entry.length > 32:
+        raise ValueError("Invalid directory size")
 
     dir_sectors = dir_entry.length
     entries_per_sector = SECTOR_SIZE // ENTRY_SIZE
