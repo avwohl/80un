@@ -579,6 +579,7 @@ Contributions of test files with missing versions/methods are welcome.
 - [upeepz80](https://github.com/avwohl/upeepz80) - Peephole optimizer for Z80 compilers that write lowercase Z80 assembly language. It shortens jumps to jr, builds djnz loops, and removes dead stores.
 - [uplm80](https://github.com/avwohl/uplm80) - PL/M-80 compiler for the Z80 processor and CP/M. It writes Intel 8080 and Zilog Z80 assembly language.
 - [z80cpmw](https://github.com/avwohl/z80cpmw) - Z80/CP/M emulator for Windows. It emulates the RomWBW HBIOS interface and boots CP/M from disk images.
+- [z80fpga](https://github.com/avwohl/z80fpga) - Z80 CPU in SystemVerilog for FPGAs, with RomWBW-compatible banked memory. It boots RomWBW and CP/M 2.2 on a Digilent Nexys A7.
 
 ## See Also
 
