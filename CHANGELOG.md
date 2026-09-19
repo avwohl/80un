@@ -3,7 +3,7 @@
 All notable changes to 80un, the unpacker for CP/M compression and packing
 formats, are documented here.
 
-## [Unreleased]
+## [0.3.0] - 2026-09-19
 
 ### Fixed
 
