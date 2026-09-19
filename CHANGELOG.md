@@ -3,6 +3,41 @@
 All notable changes to 80un, the unpacker for CP/M compression and packing
 formats, are documented here.
 
+## [0.3.1] - 2026-09-19
+
+### Changed
+
+`80un.com` and `80unbas.com` are built by plain `make` again, with the released
+toolchain. uplm80 0.3.4 fixes the last of the three code-generation defects
+recorded under 0.3.0 below, so the pin to uplm80 `01cfcc6` is gone. Reproducing
+the committed binaries needs uplm80 `>=0.3.4`; with that, `make` reproduces
+`80un.com` byte for byte.
+
+The committed `80un.com` is byte-exact against the original CP/M UNCR24.COM on
+all 15 single-file crunch and squeeze samples, and reproduces the Python decoders
+on 107 of the 108 sample-corpus members - the exception being the Crunch V1 file,
+which the decoder refuses by design. `80unbas.com` produces output identical to
+the binary committed before.
+
+The last defect was worth recording, because the shape is a trap for any code
+generator: uplm80 parked an array's base address in `DE` and then generated the
+index expression, and an index carrying a 16-bit constant emits `ld de,nn`, so
+the base was destroyed and the closing `add hl,de` added the constant twice.
+`prnt(i + lzh$t) = i` stored to `(i + 629) * 2 + 629` instead of
+`prnt + (i + 629) * 2`. An index of `i` or `i + 1` was unaffected, because
+neither needs `DE`, which is why only `init$tree` and `update$tree` in
+`src/plm/lzh.plm` broke and only CrLZH decoding was wrong.
+
+`make clean` no longer deletes `80unbas.com`. Both `.COM` files are committed
+deliverables, and removing one but not the other left a stale binary looking
+current.
+
+### Known issues
+
+Crunch V1 (siglevel below 0x20) is still not implemented, and input is refused
+with a clear error. UNCR24 handles V1 in a separate routine with a different
+algorithm.
+
 ## [0.3.0] - 2026-09-19
 
 ### Fixed

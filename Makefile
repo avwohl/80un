@@ -54,4 +54,6 @@ test-bas: $(BAS_TARGET)
 	cd tests && $(CPMEMU) 80unbas.cfg PALLOPS.BAS
 
 clean:
-	rm -f *.mac *.rel *.sym 80unbas.com
+	# Both .COM files are committed deliverables, so clean leaves them be;
+	# removing one and not the other left a stale binary looking current.
+	rm -f *.mac *.rel *.sym
