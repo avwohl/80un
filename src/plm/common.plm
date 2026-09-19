@@ -84,6 +84,15 @@ declare lzw$next$code address public;
 declare lzw$code$size byte public;
 declare lzw$max$bits byte public;
 
+/* Crunch dictionary-replacement tables.  Crunch recycles never-referenced
+   entries once all 4096 exist, and it picks the victim by walking the same
+   hash table the compressor used, so the decoder has to keep one too.  These
+   overlay buffers that crunch itself never uses - see the heap layout in
+   main.plm. */
+declare crunch$hash$hi$ptr address public;
+declare crunch$hash$lo$ptr address public;
+declare crunch$used$ptr address public;
+
 /* Ring buffer for CrLZH (4K) */
 declare ring$ptr address public;
 declare ring based ring$ptr (1) byte;

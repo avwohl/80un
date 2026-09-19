@@ -84,7 +84,7 @@ decompress$file: procedure byte;
     inbuf$pos = 0;
     inbuf$end = 0;
     input$limit = 0ffffh;  /* No limit for single file */
-    if not fill$inbuf then return 0;
+    if fill$inbuf = 0 then return 0;
 
     /* Detect compression type */
     if inbuf(0) = magic$sq$hi and inbuf(1) = magic$sq$lo then do;
@@ -335,16 +335,24 @@ main: procedure public;
 
     /* Allocate buffers after program using __END__ (via heap$base)
      * Memory layout (offsets from base):
-     *   IFCB:      36 bytes   (base + 0)
-     *   OFCB:      36 bytes   (base + 36)
-     *   INBUF:     4096 bytes (base + 72)
-     *   OUTBUF:    4096 bytes (base + 4168)
-     *   HUFF_TREE: 1024 bytes (base + 8264)
-     *   LZW_PREFIX:8192 bytes (base + 9288)
-     *   LZW_SUFFIX:4096 bytes (base + 17480)
-     *   RING:      4096 bytes (base + 21576)
-     *   WORK:      4096 bytes (base + 25672)
-     * Total: ~30K from base
+     *   IFCB:       36 bytes    (base + 0)
+     *   OFCB:       36 bytes    (base + 36)
+     *   INBUF:      128 bytes   (base + 72)
+     *   OUTBUF:     128 bytes   (base + 200)
+     *   HUFF_TREE:  1024 bytes  (base + 328)
+     *   RING:       4096 bytes  (base + 1352)
+     *   LZW_PREFIX: 16384 bytes (base + 5448)
+     *   LZW_SUFFIX: 8192 bytes  (base + 21832)
+     *   WORK:       4096 bytes  (base + 30024)
+     * Total: 34120 bytes from base
+     *
+     * HUFF_TREE sits next to RING so that the two form one 5120-byte run.
+     * Crunch needs three tables of its own and there is no spare memory in a
+     * 64K TPA for them, so they overlay buffers no crunch file ever touches:
+     * HUFF_TREE belongs to squeeze and ARC method 4, RING belongs to CrLZH,
+     * and the upper half of LZW_PREFIX only exists because ARC method 9 uses
+     * 8192 entries where crunch uses 4096.  Only one format decompresses at a
+     * time, so nothing that is live is ever aliased.
      */
     base = heap$base;
     ifcb$ptr = base;
@@ -354,10 +362,19 @@ main: procedure public;
     outbuf$ptr = inbuf$ptr + 128;
     outbuf$size = 128;
     huff$tree$ptr = outbuf$ptr + 128;
-    lzw$prefix$ptr = huff$tree$ptr + 1024;
+    ring$ptr = huff$tree$ptr + 1024;
+    lzw$prefix$ptr = ring$ptr + 4096;
     lzw$suffix$ptr = lzw$prefix$ptr + 16384;  /* 8192 entries × 2 for method 9 */
-    ring$ptr = lzw$suffix$ptr + 8192;          /* 8192 entries × 1 for method 9 */
-    work$ptr = ring$ptr + 4096;
+    work$ptr = lzw$suffix$ptr + 8192;          /* 8192 entries × 1 for method 9 */
+
+    /* Crunch-only overlays, all dead while crunch runs:
+     *   hash low bytes  5003 in HUFF_TREE + RING      (5120 available)
+     *   hash high bytes 5003 in LZW_PREFIX + 8192     (8192 available)
+     *   referenced bits  512 right after those        (3189 available)
+     */
+    crunch$hash$lo$ptr = huff$tree$ptr;
+    crunch$hash$hi$ptr = lzw$prefix$ptr + 8192;
+    crunch$used$ptr = crunch$hash$hi$ptr + 5003;
 
     /* Print banner */
     call crlf;
@@ -397,7 +414,7 @@ main: procedure public;
     /* Read first bytes to detect format */
     inbuf$pos = 0;
     inbuf$end = 0;
-    if not fill$inbuf then do;
+    if fill$inbuf = 0 then do;
         call closefile(ifcb$ptr);
         return;
     end;

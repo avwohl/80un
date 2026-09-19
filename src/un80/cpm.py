@@ -24,6 +24,105 @@ BINARY_EXTENSIONS = {
 
 CPM_EOF = 0x1A  # Ctrl-Z
 
+# Characters that must never reach the host filesystem from an archive.  A CP/M
+# directory entry or an embedded name inside a compressed member is arbitrary
+# bytes, so a member can otherwise name a path outside the output directory.
+_UNSAFE_NAME_CHARS = '/\\:*?"<>|'
+
+# Names Windows resolves to a device rather than a file.  Writing a member to
+# 'NUL' discards the contents and reports success, so the name is prefixed.
+_DEVICE_NAMES = frozenset(
+    ['CON', 'PRN', 'AUX', 'NUL']
+    + [f'COM{d}' for d in '123456789']
+    + [f'LPT{d}' for d in '123456789']
+)
+
+# Every common host filesystem stops at 255 bytes for one path component.  An
+# embedded name is arbitrary bytes and can be far longer than a CP/M name, and
+# an over-long one used to abort the whole extraction with a raw OSError.
+_MAX_NAME_BYTES = 255
+
+
+def safe_filename(name: str, fallback: str = 'UNNAMED') -> str:
+    """
+    Reduce an archive member name to a plain filename.
+
+    Every character that is special to a host filesystem is replaced, so the
+    result can never contain a directory separator and therefore can never
+    escape the output directory.  Replacing rather than splitting matters
+    because '/' is an ordinary filename character under CP/M - mouse.lbr holds
+    a member called CCP/M.COM, which becomes CCP_M.COM rather than M.COM.
+    """
+    cleaned = _clean_name(name)
+    if cleaned:
+        return cleaned
+
+    # The fallback is usually another archive-supplied name, so clean it too.
+    return _clean_name(fallback) or 'UNNAMED'
+
+
+def unique_filename(name: str, used: set[str]) -> str:
+    """
+    Make `name` unique among the names already taken, and record the result.
+
+    Sanitising maps two different member names onto one whenever they differ
+    only in a character that safe_filename replaces, and '/' is an ordinary
+    filename character under CP/M, so a collision is routine rather than
+    exotic.  Without this the second member silently overwrites the first while
+    the caller still reports both as extracted.
+
+    Comparison ignores case, because CP/M names are case-insensitive and the
+    host filesystem may be too.
+    """
+    stem, dot, ext = name.rpartition('.')
+    if not dot:
+        stem, ext = name, ''
+    suffix = '.' + ext if ext else ''
+
+    candidate = name
+    counter = 1
+    while candidate.casefold() in used:
+        candidate = f"{stem}_{counter}{suffix}"
+        counter += 1
+
+    used.add(candidate.casefold())
+    return candidate
+
+
+def _clean_name(name: str) -> str:
+    """Replace unsafe characters; return '' for a name that cannot be used."""
+    cleaned = ''.join(
+        '_' if c in _UNSAFE_NAME_CHARS or ord(c) < 0x20 or ord(c) == 0x7F else c
+        for c in name
+    ).strip()
+
+    # '.' and '..' name directories, not files.
+    if set(cleaned) <= {'.'}:
+        return ''
+
+    # Windows drops a trailing dot or space, which would quietly merge two
+    # members onto one name.
+    cleaned = cleaned.rstrip('. ')
+    if not cleaned:
+        return ''
+
+    if cleaned.partition('.')[0].upper() in _DEVICE_NAMES:
+        cleaned = '_' + cleaned
+
+    return _cap_length(cleaned)
+
+
+def _cap_length(name: str) -> str:
+    """Cap the name at _MAX_NAME_BYTES, keeping a short extension intact."""
+    encode = lambda text: text.encode('utf-8', 'surrogateescape')
+    if len(encode(name)) <= _MAX_NAME_BYTES:
+        return name
+
+    stem, dot, ext = name.rpartition('.')
+    suffix = dot + ext if dot and len(encode(ext)) <= 16 else ''
+    head = encode(stem if suffix else name)[:_MAX_NAME_BYTES - len(encode(suffix))]
+    return head.decode('utf-8', 'ignore') + suffix
+
 
 def strip_cpm_eof(data: bytes, *, aggressive: bool = False) -> bytes:
     """

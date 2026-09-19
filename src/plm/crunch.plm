@@ -19,6 +19,19 @@ declare work based work$ptr (1) byte;
 declare work$len address external;
 declare input$limit address external;
 
+/* Crunch dictionary-replacement tables.  See main.plm for where these live:
+   they overlay buffers that no crunch file ever uses. */
+declare crunch$hash$hi$ptr address external;
+declare crunch$hash$hi based crunch$hash$hi$ptr (1) byte;
+declare crunch$hash$lo$ptr address external;
+declare crunch$hash$lo based crunch$hash$lo$ptr (1) byte;
+declare crunch$used$ptr address external;
+declare crunch$used based crunch$used$ptr (1) byte;
+
+declare crunch$hash$size literally '5003';   /* UNCR24 wrap constant 138BH */
+declare hash$base literally '06000H';        /* UNCR24 addresses the table here */
+declare hash$empty literally '080H';         /* slot never written (UNCR24 0549) */
+
 /* Procedures from common.plm and io.plm - visible when compiled together */
 
 /*========================================================
@@ -58,7 +71,7 @@ lzw$output: procedure(code) address public;
     work$len = len;
     do while len > 0;
         len = len - 1;
-        if not rle$decode$byte(work(len)) then
+        if rle$decode$byte(work(len)) = 0 then
             return 0;
     end;
 
@@ -84,7 +97,7 @@ lzw$output$raw: procedure(code) address public;
     work$len = len;
     do while len > 0;
         len = len - 1;
-        if not putbyte(work(len)) then
+        if putbyte(work(len)) = 0 then
             return 0;
     end;
 
@@ -122,6 +135,184 @@ lzw$add$entry: procedure(prefix, suffix) public;
 end lzw$add$entry;
 
 /*========================================================
+ * Crunch Dictionary Replacement (UNCR24 "table full" mode)
+ *
+ * Crunch does not freeze its dictionary when all 4096 entries exist.  It
+ * switches to replacing entries that have never been referenced, and it picks
+ * the victim by walking the same open-addressed hash table the compressor
+ * used.  A decoder that freezes instead loses step with the compressor the
+ * moment the table fills, so everything after that point comes out wrong.
+ *
+ * Two byte arrays hold the hash table (UNCR24 keeps them at 6000H and 7400H)
+ * and a bit array records which codes have been referenced (UNCR24 keeps that
+ * as bit 5 of its prefix table).  Addresses below stay in UNCR24's own 6000H
+ * form so the stride arithmetic reads the same as the Z80 code.
+ *========================================================*/
+
+declare crunch$probe$step address;
+declare crunch$threshold byte;
+declare crunch$state byte;      /* UNCR24 19E6H: 0, 0FEH, 0FFH */
+
+/* Clear the hash table and the referenced bits (UNCR24 0549) */
+init$crunch$hash: procedure;
+    call fillmem(crunch$hash$hi$ptr, crunch$hash$size, hash$empty);
+    call fillmem(crunch$hash$lo$ptr, crunch$hash$size, hash$empty);
+    call fillmem(crunch$used$ptr, 512, 0);
+    crunch$hash$hi(0) = 07fh;   /* 056A: slot 0 must never read as empty */
+end init$crunch$hash;
+
+/* Mark a code as referenced (UNCR24 03BB: SET 5,(HL)) */
+mark$used: procedure(code);
+    declare code address;
+    declare i address;
+
+    i = shr(code, 3);
+    crunch$used(i) = crunch$used(i) or shl(1, low(code) and 7);
+end mark$used;
+
+/* Has this code ever been referenced? (UNCR24 05AB: BIT 5,(HL)) */
+is$used: procedure(code) byte;
+    declare code address;
+    declare i address;
+
+    i = shr(code, 3);
+    if (crunch$used(i) and shl(1, low(code) and 7)) <> 0 then return 1;
+    return 0;
+end is$used;
+
+/* Hash a (prefix, suffix) pair (UNCR24 05D3).  Returns the first probe
+   address and leaves the probe stride in crunch$probe$step. */
+crunch$hash: procedure(prefix, suffix) address;
+    declare prefix address;
+    declare suffix byte;
+    declare addr address;
+    declare lo byte;
+
+    lo = suffix xor high(shl(prefix, 4));                  /* 05D4-05D8 */
+    addr = hash$base + shl(prefix and 0fh, 8) + lo + 1;    /* 05DB-05E0 */
+    crunch$probe$step = addr + 08c75h;                     /* 05E2-05E6 */
+    return addr;
+end crunch$hash;
+
+/* Step to the next slot on a probe chain (UNCR24 058A) */
+crunch$probe: procedure(addr) address;
+    declare addr address;
+
+    addr = addr + crunch$probe$step;
+    if high(addr) < 060h then           /* 058F-0592: dropped below 6000H */
+        addr = addr + crunch$hash$size;
+    return addr;
+end crunch$probe;
+
+/* Record (prefix, suffix) -> lzw$next$code in the hash table (UNCR24 0570).
+   The guard only stops corrupt input from spinning on a full table. */
+crunch$hash$insert: procedure(prefix, suffix);
+    declare prefix address;
+    declare suffix byte;
+    declare (addr, i, guard) address;
+
+    addr = crunch$hash(prefix, suffix);
+    guard = 0;
+    do while guard < crunch$hash$size;
+        i = addr - hash$base;
+        if crunch$hash$hi(i) = hash$empty then do;
+            crunch$hash$hi(i) = high(lzw$next$code);
+            crunch$hash$lo(i) = low(lzw$next$code);
+            return;
+        end;
+        addr = crunch$probe(addr);
+        guard = guard + 1;
+    end;
+end crunch$hash$insert;
+
+/* Reuse a never-referenced entry for (prefix, suffix) (UNCR24 0599).
+   The victim keeps its code number and its hash slot, so the chain stays
+   intact.  A chain that reaches an unused slot first adds nothing at all -
+   that is UNCR24's RZ at 059F. */
+crunch$replace: procedure(prefix, suffix);
+    declare prefix address;
+    declare suffix byte;
+    declare (addr, i, victim, guard) address;
+
+    addr = crunch$hash(prefix, suffix);
+    guard = 0;
+    do while guard < crunch$hash$size;
+        i = addr - hash$base;
+        if crunch$hash$hi(i) = hash$empty then return;      /* 059D-059F */
+        victim = crunch$hash$hi(i);
+        victim = shl(victim, 8) + crunch$hash$lo(i);
+        if victim < 4096 then do;
+            if is$used(victim) = 0 then do;                 /* 05AB */
+                call writeword(lzw$prefix$ptr + shl(victim, 1), prefix);
+                lzw$suffix(victim) = suffix;
+                return;
+            end;
+        end;
+        addr = crunch$probe(addr);
+        guard = guard + 1;
+    end;
+end crunch$replace;
+
+/* Append an entry and advance the code width (UNCR24 041B) */
+crunch$add$entry: procedure(prefix, suffix);
+    declare prefix address;
+    declare suffix byte;
+
+    call crunch$hash$insert(prefix, suffix);    /* 041D, before next$code moves */
+    if lzw$next$code < 4096 then do;
+        call writeword(lzw$prefix$ptr + shl(lzw$next$code, 1), prefix);
+        lzw$suffix(lzw$next$code) = suffix;
+    end;
+    lzw$next$code = lzw$next$code + 1;
+
+    /* 0440: widen the codes, or declare the dictionary full */
+    if high(lzw$next$code + 1) = crunch$threshold then do;
+        crunch$threshold = shl(crunch$threshold, 1);
+        if lzw$code$size >= 12 then          /* 044E: CP 0DH */
+            crunch$state = 0feh;             /* 0456 */
+        else
+            lzw$code$size = lzw$code$size + 1;
+    end;
+end crunch$add$entry;
+
+/* Seed the dictionary AND the hash table exactly as UNCR24 does (0521).
+   The hash seeding matters: it fixes the probe chains, and therefore which
+   entry gets recycled once the table is full. */
+init$crunch$lzw: procedure;
+    declare i address;
+
+    call init$lzw;              /* roots 0..255, lzw$next$code = 260 */
+
+    /* UNCR24 also stores codes 256..259 with prefix 7FFFH */
+    i = 256;
+    do while i < 260;
+        call writeword(lzw$prefix$ptr + shl(i, 1), 07fffh);
+        lzw$suffix(i) = 0;
+        i = i + 1;
+    end;
+
+    call init$crunch$hash;
+
+    lzw$next$code = 0;
+    i = 0;
+    do while i < 256;
+        call crunch$hash$insert(0ffffh, low(i));
+        call mark$used(lzw$next$code);
+        lzw$next$code = lzw$next$code + 1;
+        i = i + 1;
+    end;
+    i = 0;
+    do while i < 4;
+        call crunch$hash$insert(07fffh, 0);
+        call mark$used(lzw$next$code);
+        lzw$next$code = lzw$next$code + 1;
+        i = i + 1;
+    end;
+
+    crunch$state = 0;
+end init$crunch$lzw;
+
+/*========================================================
  * Crunch Decompression
  *========================================================*/
 
@@ -134,7 +325,7 @@ uncrunch: procedure byte public;
     declare checksum address;
     declare done byte;
     declare fb byte;
-    declare max$code address;
+    declare replacing byte;
 
     /* Magic already verified, skip it */
     b = getbyte;  /* 76 */
@@ -165,24 +356,21 @@ uncrunch: procedure byte public;
     end;
 
     /* Initialize LZW and bit reader */
-    call init$lzw;
     call init$bits$msb;
     call init$rle;
 
     lzw$code$size = initial$bits;
     lzw$max$bits = 12;
+    /* UNCR24 compares the high byte of next$code + 1 against a doubling
+       threshold (0440) rather than testing next$code directly. */
+    crunch$threshold = shl(1, initial$bits - 8);
+    call init$crunch$lzw;
     prev$code = 0ffffh;
     first$code$flag = 1;
     done = 0;
+    replacing = 0;
 
-    do while not done and input$avail;
-        /* V2: Increase code size when needed */
-        if is$v2 <> 0 then do;
-            max$code = shl(1, lzw$code$size) - 1;
-            if lzw$next$code = max$code and lzw$code$size < lzw$max$bits then
-                lzw$code$size = lzw$code$size + 1;
-        end;
-
+    do while done = 0 and input$avail <> 0;
         code = read$code$msb(lzw$code$size);
 
         /* Skip filler codes 258, 259 */
@@ -196,17 +384,22 @@ uncrunch: procedure byte public;
             done = 1;
         end;
         else if code = 257 then do;
-            /* Reset dictionary */
-            call init$lzw;
+            /* Reset dictionary (UNCR24 032E) */
             lzw$code$size = initial$bits;
+            crunch$threshold = shl(1, initial$bits - 8);
+            call init$crunch$lzw;
             prev$code = 0ffffh;
             first$code$flag = 1;
+            replacing = 0;
         end;
         else do;
+            /* This code has now been referenced (UNCR24 03BB) */
+            call mark$used(code);
+
             /* Regular code */
             if code < 256 then do;
                 /* Literal byte */
-                if not rle$decode$byte(low(code)) then return 0;
+                if rle$decode$byte(low(code)) = 0 then return 0;
                 fb = low(code);
             end;
             else if code < lzw$next$code then do;
@@ -218,16 +411,27 @@ uncrunch: procedure byte public;
                 /* Special case: code not yet in dictionary */
                 fb = lzw$first$byte(prev$code);
                 if lzw$output(prev$code) = 0 then return 0;
-                if not rle$decode$byte(fb) then return 0;
+                if rle$decode$byte(fb) = 0 then return 0;
             end;
             else do;
                 /* Unknown code - end of data */
                 done = 1;
             end;
 
-            /* Add new dictionary entry */
-            if not first$code$flag and prev$code <> 0ffffh and not done then do;
-                call lzw$add$entry(prev$code, fb);
+            /* Add a new dictionary entry, or recycle one once the table is
+               full (UNCR24 02DB versus 030A) */
+            if first$code$flag = 0 and prev$code <> 0ffffh and done = 0 then do;
+                if replacing <> 0 then
+                    call crunch$replace(prev$code, fb);
+                else do;
+                    call crunch$add$entry(prev$code, fb);
+                    /* 02F9-0308: 0FEH grants one further append, then the
+                       decoder switches to replacement mode for good. */
+                    if crunch$state = 0feh then
+                        crunch$state = 0ffh;
+                    else if crunch$state = 0ffh then
+                        replacing = 1;
+                end;
             end;
 
             prev$code = code;

@@ -182,7 +182,10 @@ emit$token: procedure(tok);
     if tok = 0F4H then do; call emit('*'); prev$tok = '*'; return; end;
     if tok = 0F5H then do; call emit('/'); prev$tok = '/'; return; end;
     if tok = 0F6H then do; call emit('^'); prev$tok = '^'; return; end;
-    if tok = 0FCH then do; call emit('\'); prev$tok = '\'; return; end;
+    /* MBASIC's integer-divide token is a backslash.  Written as 5CH rather
+       than as a character literal because uplm80's lexer takes a backslash
+       inside a literal for an escape introducer and refuses the file. */
+    if tok = 0FCH then do; call emit(5CH); prev$tok = 5CH; return; end;
 
     /* Word operators: space before AND after (numeric tokens don't store spaces) */
     if tok = 0F7H then do; /* AND */
@@ -444,7 +447,7 @@ detok$line: procedure;
     declare n address;
 
     done = 0;
-    do while not done and bas$pos < inbuf$end;
+    do while done = 0 and bas$pos < inbuf$end;
         b = inbuf(bas$pos);
 
         if b = 0 then do;

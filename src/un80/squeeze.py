@@ -20,8 +20,9 @@ Huffman tree:
 
 RLE encoding (RLE90):
 - 0x90 is the escape byte
-- 0x90 0x00 = literal 0x90
-- 0x90 N = repeat previous byte N times (N > 0)
+- 0x90 0x00 = a literal 0x90; the previous byte is left alone
+- 0x90 N (N > 0) = the previous byte occurs N times in TOTAL, so N-1 further
+  copies are emitted - see decode_rle below
 """
 
 import struct
@@ -120,17 +121,20 @@ def decode_rle(data: Iterator[int]) -> bytes:
             try:
                 count = next(data)
             except StopIteration:
-                # Trailing RLE marker, treat as literal
-                result.append(RLE_MARKER)
+                # A marker with no count after it carries no data, so it is
+                # dropped - the CP/M decoders only arm the escape flag and then
+                # run out of input.
                 break
 
             if count == 0:
-                # Literal 0x90
+                # Literal 0x90; the previous byte is left alone
                 result.append(RLE_MARKER)
-                prev_byte = RLE_MARKER
             else:
-                # Repeat previous byte count times
-                result.extend([prev_byte] * count)
+                # The previous byte occurs `count` times in total, and it was
+                # already written when it was read as a literal, so emit
+                # count - 1 further copies.  Confirmed against the 16-bit
+                # checksum in the squeeze header.
+                result.extend([prev_byte] * (count - 1))
         else:
             result.append(byte)
             prev_byte = byte

@@ -222,7 +222,13 @@ def extract_lbr(
         List of (filename, data) tuples for extracted files
     """
     from . import unsqueeze, uncrunch, uncrlzh
-    from .cpm import strip_cpm_eof, crlf_to_lf, is_text_file, detect_compression
+    from .cpm import (
+        strip_cpm_eof, crlf_to_lf, is_text_file, detect_compression,
+        safe_filename, unique_filename,
+    )
+    from .crlzh import CrLZHError
+    from .crunch import CrunchError
+    from .squeeze import SqueezeError
 
     path = Path(path)
     if output_dir:
@@ -230,6 +236,7 @@ def extract_lbr(
         output_dir.mkdir(parents=True, exist_ok=True)
 
     results = []
+    used_names: set[str] = set()
 
     with open(path, 'rb') as f:
         entries = read_directory(f)
@@ -238,27 +245,39 @@ def extract_lbr(
             data = read_member(f, entry)
             filename = entry.filename
 
-            # Optionally decompress
+            # Optionally decompress.  A member that will not decompress is
+            # kept as it was stored, under its directory name, so that one bad
+            # member cannot cost the caller the rest of the archive.
             if decompress and data:
                 compression = detect_compression(data)
-                if compression == 'squeeze':
-                    from .squeeze import get_squeezed_filename
-                    orig_name = get_squeezed_filename(data)
-                    data = unsqueeze(data)
-                    if orig_name:
-                        filename = orig_name
-                elif compression == 'crunch':
-                    from .crunch import get_crunched_filename
-                    orig_name = get_crunched_filename(data)
-                    data = uncrunch(data)
-                    if orig_name:
-                        filename = orig_name
-                elif compression == 'crlzh':
-                    from .crlzh import get_crlzh_filename
-                    orig_name = get_crlzh_filename(data)
-                    data = uncrlzh(data)
-                    if orig_name:
-                        filename = orig_name
+                try:
+                    if compression == 'squeeze':
+                        from .squeeze import get_squeezed_filename
+                        orig_name = get_squeezed_filename(data)
+                        data = unsqueeze(data)
+                        if orig_name:
+                            filename = orig_name
+                    elif compression == 'crunch':
+                        from .crunch import get_crunched_filename
+                        orig_name = get_crunched_filename(data)
+                        data = uncrunch(data)
+                        if orig_name:
+                            filename = orig_name
+                    elif compression == 'crlzh':
+                        from .crlzh import get_crlzh_filename
+                        orig_name = get_crlzh_filename(data)
+                        data = uncrlzh(data)
+                        if orig_name:
+                            filename = orig_name
+                except (SqueezeError, CrunchError, CrLZHError):
+                    data = read_member(f, entry)
+                    filename = entry.filename
+
+            # A name embedded in a compressed member is arbitrary bytes, so it
+            # must not be allowed to name a path of its own.
+            filename = unique_filename(
+                safe_filename(filename, fallback=entry.filename), used_names
+            )
 
             # Optionally convert text files
             if convert_text and is_text_file(filename):

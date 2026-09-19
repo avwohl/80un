@@ -342,6 +342,15 @@ CrLZH uses a complex LZSS algorithm with adaptive Huffman coding. If decompressi
 
 Some very old archives don't store original filenames. The tool will use the archive member name with the compression indicator removed.
 
+A crunched file may store a note after its name, as in `MOUSE.MAC[04/01/87]` or
+`COMMON.LIB[ V2.4 INCLUDE FILE]`. The note is not part of the name and is
+dropped; read it with `get_crunch_info()` or `CrunchHeader.note`.
+
+A CP/M filename may contain characters that a host filesystem treats as special,
+`/` in particular, which is an ordinary filename character under CP/M.  Those
+characters are replaced with `_`, so a member called `CCP/M.COM` extracts as
+`CCP_M.COM`.
+
 ### Duplicate filenames in archive
 
 Some archives contain multiple files with the same name (e.g., from different directories that CP/M flattened). When this happens, 80un automatically renames duplicates by appending `_1`, `_2`, etc.:
@@ -549,12 +558,18 @@ The test suite needs additional sample files to achieve complete coverage:
 
 | Format | What's Tested | What's Missing |
 |--------|---------------|----------------|
-| **Squeeze** | ✅ Complete | - |
-| **Crunch** | ✅ V2.x (siglevel ≥ 0x20) | V1.x samples (fixed 12-bit codes) |
+| **Squeeze** | ✅ Complete, checked against the header checksum | - |
+| **Crunch** | ✅ V2.x (siglevel ≥ 0x20), byte for byte against UNCR24.COM | V1.x (fixed 12-bit codes) is a different algorithm and is not decoded |
 | **CrLZH** | ✅ V1.x and V2.0 | - |
-| **ARC** | ✅ Methods 2, 3, 8, 9 | Methods 1, 4-7 (stored old, squeezed, old crunched) |
+| **ARC** | ✅ Methods 2, 3, 8, 9, checked against each member's CRC-16 | Methods 1, 4-7 (stored old, squeezed, old crunched); two method 8 members still fail their CRC |
 | **LBR** | ✅ Archive with nested compression | - |
 | **MBASIC** | ✅ Standard (0xFF) and Protected (0xFE) | - |
+
+Crunch expectations are ground truth rather than recorded behaviour:
+`tests/samples/lbr/mouse.lbr` carries `UNCR24.COM`, the original CP/M
+uncruncher, so the expected output is what that program produces when run under
+cpmemu. ARC and squeeze are checked against the CRC-16 and the 16-bit checksum
+those formats already store.
 
 Use `-v` with `-l` to check file versions: `80un file.czm -l -v`
 

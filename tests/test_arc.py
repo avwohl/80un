@@ -112,3 +112,57 @@ class TestARC:
         # Extract - 13-bit LZW decompression should work
         results = extract_arc(sample, None)
         assert len(results) > 0
+
+
+def crc16_arc(data: bytes) -> int:
+    """The CRC-16 (reflected, poly 0xA001) that every ARC member header carries."""
+    crc = 0
+    for byte in data:
+        crc ^= byte
+        for _ in range(8):
+            crc = (crc >> 1) ^ 0xA001 if crc & 1 else crc >> 1
+    return crc
+
+
+def _members(sample: Path):
+    """Yield (entry, decompressed_bytes) for every member of an ARC archive."""
+    from un80.arc import parse_header, decompress_member
+
+    raw = sample.read_bytes()
+    with open(sample, 'rb') as f:
+        while True:
+            entry = parse_header(f)
+            if entry is None:
+                break
+            chunk = raw[entry.data_offset:entry.data_offset + entry.compressed_size]
+            yield entry, decompress_member(entry, chunk)
+            f.seek(entry.data_offset + entry.compressed_size)
+
+
+class TestArcChecksums:
+    """
+    Validate decompression against the CRC-16 stored in each member header.
+
+    This is the archive's own integrity check, so it is ground truth rather than
+    a recording of current behaviour.  It is what proves RLE90's `0x90 N` count
+    is a total (N-1 further copies) and not an addition: with the off-by-one,
+    only 8 of these 48 members validate.
+    """
+
+    # Every member of every sample validates; nothing is excused.
+    @pytest.mark.parametrize("name", sorted(p.name for p in SAMPLES_DIR.glob('*')))
+    def test_member_crcs(self, name):
+        sample = SAMPLES_DIR / name
+        if not sample.exists():
+            pytest.skip(f"{name} sample not available")
+
+        checked = 0
+        for entry, data in _members(sample):
+            checked += 1
+            assert len(data) == entry.original_size, (
+                f"{name}:{entry.filename} method {entry.method} wrong length"
+            )
+            assert crc16_arc(data) == entry.crc, (
+                f"{name}:{entry.filename} method {entry.method} CRC mismatch"
+            )
+        assert checked > 0

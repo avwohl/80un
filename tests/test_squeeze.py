@@ -55,3 +55,27 @@ class TestSqueeze:
         """Verify squeeze magic constant."""
         from un80.squeeze import SQUEEZE_MAGIC
         assert SQUEEZE_MAGIC == 0x76FF
+
+
+class TestSqueezeChecksum:
+    """
+    Validate against the 16-bit checksum in the squeeze header.
+
+    The checksum is the sum of the decoded bytes, so it catches the RLE90
+    off-by-one directly: emitting `count` copies instead of `count - 1` makes
+    both samples come out too long and the sum wrong.
+    """
+
+    @pytest.mark.parametrize("name", ["555-ic.bqs", "mbastip.tqt"])
+    def test_checksum(self, name):
+        import struct
+
+        sample = SAMPLES_DIR / name
+        if not sample.exists():
+            pytest.skip(f"{name} sample not available")
+
+        data = sample.read_bytes()
+        expected = struct.unpack('<H', data[2:4])[0]
+        result = unsqueeze(data)
+
+        assert sum(result) & 0xFFFF == expected

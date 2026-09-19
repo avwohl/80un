@@ -411,7 +411,7 @@ uncrlzh: procedure byte public;
 
         if c < 256 then do;
             /* Literal byte */
-            if not putbyte(low(c)) then return 0;
+            if putbyte(low(c)) = 0 then return 0;
             lzh$ring(lzh$ring$pos) = low(c);
             lzh$ring$pos = (lzh$ring$pos + 1) and lzh$n$mask;
         end;
@@ -435,7 +435,7 @@ uncrlzh: procedure byte public;
             /* Copy from ring buffer */
             do i = 0 to low(match$len) - 1;
                 b = lzh$ring(src);
-                if not putbyte(b) then return 0;
+                if putbyte(b) = 0 then return 0;
                 lzh$ring(lzh$ring$pos) = b;
                 lzh$ring$pos = (lzh$ring$pos + 1) and lzh$n$mask;
                 src = (src + 1) and lzh$n$mask;

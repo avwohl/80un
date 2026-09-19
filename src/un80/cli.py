@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
-from .cpm import detect_compression, strip_cpm_eof, crlf_to_lf
+from .cpm import detect_compression, strip_cpm_eof, crlf_to_lf, safe_filename
 from .lbr import list_lbr, extract_lbr
 from .arc import list_arc, extract_arc
 from .squeeze import unsqueeze, get_squeezed_filename
@@ -64,18 +64,20 @@ def get_output_filename(path: Path, compression: str) -> str:
     with open(path, 'rb') as f:
         data = f.read()
 
+    # The embedded name is arbitrary bytes, so it must not be allowed to name a
+    # path of its own.
     if compression == 'squeeze':
         name = get_squeezed_filename(data)
         if name:
-            return name
+            return safe_filename(name, fallback=path.stem + '.out')
     elif compression == 'crunch':
         name = get_crunched_filename(data)
         if name:
-            return name
+            return safe_filename(name, fallback=path.stem + '.out')
     elif compression == 'crlzh':
         name = get_crlzh_filename(data)
         if name:
-            return name
+            return safe_filename(name, fallback=path.stem + '.out')
 
     # Reconstruct from extension
     stem = path.stem

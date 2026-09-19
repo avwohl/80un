@@ -3,6 +3,178 @@
 All notable changes to 80un, the unpacker for CP/M compression and packing
 formats, are documented here.
 
+## [Unreleased]
+
+### Fixed
+
+RLE90 emitted one byte too many for every run. `90 N` means the previous byte
+occurs N times in TOTAL, so only N-1 further copies belong in the output - the
+previous byte was already written when the previous byte was read as a literal.
+The decoders emitted N, which added one spurious byte per run, in practice from
+around output byte 72 of every affected file. `90 00`, which is a literal `90`,
+also wrongly set the previous-byte register; `90 00` must leave the previous-byte
+register alone. Both rules come straight from GEL Uncruncher v2.4 (`DEC A` at
+04AF, and the 04BF path that does not touch the previous-byte register).
+
+A `90` with no count byte after it is now dropped rather than written out as a
+literal. UNCR24 only arms its escape flag and then runs out of input, so UNCR24
+writes nothing; running UNCR24 on `A 90` under cpmemu produces just `A`.
+
+One difference from UNCR24 is deliberate. UNCR24 decrements the count into the
+Z80 `B` register and then runs a do-while loop, so `90 01` underflows to 256
+copies: running UNCR24 on `A 90 01` produces 257 bytes. No encoder emits `90 01`
+- a run of one is simply a literal - and reproducing the underflow would turn
+three bytes into 257, so `90 01` emits nothing here, which is what the count
+actually means.
+
+The same off-by-one was present in every RLE90 decoder that the build uses, and
+all of the decoders are fixed: `src/un80/crunch.py`, `src/un80/arc.py`,
+`src/un80/squeeze.py`, and on the CP/M side `rle$decode$byte` in `src/plm/io.plm`
+(shared by crunch, squeeze and ARC) and `arc$decomp$rle` in `src/plm/arc.plm`.
+The two copies in `src/plm/archive/80un.plm` are left alone; that file predates
+the split into modules and nothing builds that file. Two independent oracles
+confirm the correction rather than just the samples: the CRC-16 that each ARC
+member header carries over its uncompressed contents goes from 8 of 48 members
+valid to 46 of 48, and both squeeze samples now reproduce the 16-bit checksum
+stored in their headers exactly.
+
+ARC methods 8 and 9 lost the stream at the first code after a CLEAR. ARC packs
+LZW codes eight at a time, so one block is `code_size` bytes, and the encoder
+pads the block out before starting again at 9 bits; a decoder that reads straight
+on takes the padding for data. Both implementations are fixed,
+`decompress_lzw_arc8` and the method 9 decoder in `src/un80/arc.py` and
+`arc$decomp$lzw8` and `arc$decomp$squashed` in `src/plm/arc.plm`. Discarding the
+padding takes the ARC corpus from 46 of 48 members CRC-valid to all 48, which
+retires the two method 8 failures that this file previously recorded as a known
+issue. `CPKERM.DOC`, the larger of the two, now reproduces its stored CRC of
+0xA4B4 under cpmemu as well as in Python. Only CLEAR needs the
+alignment. A code-size increase is already aligned, because the increase happens
+after exactly `2**code_size - 256` codes, and that count is a multiple of 8 for
+every code size from 9 up - measured across the corpus, a growth-point alignment
+would discard nothing at all 98 growth points.
+
+Crunch froze its LZW dictionary once the dictionary held 4096 entries. CRUNCH
+does not freeze - once the table is full CRUNCH switches to a second mode that
+*replaces* entries which have never been referenced, choosing the victim by
+walking the same open-addressed hash table the compressor used. A decoder that
+freezes instead desynchronises from the compressor at the moment the table fills,
+so everything after that point is corrupt. `src/un80/crunch.py` now implements
+the replacement mode: the 5003-slot hash table, the `(prefix, suffix)` hash and
+its probe stride, the "referenced" flag bit, and the one extra append that
+happens between the table filling and replacement starting. `src/plm/crunch.plm`
+implements the same mode for CP/M, with the tables declared in
+`src/plm/common.plm` and given storage in `src/plm/main.plm`. Every routine
+carries the UNCR24 address the routine was taken from.
+
+The crunch decoder's "entry does not exist" guard never fired. The caller marks a
+code as referenced before decoding the code, and the referenced bit and the
+"slot empty" marker are different bits of the same flag byte, so a code naming an
+entry that was never created read as a single-byte entry: the decoder emitted a
+NUL and carried on instead of stopping on a corrupt or truncated stream. 61 of
+the 62 bytes that `tests/samples/crunch/zex-sage.dzc` used to produce were that
+artefact.
+
+Crunch V1 input is refused rather than decoded wrongly. V1 carries a siglevel
+below 0x20 and uses a different algorithm, which UNCR24 handles in a separate
+routine. Running the V2 decoder over V1 input produced a short run of rubbish and
+reported success, so `un80 zex-sage.dzc` wrote a 62-byte file and said nothing
+was wrong. `uncrunch` now raises `CrunchError`.
+
+The embedded filename in a crunch header may carry a free-form note, as in
+`MOUSE.MAC[04/01/87]` or `COMMON.LIB[ V2.4 INCLUDE FILE]`. The note was being
+treated as part of the filename, and because these notes usually contain a date
+with slashes in the date, extracting an archive whose members carry a note failed
+outright with `No such file or directory`. `parse_header` now ends the filename
+at the `[`, as UNCR24 does, reports the remainder as `CrunchHeader.note`, and
+stops scanning for the terminator past 128 bytes rather than following a corrupt
+header as far as the file goes.
+
+Names taken from an archive went into a filesystem path unchecked. A member could
+therefore name a path outside the output directory. `un80.cpm.safe_filename` now
+replaces every character that is special to a host filesystem, and LBR, ARC and
+the single-file decompress path all run member names through `safe_filename`. The
+characters are replaced rather than split on, because `/` is an ordinary filename
+character under CP/M: `mouse.lbr` holds a member called `CCP/M.COM`, which now
+extracts as `CCP_M.COM` instead of losing everything before the slash.
+
+Replacing characters creates collisions of its own, and three further hazards
+around member names are handled with it. Two members whose names differ only in a
+replaced character now map to one name, so extraction de-duplicates and the name
+reported back to the caller is the name actually written; before, the second
+member silently overwrote the first while both members were reported as
+extracted. An embedded name is arbitrary bytes and can be far longer than a CP/M
+name, so a name is capped at 255 bytes with its extension kept - an over-long
+name used to abort the whole extraction part-way with a bare `OSError`. A name
+that Windows resolves to a device, such as `NUL` or `PRN.TXT`, is prefixed, and a
+trailing dot or space is dropped, because Windows drops a trailing dot itself and
+would merge two members onto one name.
+
+One member that cannot be decompressed no longer costs the caller the rest of the
+archive. `extract_lbr` keeps such a member as stored, under the name in the LBR
+directory, the way `extract_arc` already did.
+
+`make` builds both programs again. MBASIC's integer-divide token is a backslash,
+and `src/plm/bas.plm` wrote the backslash as a character literal, which the
+current uplm80 lexer takes for an escape introducer and rejects, so `make`
+stopped with a lexical error after building `80un.com`. The literal is written as
+`5CH` instead, and `80unbas.com` produces byte-identical output.
+
+### Added
+
+`tests/samples/lbr/mouse.lbr`, the archive from issue #2, as a regression case.
+The archive is a good one: `MOUSE.MZC` fills the dictionary early, `COCONUT.MZE`
+fills the dictionary only 181 bytes before the end, and the archive carries
+`UNCR24.COM` itself, so the expected output is produced by the original CP/M
+uncruncher running under cpmemu rather than recorded from this decoder. All 14
+crunched members, plus `COMMON.LZB` which recycles 7177 entries, now decode byte
+for byte as UNCR24 decodes them.
+
+Checksum-based tests for ARC and squeeze that validate against the CRC-16 and the
+header checksum the formats already carry. Every member of every ARC sample is
+checked, with no exclusions.
+
+Unit tests for RLE90's exact semantics and for filename sanitisation, including
+the cases sanitising creates: Windows device names, trailing dots, over-long
+names, and two members that sanitise to one name. A crafted LBR holding a Crunch
+V1 member checks that one unusable member does not stop the extraction.
+
+A reset-code test that a broken reset fails. The previous test passed with the
+whole reset handler replaced by `continue`, so the entire reset path was
+untested; the replacement checks that dictionary numbering really restarts.
+
+### Known issues
+
+Crunch V1 (siglevel below 0x20) is not implemented. Input is now refused with a
+clear error instead of decoded wrongly. UNCR24 handles V1 in a separate routine
+with a different algorithm.
+
+The released uplm80 0.3.2 miscompiles this program, so the `80UN.COM` that `make`
+produces is wrong even though the PL/M sources are right. Three separate
+code-generation defects are involved, all of them in the compiler:
+
+* a BYTE `>` comparison used as a value leaves the left operand in the
+  accumulator on the false path instead of zero, so a false `>` reads as true;
+* `_gen_byte_binary` parks one operand of an `AND` or `OR` in register `B` while
+  generating the other operand, and the other operand can overwrite `B`;
+* uplm80 `bdb0f8a` "Implement register tracking phases 3-5" breaks CrLZH.
+
+The first two defects became reachable at uplm80 `273c83a`, which correctly made
+PL/M-80's `AND` and `OR` bitwise rather than short-circuit; both defects are
+latent in every earlier commit as well, and standalone PL/M programs demonstrate
+both under the older compiler too. The result under 0.3.2 is a binary that
+decodes all 15 single-file crunch and squeeze samples byte-exactly against
+UNCR24, yet truncates every compressed ARC or LBR member to one 128-byte record,
+rejects `mouse.lbr` outright as invalid, and decodes CrLZH wrongly. Building the
+same sources with uplm80 `01cfcc6` gives a binary that is byte-exact on all 15
+single-file samples and reproduces the Python decoders on 107 of the 108 corpus
+members; the remaining member is the Crunch V1 file above.
+
+The committed `80un.com` and `80unbas.com` are therefore built with uplm80
+`01cfcc6` rather than with the released 0.3.2, and plain `make` will not
+reproduce either binary until uplm80 is fixed. `80un.com` is the 107 of 108
+binary described above. `80unbas.com` produces output identical to the binary
+committed before this change.
+
 ## [0.2.4] - 2026-08-20
 
 Version 0.2.3 was bumped in `pyproject.toml` but never uploaded to PyPI and

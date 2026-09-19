@@ -50,6 +50,7 @@ extract$lbr: procedure byte public;
     declare result byte;
     declare dir$sectors byte;
     declare k byte;
+    declare b byte;
     declare entry$num address;
     declare max$entries address;
     declare sectors$left address;
@@ -138,11 +139,20 @@ extract$lbr: procedure byte public;
                 member$index = ent(12) + shl(ent(13), 8);
                 member$length = ent(14) + shl(ent(15), 8);
 
-                /* Set up output FCB */
+                /* Set up output FCB.  An LBR directory entry is arbitrary
+                   bytes, and CP/M refuses to create a file whose name holds a
+                   delimiter, so map those to '_' rather than lose the member.
+                   mouse.lbr carries CCP/M.COM and CCP/M.LTR, which used to be
+                   skipped with a file creation error. */
                 call fillmem(ofcb$ptr, 36, 0);
                 k = 1;
                 do while k <= 11;
-                    ofcb(k) = ent(k) and 07fh;
+                    b = ent(k) and 07fh;
+                    if b < ' ' or b = '/' or b = ':' or b = '.' or b = ';' or
+                       b = '=' or b = ',' or b = '[' or b = ']' or b = '<' or
+                       b = '>' or b = '*' or b = '?' or b = '|' or b = 07fh then
+                        b = '_';
+                    ofcb(k) = b;
                     k = k + 1;
                 end;
 
@@ -176,7 +186,7 @@ extract$lbr: procedure byte public;
                             inbuf$pos = 0;
                             inbuf$end = 0;
                             input$limit = 0ffffh;  /* No byte limit for LBR members */
-                            if not fill$inbuf then do;
+                            if fill$inbuf = 0 then do;
                                 call closefile(ofcb$ptr);
                                 call crlf;
                             end;

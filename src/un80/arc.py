@@ -168,7 +168,20 @@ class BitReader:
 
 
 def decode_rle(data: bytes) -> bytes:
-    """Decode RLE90-encoded data."""
+    """
+    Decode RLE90-encoded data.
+
+    0x90 N means the previous byte occurs N times in total, so only N-1 further
+    copies are emitted - the previous byte was already written when it was read
+    as a literal.  0x90 0x00 is a literal 0x90 and leaves the previous byte
+    alone.  A 0x90 with no count after it is dropped.  The N-1 rule is
+    confirmed by the CRC-16 each ARC member header carries over its
+    uncompressed contents.  The other two rules are carried over from CRUNCH,
+    where UNCR24 settles them (see un80.crunch.decode_rle); the ARC samples
+    cannot decide them, because across all 48 members `90 00` occurs 151 times
+    and is never once followed by `90 N`.  `90 01` emits nothing, for the same
+    reason and with the same caveat: no sample contains one.
+    """
     result = bytearray()
     prev = 0
     i = 0
@@ -179,15 +192,13 @@ def decode_rle(data: bytes) -> bytes:
 
         if byte == 0x90:
             if i >= len(data):
-                result.append(0x90)
                 break
             count = data[i]
             i += 1
             if count == 0:
                 result.append(0x90)
-                prev = 0x90
             else:
-                result.extend([prev] * count)
+                result.extend([prev] * (count - 1))
         else:
             result.append(byte)
             prev = byte
@@ -278,20 +289,44 @@ def decompress_lzw_arc8(data: bytes) -> bytes:
 
     prev_string = b''
     first = True
+    codes_in_block = 0
+
+    def skip_rest_of_block() -> None:
+        """
+        Discard the padding that follows a CLEAR code.
+
+        ARC packs codes eight at a time, so one block is `code_size` bytes, and
+        the encoder pads the block out before it starts over at 9 bits.  A
+        decoder that reads straight on takes that padding for data and loses
+        the stream at the very first code after the CLEAR.
+
+        Only CLEAR needs this.  A code-size increase is already block-aligned:
+        it happens when `next_code` passes `2**code_size - 1`, which is after
+        exactly `2**code_size - 256` codes, and that is a multiple of 8 for
+        every code_size from 9 up.
+        """
+        for _ in range((8 - codes_in_block % 8) % 8):
+            try:
+                bits.read_bits(code_size)
+            except ArcError:
+                return
 
     while True:
         try:
             code = bits.read_bits(code_size)
         except ArcError:
             break
+        codes_in_block += 1
 
         if code == CLEAR_CODE:
+            skip_rest_of_block()
             dictionary = {i: bytes([i]) for i in range(256)}
             code_size = 9
             next_code = FIRST_CODE
             max_code_for_size = (1 << code_size) - 1
             prev_string = b''
             first = True
+            codes_in_block = 0
             continue
 
         # Decode
@@ -440,18 +475,28 @@ def decompress_member(entry: ArcEntry, data: bytes) -> bytes:
         next_code = FIRST_CODE
         prev_string = b''
         first = True
+        codes_in_block = 0
 
         while True:
             try:
                 code = bits.read_bits(code_size)
             except ArcError:
                 break
+            codes_in_block += 1
             if code == CLEAR_CODE:
+                # Same eight-code block padding as method 8; see
+                # skip_rest_of_block in decompress_lzw_arc8.
+                for _ in range((8 - codes_in_block % 8) % 8):
+                    try:
+                        bits.read_bits(code_size)
+                    except ArcError:
+                        break
                 dictionary = {i: bytes([i]) for i in range(256)}
                 code_size = 9
                 next_code = FIRST_CODE
                 prev_string = b''
                 first = True
+                codes_in_block = 0
                 continue
             if code < 256:
                 string = bytes([code])
@@ -514,7 +559,9 @@ def extract_arc(
     Returns:
         List of (filename, data) tuples for extracted files
     """
-    from .cpm import strip_cpm_eof, crlf_to_lf, is_text_file
+    from .cpm import (
+        strip_cpm_eof, crlf_to_lf, is_text_file, safe_filename, unique_filename,
+    )
 
     path = Path(path)
     if output_dir:
@@ -522,6 +569,7 @@ def extract_arc(
         output_dir.mkdir(parents=True, exist_ok=True)
 
     results = []
+    used_names: set[str] = set()
 
     with open(path, 'rb') as f:
         while True:
@@ -539,7 +587,9 @@ def extract_arc(
                 # Store raw data if decompression fails
                 data = compressed_data
 
-            filename = entry.filename
+            # An ARC member name is arbitrary bytes, so it must not be allowed
+            # to name a path of its own.
+            filename = unique_filename(safe_filename(entry.filename), used_names)
 
             # Optionally convert text files
             if convert_text and is_text_file(filename):

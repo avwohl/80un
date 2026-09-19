@@ -45,7 +45,7 @@ arc$decomp$stored: procedure(size$lo, size$hi) byte;
     /* First process size$lo bytes */
     do while size$lo <> 0;
         b = getbyte;
-        if not putbyte(b) then return 0;
+        if putbyte(b) = 0 then return 0;
         size$lo = size$lo - 1;
     end;
 
@@ -55,12 +55,12 @@ arc$decomp$stored: procedure(size$lo, size$hi) byte;
         i = 1;  /* Start at 1 so we can check for wrap to 0 */
         do while i <> 0;
             b = getbyte;
-            if not putbyte(b) then return 0;
+            if putbyte(b) = 0 then return 0;
             i = i + 1;  /* Wraps from 0xFFFF to 0 after 65535 iterations */
         end;
         /* Process one more byte to complete 65536 */
         b = getbyte;
-        if not putbyte(b) then return 0;
+        if putbyte(b) = 0 then return 0;
         size$hi = size$hi - 1;
     end;
 
@@ -78,26 +78,28 @@ arc$decomp$rle: procedure(size) byte;
         size = size - 1;
 
         if b = rle$marker then do;
-            if size = 0 then do;
-                if not putbyte(rle$marker) then return 0;
-            end;
-            else do;
+            /* A marker with no count byte after it carries no data, so it is
+               dropped - the same as rle$decode$byte and UNCR24 do */
+            if size <> 0 then do;
                 cnt = getbyte;
                 size = size - 1;
                 if cnt = 0 then do;
-                    if not putbyte(rle$marker) then return 0;
-                    prev = rle$marker;
+                    /* Literal 090H; the previous byte is left alone */
+                    if putbyte(rle$marker) = 0 then return 0;
                 end;
                 else do;
+                    /* CNT counts the previous byte's TOTAL occurrences, and it
+                       was already written once, so emit CNT-1 further copies */
+                    cnt = cnt - 1;
                     do while cnt > 0;
-                        if not putbyte(prev) then return 0;
+                        if putbyte(prev) = 0 then return 0;
                         cnt = cnt - 1;
                     end;
                 end;
             end;
         end;
         else do;
-            if not putbyte(b) then return 0;
+            if putbyte(b) = 0 then return 0;
             prev = b;
         end;
     end;
@@ -130,7 +132,7 @@ arc$decomp$squeezed: procedure byte;
 
     /* Decode symbols */
     done = 0;
-    do while not done and input$avail;
+    do while done = 0 and input$avail <> 0;
         node = 0;
         do while node < huff$nodes;
             p = huff$tree$ptr + shl(low(node), 2);
@@ -144,7 +146,7 @@ arc$decomp$squeezed: procedure byte;
                 if symbol = 256 then
                     done = 1;
                 else do;
-                    if not rle$decode$byte(low(symbol)) then return 0;
+                    if rle$decode$byte(low(symbol)) = 0 then return 0;
                 end;
                 node = huff$nodes;
             end;
@@ -167,44 +169,59 @@ arc$decomp$lzw56: procedure(with$rle) byte;
     call init$lzw;
     lzw$next$code = 256;  /* Old format starts at 256 */
     call init$bits$msb;
-    if with$rle then call init$rle;
+    /* Always reset the RLE state, even for method 5.  Leaving it alone let a
+       half-finished escape from the previous member leak into this one. */
+    call init$rle;
 
     prev$code = 0ffffh;
     first$flag = 1;
     done = 0;
 
-    do while not done and input$avail;
+    do while done = 0 and input$avail <> 0;
         code = read$code$msb(12);
 
         if code < 256 then do;
             if with$rle then do;
-                if not rle$decode$byte(low(code)) then return 0;
+                if rle$decode$byte(low(code)) = 0 then return 0;
             end;
             else do;
-                if not putbyte(low(code)) then return 0;
+                if putbyte(low(code)) = 0 then return 0;
             end;
             fb = low(code);
         end;
         else if code < lzw$next$code then do;
             fb = lzw$first$byte(code);
-            /* Output string - uses RLE internally if enabled */
-            call lzw$output(code);
+            /* Method 5 has no RLE layer, so its dictionary strings must go
+               out raw.  Literals below already honour WITH$RLE; routing the
+               strings through lzw$output regardless meant a 0x90 inside a
+               dictionary string armed the escape and swallowed the next byte. */
+            if with$rle then do;
+                if lzw$output(code) = 0 then return 0;
+            end;
+            else do;
+                if lzw$output$raw(code) = 0 then return 0;
+            end;
         end;
         else if code = lzw$next$code and prev$code <> 0ffffh then do;
             fb = lzw$first$byte(prev$code);
-            call lzw$output(prev$code);
             if with$rle then do;
-                if not rle$decode$byte(fb) then return 0;
+                if lzw$output(prev$code) = 0 then return 0;
             end;
             else do;
-                if not putbyte(fb) then return 0;
+                if lzw$output$raw(prev$code) = 0 then return 0;
+            end;
+            if with$rle then do;
+                if rle$decode$byte(fb) = 0 then return 0;
+            end;
+            else do;
+                if putbyte(fb) = 0 then return 0;
             end;
         end;
         else do;
             done = 1;
         end;
 
-        if not first$flag and prev$code <> 0ffffh and not done then do;
+        if first$flag = 0 and prev$code <> 0ffffh and done = 0 then do;
             if lzw$next$code < 4096 then
                 call lzw$add$entry(prev$code, fb);
         end;
@@ -222,6 +239,7 @@ arc$decomp$lzw8: procedure byte;
     declare (first$flag, done) byte;
     declare fb byte;
     declare max$code address;
+    declare (codes$in$block, pad) byte;
 
     /* First byte is max bits */
     lzw$max$bits = getbyte;
@@ -237,21 +255,38 @@ arc$decomp$lzw8: procedure byte;
     prev$code = 0ffffh;
     first$flag = 1;
     done = 0;
+    codes$in$block = 0;
 
-    do while not done and input$avail;
+    do while done = 0 and input$avail <> 0;
         code = read$bits$lsb(lzw$code$size);
+        codes$in$block = codes$in$block + 1;
 
         if code = 256 then do;
+            /* ARC packs codes eight at a time, so one block is
+               LZW$CODE$SIZE bytes, and the encoder pads the block out before
+               starting again at 9 bits.  Reading straight on takes the padding
+               for data and loses the stream at the first code after the CLEAR.
+               A code size increase needs no alignment: the increase happens
+               after exactly 2**LZW$CODE$SIZE - 256 codes, which is a multiple
+               of 8 for every code size from 9 up.  CODES$IN$BLOCK may wrap at
+               256, and 256 is a multiple of 8, so wrapping does not disturb
+               the count. */
+            pad = (8 - (codes$in$block and 7)) and 7;
+            do while pad <> 0;
+                code = read$bits$lsb(lzw$code$size);
+                pad = pad - 1;
+            end;
             /* Clear code */
             call init$lzw;
             lzw$next$code = 257;
             lzw$code$size = 9;
             prev$code = 0ffffh;
             first$flag = 1;
+            codes$in$block = 0;
         end;
         else do;
             if code < 256 then do;
-                if not rle$decode$byte(low(code)) then return 0;
+                if rle$decode$byte(low(code)) = 0 then return 0;
                 fb = low(code);
             end;
             else if code < lzw$next$code then do;
@@ -261,13 +296,13 @@ arc$decomp$lzw8: procedure byte;
             else if code = lzw$next$code and prev$code <> 0ffffh then do;
                 fb = lzw$first$byte(prev$code);
                 if lzw$output(prev$code) = 0 then return 0;
-                if not rle$decode$byte(fb) then return 0;
+                if rle$decode$byte(fb) = 0 then return 0;
             end;
             else do;
                 done = 1;
             end;
 
-            if not first$flag and prev$code <> 0ffffh and not done then do;
+            if first$flag = 0 and prev$code <> 0ffffh and done = 0 then do;
                 if lzw$next$code < shl(1, lzw$max$bits) then do;
                     call lzw$add$entry(prev$code, fb);
                     /* Increase code size when needed */
@@ -291,6 +326,7 @@ arc$decomp$squashed: procedure byte;
     declare (first$flag, done) byte;
     declare fb byte;
     declare max$code address;
+    declare (codes$in$block, pad) byte;
 
     call init$lzw;
     lzw$next$code = 257;
@@ -301,21 +337,38 @@ arc$decomp$squashed: procedure byte;
     prev$code = 0ffffh;
     first$flag = 1;
     done = 0;
+    codes$in$block = 0;
 
-    do while not done and input$avail;
+    do while done = 0 and input$avail <> 0;
         code = read$bits$lsb(lzw$code$size);
+        codes$in$block = codes$in$block + 1;
 
         if code = 256 then do;
+            /* ARC packs codes eight at a time, so one block is
+               LZW$CODE$SIZE bytes, and the encoder pads the block out before
+               starting again at 9 bits.  Reading straight on takes the padding
+               for data and loses the stream at the first code after the CLEAR.
+               A code size increase needs no alignment: the increase happens
+               after exactly 2**LZW$CODE$SIZE - 256 codes, which is a multiple
+               of 8 for every code size from 9 up.  CODES$IN$BLOCK may wrap at
+               256, and 256 is a multiple of 8, so wrapping does not disturb
+               the count. */
+            pad = (8 - (codes$in$block and 7)) and 7;
+            do while pad <> 0;
+                code = read$bits$lsb(lzw$code$size);
+                pad = pad - 1;
+            end;
             /* Clear */
             call init$lzw;
             lzw$next$code = 257;
             lzw$code$size = 9;
             prev$code = 0ffffh;
             first$flag = 1;
+            codes$in$block = 0;
         end;
         else do;
             if code < 256 then do;
-                if not putbyte(low(code)) then return 0;
+                if putbyte(low(code)) = 0 then return 0;
                 fb = low(code);
             end;
             else if code < lzw$next$code then do;
@@ -325,13 +378,13 @@ arc$decomp$squashed: procedure byte;
             else if code = lzw$next$code and prev$code <> 0ffffh then do;
                 fb = lzw$first$byte(prev$code);
                 if lzw$output$raw(prev$code) = 0 then return 0;
-                if not putbyte(fb) then return 0;
+                if putbyte(fb) = 0 then return 0;
             end;
             else do;
                 done = 1;
             end;
 
-            if not first$flag and prev$code <> 0ffffh and not done then do;
+            if first$flag = 0 and prev$code <> 0ffffh and done = 0 then do;
                 call lzw$add$entry(prev$code, fb);
                 max$code = shl(1, lzw$code$size) - 1;
                 if lzw$next$code > max$code and lzw$code$size < lzw$max$bits then

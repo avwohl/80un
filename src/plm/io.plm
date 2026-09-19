@@ -64,7 +64,7 @@ getbyte: procedure byte public;
         return cpm$eof;
 
     if inbuf$pos >= inbuf$end then do;
-        if not fill$inbuf then
+        if fill$inbuf = 0 then
             return cpm$eof;
     end;
 
@@ -83,7 +83,7 @@ peekbyte: procedure byte public;
         return cpm$eof;
 
     if inbuf$pos >= inbuf$end then do;
-        if not fill$inbuf then
+        if fill$inbuf = 0 then
             return cpm$eof;
     end;
 
@@ -221,26 +221,27 @@ end init$bits$msb;
 read$code$msb: procedure(bits) address public;
     declare bits byte;
     declare code address;
-    declare b byte;
-    declare shift$amt byte;
-    declare mask address;
 
-    do while bits$left < bits;
-        b = getbyte;
-        bit$buffer = shl(bit$buffer, 8) + b;
-        bits$left = bits$left + 8;
+    /* Take the code one bit at a time, holding at most one byte in
+       BIT$BUFFER.
+       The previous version shifted whole bytes into BIT$BUFFER and pulled the
+       code back out of it.  BIT$BUFFER is an ADDRESS, so it is 16 bits wide,
+       and the refill loop ran until it held at least BITS bits.  For 9- and
+       10-bit codes that never needs more than 16 bits, but an 11-bit code
+       asked for with 10 bits already buffered pushed 18 bits into the word and
+       lost the top two.  Crunch widens its codes to 11 bits partway through a
+       file, so every file longer than about 1.3K came apart from that point
+       on. */
+    code = 0;
+    do while bits > 0;
+        if bits$left = 0 then do;
+            bit$buffer = getbyte;
+            bits$left = 8;
+        end;
+        bits$left = bits$left - 1;
+        code = shl(code, 1) + (shr(bit$buffer, bits$left) and 1);
+        bits = bits - 1;
     end;
-
-    shift$amt = bits$left - bits;
-    code = shr(bit$buffer, shift$amt);
-    mask = shl(1, bits) - 1;
-    code = code and mask;
-
-    bits$left = bits$left - bits;
-    if bits$left > 0 then
-        bit$buffer = bit$buffer and (shl(1, bits$left) - 1);
-    else
-        bit$buffer = 0;
 
     return code;
 end read$code$msb;
@@ -265,16 +266,19 @@ rle$decode$byte: procedure(b) byte public;
     declare cnt byte;
 
     if rle$active then do;
+        rle$active = 0;
         if b = 0 then do;
-            rle$active = 0;
-            rle$prev = rle$marker;
+            /* Literal 090H.  The previous byte is deliberately left alone,
+               matching UNCR24 at 04BF. */
             return putbyte(rle$marker);
         end;
         else do;
-            rle$active = 0;
-            cnt = b;
+            /* B is how many times the previous byte occurs in TOTAL, and it
+               was already written once when it was read as a literal, so emit
+               B-1 further copies (UNCR24 DEC A at 04AF). */
+            cnt = b - 1;
             do while cnt > 0;
-                if not putbyte(rle$prev) then return 0;
+                if putbyte(rle$prev) = 0 then return 0;
                 cnt = cnt - 1;
             end;
             return 1;

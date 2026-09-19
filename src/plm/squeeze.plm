@@ -70,7 +70,7 @@ unsqueeze: procedure byte public;
 
     /* Decode symbols */
     done = 0;
-    do while not done and input$avail;
+    do while done = 0 and input$avail <> 0;
         node = 0;
         do while node < huff$nodes;
             p = huff$tree$ptr + shl(low(node), 2);
@@ -85,7 +85,7 @@ unsqueeze: procedure byte public;
                     done = 1;
                 end;
                 else do;
-                    if not rle$decode$byte(low(symbol)) then
+                    if rle$decode$byte(low(symbol)) = 0 then
                         return 0;
                 end;
                 node = huff$nodes;

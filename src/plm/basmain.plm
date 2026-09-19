@@ -98,7 +98,7 @@ main: procedure public;
     inbuf$pos = 0;
     inbuf$end = 0;
     input$limit = 0ffffh;
-    if not fill$inbuf then do;
+    if fill$inbuf = 0 then do;
         call printstr(.msg$err);
         call crlf;
         call closefile(ifcb$ptr);
