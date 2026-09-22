@@ -3,6 +3,22 @@
 All notable changes to 80un, the unpacker for CP/M compression and packing
 formats, are documented here.
 
+## [Unreleased]
+
+### Changed
+
+`80un.com` and `80unbas.com` rebuilt against uplm80 0.3.5. That release fixes
+a long list of code-generation defects, so the emitted code differs from the
+binaries built with 0.3.4 even though the behaviour does not: both builds
+produce byte-identical output on all 21 members of the sample corpus and on
+the BASIC detokeniser. Reproducing the committed binaries now needs uplm80
+`>=0.3.5`.
+
+None of the defects 0.3.5 fixes was reachable from this source — the survey
+in that release found no site in `src/plm` exposed to any of them — which is
+why the output is unchanged. The rebuild is to keep `make` reproducing what
+is committed.
+
 ## [0.3.1] - 2026-09-19
 
 ### Changed
