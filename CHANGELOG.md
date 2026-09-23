@@ -3,7 +3,7 @@
 All notable changes to 80un, the unpacker for CP/M compression and packing
 formats, are documented here.
 
-## [Unreleased]
+## [0.3.2] - 2026-09-23
 
 ### Changed
 
@@ -18,6 +18,13 @@ None of the defects 0.3.5 fixes was reachable from this source — the survey
 in that release found no site in `src/plm` exposed to any of them — which is
 why the output is unchanged. The rebuild is to keep `make` reproducing what
 is committed.
+
+`src/plm/bas.plm` writes MBASIC's integer-divide token as `'\'` again rather
+than `5CH`. The numeric form was a workaround from when uplm80's lexer took a
+backslash inside a character literal for an escape introducer and refused the
+file; PL/M-80 has no escape character, uplox 3.3.1 corrected the grammar, and
+uplm80 0.3.5 requires it. `80unbas.com` is byte-identical across the change,
+which is what proves `'\'` lexes to 5CH.
 
 ## [0.3.1] - 2026-09-19
 
