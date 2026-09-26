@@ -105,13 +105,18 @@ arc$decomp$squeezed: procedure byte;
     end;
 
     huff$nodes = node$count;
+
+    /* An empty member: no nodes and no code bits, nothing to write.  The
+       loop below would read no bit and never end.  See unsqueeze. */
+    if node$count = 0 then return 1;
     call init$rle;
 
     /* Decode symbols.  The member's last byte can hold whole symbols after
        the one that fetched it, and the loop used to stop as soon as that byte
-       was read, which dropped them: go on while bits are left, and stop at a
-       symbol that ran past the end of the member (INPUT$SHORT) rather than
-       write it.  See unsqueeze. */
+       was read, which dropped them: go on while bits are left, and stop at
+       the first bit read from past the end of the member (INPUT$SHORT), leaf
+       or not, which also ends a tree that never reaches a leaf.  See
+       unsqueeze. */
     done = 0;
     input$short = 0;
     do while done = 0 and (bits$left <> 0 or input$avail <> 0);
@@ -123,9 +128,13 @@ arc$decomp$squeezed: procedure byte;
             else
                 left = readword(p);
 
-            if (left and 8000h) <> 0 then do;
+            if input$short then do;
+                done = 1;
+                node = huff$nodes;
+            end;
+            else if (left and 8000h) <> 0 then do;
                 symbol = not left;
-                if symbol = 256 or input$short then
+                if symbol = 256 then
                     done = 1;
                 else do;
                     if rle$decode$byte(low(symbol)) = 0 then return 0;

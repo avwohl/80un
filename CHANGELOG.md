@@ -104,6 +104,17 @@ cpmemu gave up after 9 billion instructions. Binaries are the files most likely
 to use every value. The count is 16 bits now, and a squeezed file and an ARC
 method 4 member of all 256 values extract correctly under both compilers.
 
+Nor does an empty squeezed file, or a Huffman tree that never reaches a leaf.
+SQ writes an empty file as a tree of no nodes followed by no code bits, and
+`src/un80` decodes that to nothing; `unsqueeze` and ARC method 4 read a bit only
+inside a node, so with no nodes they read none and went round for ever, whether
+the file stood alone or was a member of an LBR or an ARC, and the members after
+it were never reached. It hung 24739a3 the same way. They now write an empty
+file. And they stop at the first bit read from past the end of the input, leaf
+or not, where they stopped only at a leaf: a tree whose nodes lead back to one
+another never reaches one, and read on for ever too. It now ends at the end of
+the input with what was decoded before it, as it does in `src/un80`.
+
 Crunch V1 is decoded, by 80un and by `src/un80`. The one file in
 `tests/samples/crunch/zex-sage.dzc` is V1 (siglevel 10H): `src/un80` refused
 it, and 80un, had it been able to create the file, would have run it through
