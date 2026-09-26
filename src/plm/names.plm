@@ -20,7 +20,7 @@
  *   - a name already made this run gets -1, -2 ... on its end, cutting the
  *     name to fit, so that no member overwrites another.  That holds for as
  *     many names as the table keeps: 256, or as many as fit below the BDOS
- *     (main.plm), about 120 in a 64K CP/M 2.2;
+ *     (main.plm), about 100 in a 64K CP/M 2.2;
  *   - the archive's own name counts as made already, when it is on the drive
  *     the members are made on, so that no member is made over the archive
  *     while it is being read.

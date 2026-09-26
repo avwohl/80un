@@ -185,12 +185,15 @@ with the BDOS address at 0006H, and a 64K CP/M 2.2 has its BDOS entry at EC06H:
 there an ARC of more than about 150 members wrote names over the BDOS, where
 24739a3, whose data ended at E058H, fit. 80un now reads 0006H at startup, keeps
 128 bytes under it for the stack (which goes no deeper than 24 bytes on any
-test input), and keeps as many names as fit in the rest, up to 256: about 120
-in a 64K CP/M 2.2. Past that, names are still made by the rule but no longer
-kept, so two members can then land on one file; the names of an LBR, at most
-127, and of most archives are fewer. When the buffers and one name do not fit
+test input), and keeps as many names as fit in the rest, up to 256: about 100
+in a 64K CP/M 2.2 (103 with uplm80 0.4.2, 109 with the BYTE shift rule, the
+archive's own among them). Past that, names are still made by the rule but no
+longer kept, so two members made alike after the first hundred or so can land
+on one file; an archive of fewer members, or of more with names that do not
+come out alike, is not touched by it. When the buffers and one name do not fit
 below the BDOS, 80un says `Not enough memory` and stops, where it used to run
-and write over the BDOS. It needs about 58K of TPA.
+and write over the BDOS. It needs about 58K of TPA: the BDOS entry at 0006H
+must be at E79BH or above (E758H with the BYTE shift rule).
 
 No member is written over the archive being read. A member whose name, as made
 by the rule, was the archive's own deleted the archive and wrote itself in its
@@ -208,7 +211,17 @@ With these changes 80un extracts all 142 files under `tests/`, under uplm80
 `src/un80` extracts them and the other 9 the same up to the ^Z padding of the
 last record, with every ARC member's CRC-16, the squeeze checksums and the
 crunch byte sums checking. An ARC, an LBR and a squeezed file of 25 names CP/M
-cannot take as they stand come out under the names the rule gives.
+cannot take as they stand come out under the names the rule gives, and the 17
+files of the nine big-member archives come out right. Sixteen more inputs were
+made for the fixes after those: empty squeezed files and trees that loop or
+point past their end, an ARC member that will not decode, an LBR member of no
+sectors, archives holding their own names, and archives of 100 and 300 members
+run with the BDOS entry at FD00H and EC06H, and one at D006H. Of the 722 files
+they give, 721 are what `src/un80` writes; the other is the member that will not
+decode, which 80un leaves as far as it got (empty) and `src/un80` writes as
+stored. The D006H run says `Not enough memory` and writes nothing. Both
+compilers give the same files and the same console output for every one of these
+inputs.
 
 ### Added
 

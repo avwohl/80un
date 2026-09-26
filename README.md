@@ -480,7 +480,7 @@ every format (`src/plm/names.plm`):
   `UNNAMED`;
 - a name already made in this run gets `-1`, `-2`, ... on its end, cut to fit,
   so that two members never land on one file (for as many names as 80un
-  keeps: 256, or as many as fit below the BDOS, about 120 in a 64K CP/M 2.2);
+  keeps: 256, or as many as fit below the BDOS, about 100 in a 64K CP/M 2.2);
 - the archive's own name counts as one made already, when the archive is on the
   drive the members are written to, so that no member is written over the
   archive while it is being read: `SELF.ARC` holding `SELF.ARC` writes it as
@@ -550,9 +550,10 @@ PL/M-80 source is in `src/plm/`:
 - CP/M 2.2 or compatible (MP/M, ZCPR, etc.)
 - About 58KB of TPA (Transient Program Area) for 80UN.COM: its buffers and
   room for one name must end 128 bytes below the BDOS entry at 0006H, so that
-  must be at about E700H or above. With more room it keeps up to 256 names
-  (2.75KB), about 120 in a 64K CP/M 2.2, whose BDOS entry is at EC06H. With
-  less, 80UN says `Not enough memory` and stops.
+  must be at about E7A0H or above (the exact figure depends on the build).
+  With more room it keeps up to 256 names (2.75KB), about 100 in a 64K CP/M
+  2.2, whose BDOS entry is at EC06H. With less, 80UN says `Not enough memory`
+  and stops.
 - ~18KB TPA for 80UNBAS.COM
 - Z80 processor
 
