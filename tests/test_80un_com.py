@@ -22,6 +22,8 @@ import pytest
 
 from un80.arc import extract_arc
 from un80.crunch import uncrunch
+from un80.lbr import extract_lbr
+from un80.squeeze import unsqueeze
 
 ROOT = Path(__file__).resolve().parent.parent
 TESTS = ROOT / "tests"
@@ -59,8 +61,11 @@ def com(tmp_path_factory):
     return build / "80un.com"
 
 
-def run_80un(com: Path, archive: Path, workdir: Path, name: str | None = None):
-    """Run 80un.com on a copy of ARCHIVE; return (console, {file: bytes})."""
+def run_80un(com: Path, archive: Path, workdir: Path, name: str | None = None,
+             timeout: int = 300, keep: dict | None = None):
+    """Run 80un.com on a copy of ARCHIVE; return (console, {file: bytes}).
+    The copy is left out of the files; if KEEP is a dict, KEEP["archive"] is
+    what it holds after the run."""
     workdir.mkdir(parents=True, exist_ok=True)
     name = name or archive.name
     shutil.copy(archive, workdir / name)
@@ -68,9 +73,11 @@ def run_80un(com: Path, archive: Path, workdir: Path, name: str | None = None):
     cfg.write_text(f"program = {com}\ncd = {workdir}\n"
                    "default_mode = binary\neol_convert = false\n")
     done = subprocess.run([CPMEMU, str(cfg), name.upper()], capture_output=True,
-                          text=True, errors="replace", timeout=300,
+                          text=True, errors="replace", timeout=timeout,
                           stdin=subprocess.DEVNULL)
-    (workdir / name).unlink()
+    if keep is not None:
+        keep["archive"] = (workdir / name).read_bytes() if (workdir / name).exists() else None
+    (workdir / name).unlink(missing_ok=True)
     files = {p.name: p.read_bytes() for p in workdir.iterdir()}
     return done.stdout + done.stderr, files
 
@@ -199,3 +206,172 @@ def test_names_cpm_cannot_take(com, tmp_path):
         assert_same(files[cpm.lower()], f"member {i}\r\n".encode() * 3, cpm)
     assert "zex/sage.doc -> ZEX-SAGE.DOC OK" in console, console
     assert "  BYE520.ASM OK" in console, console
+
+
+# A decoder that never ends is killed here rather than at run_80un's 300 s.
+HANG = 60
+
+
+def _lbr(members):
+    """An LBR image; MEMBERS is [(name, type, bytes)], b"" for no sectors."""
+    count = len(members) + 1
+    dsec = -(-count * 32 // 128)
+    directory = b"\0" + b" " * 11 + struct.pack("<HH", 0, dsec) + bytes(16)
+    body = b""
+    index = dsec
+    for name, ext, data in members:
+        sectors = -(-len(data) // 128)
+        directory += (b"\0" + name.ljust(8).encode() + ext.ljust(3).encode()
+                      + struct.pack("<HH", index if sectors else 0, sectors) + bytes(16))
+        body += data.ljust(sectors * 128, b"\x1a")
+        index += sectors
+    return directory.ljust(dsec * 128, b"\xff") + body
+
+
+def _empty_squeezed(name: bytes) -> bytes:
+    """What SQ writes for an empty file: a tree of no nodes, no code bits."""
+    return b"\x76\xff\0\0" + name + b"\0" + b"\0\0"
+
+
+def test_empty_squeezed_file(com, tmp_path):
+    """
+    A squeeze tree of no nodes, SQ's empty file, read no bit and went round for
+    ever: alone, as an LBR member and as an ARC method 4 member, and the
+    members after it were never reached.  So did a tree that loops back on
+    itself.  src/un80 decodes each to nothing, and a tree whose child is past
+    its end too.
+    """
+    alone = tmp_path / "empty.bqn"
+    alone.write_bytes(_empty_squeezed(b"EMPTY.TXT").ljust(128, b"\x1a"))
+    assert unsqueeze(alone.read_bytes()) == b""
+    console, files = run_80un(com, alone, tmp_path / "alone", timeout=HANG)
+    assert "Creating: EMPTY.TXT OK" in console, console
+    assert files == {"empty.txt": b""}, console
+
+    after = b"the member after the empty one\r\n" * 5
+    padded = after.ljust(256, b"\x1a")
+    lbr = tmp_path / "empty.lbr"
+    lbr.write_bytes(_lbr([("EMPTY", "TQT", _empty_squeezed(b"EMPTY.TXT")),
+                          ("AFTER", "TXT", after)]))
+    want = extract_lbr(lbr)
+    assert [data for _, data in want] == [b"", padded]
+    console, files = run_80un(com, lbr, tmp_path / "lbr", timeout=HANG)
+    assert "2 file(s) extracted" in console, console
+    assert files == {"empty.tqt": b"", "after.txt": padded}, console
+
+    loop = struct.pack("<HHH", 1, 0, 0)  # one node, both of its children itself
+    past = struct.pack("<HHH", 1, 5, 5)  # one node, its children node 5
+    arc = tmp_path / "empty.arc"
+    arc.write_bytes(_arc_member(4, b"EMPTY.TXT", b"\0\0\0", b"")
+                    + _arc_member(4, b"LOOP.TXT", loop + b"\x55" * 40, b"")
+                    + _arc_member(4, b"PAST.TXT", past + b"\x55" * 40, b"")
+                    + _arc_member(2, b"AFTER.TXT", after, after) + b"\x1a\0")
+    want = extract_arc(arc)
+    assert [data for _, data in want] == [b"", b"", b"", after]
+    console, files = run_80un(com, arc, tmp_path / "arc", timeout=HANG)
+    assert "4 file(s) extracted" in console, console
+    assert sorted(files) == ["after.txt", "empty.txt", "loop.txt", "past.txt"], console
+    assert files["empty.txt"] == files["loop.txt"] == files["past.txt"] == b""
+    assert_same(files["after.txt"], after, "AFTER.TXT")
+
+
+def test_arc_member_that_will_not_decode(com, tmp_path):
+    """
+    A member whose decoder fails ended the archive, although its data had been
+    read through and the next header was where it should be.  src/un80 goes on.
+    """
+    body = b"a member after a bad one\r\n" * 6
+    arc = tmp_path / "bad.arc"
+    arc.write_bytes(_arc_member(4, b"BAD.TXT", struct.pack("<H", 300) + bytes(60), b"x")
+                    + _arc_member(2, b"AFTER.TXT", body, body)
+                    + _arc_member(2, b"LAST.TXT", body[:40], body[:40]) + b"\x1a\0")
+    console, files = run_80un(com, arc, tmp_path / "bad", timeout=HANG)
+    assert "Error" in console, console
+    assert "2 file(s) extracted" in console, console
+    want = dict(extract_arc(arc))
+    assert_same(files["after.txt"], want["AFTER.TXT"], "AFTER.TXT")
+    assert_same(files["last.txt"], want["LAST.TXT"], "LAST.TXT")
+
+
+def test_lbr_member_of_no_sectors(com, tmp_path):
+    """
+    A member of no sectors made no file, but its name was taken all the same,
+    so a later member of that name came out as DUP-1.TXT with no DUP.TXT.
+    src/un80 writes an empty DUP.TXT and then DUP_1.TXT.
+    """
+    second = b"the second DUP.TXT\r\n".ljust(128, b"\x1a")
+    lbr = tmp_path / "zero.lbr"
+    lbr.write_bytes(_lbr([("DUP", "TXT", b""), ("DUP", "TXT", second), ("LAST", "TXT", b"")]))
+    assert extract_lbr(lbr) == [("DUP.TXT", b""), ("DUP_1.TXT", second), ("LAST.TXT", b"")]
+    console, files = run_80un(com, lbr, tmp_path / "zero")
+    assert "DUP.TXT -> DUP-1.TXT OK" in console, console
+    assert "3 file(s) extracted" in console, console
+    assert files == {"dup.txt": b"", "dup-1.txt": second, "last.txt": b""}, console
+
+
+def test_member_named_like_the_archive(com, tmp_path):
+    """
+    A member made under the archive's own name deleted the archive while it
+    was being read, and wrote itself in its place.  The name is taken now.
+    """
+    body = b"I am not the archive\r\n" * 30
+    other = b"the member after it\r\n" * 3
+    arc = tmp_path / "self.arc"
+    arc.write_bytes(_arc_member(2, b"SELF.ARC", body, body)
+                    + _arc_member(2, b"OTHER.TXT", other, other) + b"\x1a\0")
+    keep = {}
+    console, files = run_80un(com, arc, tmp_path / "arc", keep=keep)
+    assert keep["archive"] == arc.read_bytes(), console
+    assert "SELF.ARC -> SELF-1.ARC OK" in console, console
+    assert sorted(files) == ["other.txt", "self-1.arc"], console
+    assert_same(files["self-1.arc"], body, "SELF-1.ARC")
+
+    padded = body.ljust(768, b"\x1a")
+    lbr = tmp_path / "self.lbr"
+    lbr.write_bytes(_lbr([("SELF", "LBR", padded), ("OTHER", "TXT", other)]))
+    keep = {}
+    console, files = run_80un(com, lbr, tmp_path / "lbr", keep=keep)
+    assert keep["archive"] == lbr.read_bytes(), console
+    assert "SELF.LBR -> SELF-1.LBR OK" in console, console
+    assert files == {"self-1.lbr": padded, "other.txt": other.ljust(128, b"\x1a")}, console
+
+
+def _tpa(com: Path, entry: int, dest: Path) -> Path:
+    """A copy of COM that finds the BDOS entry at ENTRY, as on a smaller system:
+    its first instruction, LD HL,(6), jumps to a stub that puts JP 0FD00H,
+    cpmemu's BDOS, at ENTRY and ENTRY at 0006H, and then does LD HL,(6)."""
+    image = bytearray(com.read_bytes())
+    if image[:3] != b"\x2a\x06\x00":
+        pytest.skip("80un.com does not begin LD HL,(6)")
+    stub = 0x100 + len(image)
+    lo, hi, lo1, hi1 = entry & 0xFF, entry >> 8, (entry + 1) & 0xFF, (entry + 1) >> 8
+    image[:3] = bytes([0xC3, stub & 0xFF, stub >> 8])
+    image += bytes([0x3E, 0xC3, 0x32, lo, hi, 0x21, 0x00, 0xFD, 0x22, lo1, hi1,
+                    0x21, lo, hi, 0x22, 0x06, 0x00, 0x2A, 0x06, 0x00, 0xC3, 0x03, 0x01])
+    dest.write_bytes(bytes(image))
+    return dest
+
+
+def test_many_members_and_the_bdos(com, tmp_path):
+    """
+    The names made in a run are kept above the buffers, and nothing held them
+    below the BDOS: in a 64K CP/M 2.2, BDOS entry EC06H, an ARC of more than
+    about 150 members wrote them over it.  The count of files was a BYTE, so
+    300 members were reported as 44.  A TPA the buffers do not fit is refused.
+    """
+    members = [(f"M{i:03d}.TXT".encode(), f"member {i:03d}\r\n".encode() * 2)
+               for i in range(300)]
+    arc = tmp_path / "many.arc"
+    arc.write_bytes(b"".join(_arc_member(2, n, b, b) for n, b in members) + b"\x1a\0")
+    want = {n.decode().lower(): b for n, b in members}
+    for where, program in (("full", com), ("ec06", _tpa(com, 0xEC06, tmp_path / "ec06.com"))):
+        console, files = run_80un(program, arc, tmp_path / where, timeout=HANG)
+        assert "300 file(s) extracted" in console, (where, console)
+        assert sorted(files) == sorted(want), where
+        for name, data in want.items():
+            assert_same(files[name], data, f"{where} {name}")
+
+    console, files = run_80un(_tpa(com, 0xD006, tmp_path / "d006.com"), arc,
+                              tmp_path / "d006", timeout=HANG)
+    assert "Not enough memory" in console, console
+    assert files == {}, console

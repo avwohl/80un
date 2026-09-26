@@ -219,8 +219,21 @@ runs it under cpmemu in binary mode, and compares every file it writes with
 what `src/un80` extracts: all 18 members of `tests/test.arc`, `zex-sage.dzc`
 (Crunch V1, stored as `ZEX/SAGE.DOC`), an ARC made on the fly with a stored
 member of 100000 bytes and a packed one over 64K, and one of names CP/M cannot
-take. It is skipped when make, uplm80, um80, ul80 or cpmemu is missing, and
-all four of its tests fail on the sources before these fixes.
+take. Five more tests build their inputs the same way: an empty squeezed file
+alone, in an LBR and in an ARC, with ARC method 4 trees that loop and that
+point past their end; an ARC member that will not decode, followed by two that
+must come out; an LBR member of no sectors followed by one of the same name; an
+ARC and an LBR that each hold a member of their own name, which must be left as
+they were; and an ARC of 300 members, run as it is, with 80un.com patched to
+find its BDOS at EC06H as in a 64K CP/M 2.2, and at D006H, where it must say
+`Not enough memory`. A decoder that never ends fails its test after 60 seconds.
+It is skipped when make, uplm80, um80, ul80 or cpmemu is missing, and all nine
+of its tests fail on the sources at 24739a3, the last five on those at 782334d
+too.
+
+`tests/test_arc.py` checks that `src/un80`'s ARC method 4 reads an empty tree
+with padding after it, and a tree whose child is past its end, and that an
+archive holding them extracts to its end.
 
 ## [0.3.2] - 2026-09-23
 
