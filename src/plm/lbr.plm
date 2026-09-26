@@ -192,14 +192,17 @@ extract$lbr: procedure byte public;
                            its decoder, or the copy of a stored member, came
                            to its end and its file took all it was given.
                            Anything else is an Error, and the next member is
-                           gone on to, as in an ARC (extract$arc$member): a
-                           decoder that fails (a squeeze tree of more than 256
-                           nodes, a Crunch V1 siglevel refused, V1 input that
-                           ends before its end code), a stored member whose
-                           sectors are not all in the file, a file that will
-                           not take the member, an archive that will not
-                           reopen.  It used to say OK and be counted whatever
-                           became of it.
+                           gone on to, as in an ARC (extract$arc$member).
+                           That is a decoder that fails: unsqueeze on a tree
+                           of more than 256 nodes; uncrunch on a Crunch V1
+                           siglevel of 11H to 1FH, a V1 code that names no
+                           entry, or V1 input that ends before code 0; and
+                           uncrlzh on a version byte of 21H or more.  It is
+                           also a member none of whose sectors are in the
+                           file, a stored one whose sectors are not all there,
+                           a file that will not take the member, and an
+                           archive that will not reopen.  It used to say OK
+                           and be counted whatever became of it.
 
                            OK is not a member come out whole.  Of the
                            compressed ones only Crunch V1 finds a member cut
