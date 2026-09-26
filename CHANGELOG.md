@@ -141,6 +141,24 @@ already did for one that cannot be created. What the member's file holds is
 what was written of it before the error; `src/un80` writes the member's stored
 data instead.
 
+An LBR member that will not decode says `Error` too, and 80un goes on to the
+next member, as in an ARC. When `unsqueeze`, `uncrunch` or `uncrlzh` failed on
+an LBR member, on a squeeze tree of more than 256 nodes or a Crunch V1 member
+of siglevel 15H for example, or its file would not take all of it, 80un said
+`OK` and counted it. So it did for a stored member whose sectors ran past the
+end of the file, writing the last sector read again in place of each one
+missing, and a member none of whose sectors were in the file got no word at
+all. Each of them says `Error` now and is not counted. As in an ARC, the
+member's file holds the 128-byte records written before the error, without the
+part record after them: nothing, for a tree too large or a siglevel refused,
+which fail before a byte is decoded, and the sectors that are there for a
+stored member cut short, which is what `src/un80` writes for it. For a member
+that will not decode, `src/un80` writes the member's stored data. Its squeeze
+module now refuses a tree of more than 256 nodes, as USQ, 80un and its own ARC
+method 4 refuse it: the 257 symbols, the bytes and the end code, take a node
+for each but one. It decoded such a tree when the file was long enough to hold
+it.
+
 Crunch V1 is decoded, by 80un and by `src/un80`. The one file in
 `tests/samples/crunch/zex-sage.dzc` is V1 (siglevel 10H): `src/un80` refused
 it, and 80un, had it been able to create the file, would have run it through
@@ -267,6 +285,8 @@ too.
 `tests/test_arc.py` checks that `src/un80`'s ARC method 4 reads an empty tree
 with padding after it, a tree whose child is past its end and one with a leaf
 of 299, and that an archive holding them extracts to its end.
+`tests/test_squeeze.py` checks that its squeeze module takes a tree of 256
+nodes and refuses one of 257.
 
 ## [0.3.2] - 2026-09-23
 

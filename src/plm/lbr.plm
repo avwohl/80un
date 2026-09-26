@@ -43,6 +43,7 @@ extract$lbr: procedure byte public;
     declare msg$badlbr data('Invalid LBR file$');
     declare msg$nocreat data(' - cannot create$');
     declare msg$ok data(' OK$');
+    declare msg$error data(13, 10, '  Error$');
 
     declare saved$fcb (36) byte;
     declare member$name (12) byte;
@@ -187,12 +188,14 @@ extract$lbr: procedure byte public;
                         call copymem(.saved$fcb, ifcb$ptr, 12);
                         call fillmem(ifcb$ptr + 12, 24, 0);
 
-                        result = openfile(ifcb$ptr);
-                        if result = 0ffh then do;
-                            call closefile(ofcb$ptr);
-                            call crlf;
-                        end;
-                        else do;
+                        /* RESULT is set to 1 only by a member that comes
+                           out whole.  One that will not decode, whose sectors
+                           are not all in the file, or that its file will not
+                           take is an Error, and the next member is gone on
+                           to, as in an ARC (extract$arc$member).  It used to
+                           say OK and be counted whatever became of it. */
+                        result = 0;
+                        if openfile(ifcb$ptr) <> 0ffh then do;
                             /* Skip to member */
                             call setdmaaddr(dma$ptr);
                             sectors$left = member$index;
@@ -200,6 +203,7 @@ extract$lbr: procedure byte public;
                                 result = readfile(ifcb$ptr);
                                 sectors$left = sectors$left - 1;
                             end;
+                            result = 0;
 
                             /* A compressed member is decoded through getbyte,
                                which now stops at the member's end rather than
@@ -208,28 +212,23 @@ extract$lbr: procedure byte public;
                                limit in bytes takes 23 bits. */
                             inbuf$pos = 0;
                             inbuf$end = 0;
+                            outbuf$pos = 0;
                             call set$input$limit(shl(member$length, 7),
                                                  shr(member$length, 9));
-                            if fill$inbuf = 0 then do;
-                                call clear$input$limit;
-                                call closefile(ofcb$ptr);
-                                call crlf;
-                            end;
-                            else do;
-                                if inbuf(0) = magic$sq$hi and inbuf(1) = magic$sq$lo then do;
-                                    outbuf$pos = 0;
+                            if fill$inbuf <> 0 then do;
+                                if inbuf(0) = magic$sq$hi and inbuf(1) = magic$sq$lo then
                                     result = unsqueeze;
-                                    if result then result = flush$outbuf;
-                                end;
-                                else if inbuf(0) = magic$cr$hi and inbuf(1) = magic$cr$lo then do;
-                                    outbuf$pos = 0;
-                                    if uncrunch then result = flush$outbuf;
-                                end;
-                                else if inbuf(0) = magic$lzh$hi and inbuf(1) = magic$lzh$lo then do;
-                                    outbuf$pos = 0;
-                                    if uncrlzh then result = flush$outbuf;
-                                end;
+                                else if inbuf(0) = magic$cr$hi and inbuf(1) = magic$cr$lo then
+                                    result = uncrunch;
+                                else if inbuf(0) = magic$lzh$hi and inbuf(1) = magic$lzh$lo then
+                                    result = uncrlzh;
                                 else do;
+                                    /* Stored: copied a sector at a time.  A
+                                       sector past the end of the file ends
+                                       it, where the one before was written
+                                       again in its place, and so does one
+                                       the disk will not take. */
+                                    result = 1;
                                     sectors$left = member$length;
                                     do while sectors$left <> 0;
                                         call setdmaaddr(dma$ptr);
@@ -237,24 +236,39 @@ extract$lbr: procedure byte public;
                                             call copymem(inbuf$ptr + inbuf$pos, dma$ptr, 128);
                                             inbuf$pos = inbuf$pos + 128;
                                         end;
-                                        else do;
-                                            result = readfile(ifcb$ptr);
+                                        else if readfile(ifcb$ptr) <> 0 then
+                                            result = 0;
+                                        if result then do;
+                                            if writefile(ofcb$ptr) <> 0 then result = 0;
                                         end;
-                                        if writefile(ofcb$ptr) <> 0 then sectors$left = 1;
                                         sectors$left = sectors$left - 1;
+                                        if result = 0 then sectors$left = 0;
                                     end;
                                 end;
-
-                                call clear$input$limit;
-                                call closefile(ofcb$ptr);
-                                file$count = file$count + 1;
-                                call printstr(.msg$ok);
-                                call crlf;
-
-                                /* Directory already in work buffer - just close input */
-                                call closefile(ifcb$ptr);
+                                /* A decoder that fails leaves its last part
+                                   record unwritten: the file holds the whole
+                                   128-byte records decoded before the error,
+                                   none for a Huffman tree of more than 256
+                                   nodes or a crunch siglevel refused, which
+                                   fail before a byte is decoded.  src/un80
+                                   writes the member's stored sectors
+                                   instead. */
+                                if result then result = flush$outbuf;
                             end;
+                            call clear$input$limit;
+
+                            /* Directory already in work buffer - just close input */
+                            call closefile(ifcb$ptr);
                         end;
+                        call closefile(ofcb$ptr);
+
+                        if result then do;
+                            file$count = file$count + 1;
+                            call printstr(.msg$ok);
+                        end;
+                        else
+                            call printstr(.msg$error);
+                        call crlf;
                     end;
                 end;
                 else do;

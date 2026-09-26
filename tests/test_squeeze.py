@@ -51,6 +51,20 @@ class TestSqueeze:
         with pytest.raises(SqueezeError):
             unsqueeze(data)
 
+    def test_a_tree_of_more_than_256_nodes_is_refused(self):
+        """SQ's tree has a node for each of its 257 symbols but one, 256 at
+        most, and USQ refuses more, as 80un and un80's ARC method 4 do."""
+        import struct
+
+        def squeezed(nodes):
+            return (b"\x76\xff" + struct.pack("<H", 0x41) + b"A.TXT\0"
+                    + struct.pack("<H", nodes) + struct.pack("<hh", -66, -257) * nodes
+                    + b"\x02")                     # A, then the end code
+
+        assert unsqueeze(squeezed(256)) == b"A"
+        with pytest.raises(SqueezeError):
+            unsqueeze(squeezed(257))
+
     def test_squeeze_magic_constant(self):
         """Verify squeeze magic constant."""
         from un80.squeeze import SQUEEZE_MAGIC

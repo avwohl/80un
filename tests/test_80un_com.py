@@ -337,6 +337,46 @@ def test_arc_member_that_will_not_decode(com, tmp_path):
     assert_same(files["last.txt"], want["LAST.TXT"], "LAST.TXT")
 
 
+def test_lbr_member_that_will_not_decode(com, tmp_path):
+    """
+    An LBR member whose decoder failed, or whose sectors were not all in the
+    file, said OK and was counted all the same: a squeezed member of 300
+    nodes, a Crunch V1 member of siglevel 15H, and a stored member cut short,
+    whose last sector was written again in place of the ones missing.  Each
+    says Error now, as an ARC member does, and the member after it comes out.
+    src/un80 writes the first two as they are stored; 80un leaves their files
+    as far as they got, which is empty.
+    """
+    v1 = bytearray((TESTS / "samples" / "crunch" / "zex-sage.dzc").read_bytes())
+    siglevel = v1.index(0, 2) + 2       # after the name's NUL and reflevel
+    assert v1[siglevel] == 0x10
+    v1[siglevel] = 0x15
+    v1 = bytes(v1)
+    tree = struct.pack("<H", 300) + struct.pack("<hh", -66, -257) * 300
+    sq = b"\x76\xff" + struct.pack("<H", 0x41) + b"BADSQ.TXT\0" + tree + b"\x02"
+    good = b"a member after a bad one\r\n" * 4
+    cut = bytes(range(256)) + b"x" * 128        # three sectors; the file keeps one
+    image = _lbr([("BADSQ", "TQT", sq), ("BADCR", "TZT", v1), ("GOOD", "TXT", good),
+                  ("CUT", "TXT", cut), ("GONE", "TXT", good)])
+    index = struct.unpack_from("<H", image, 4 * 32 + 12)[0]    # CUT.TXT's
+    lbr = tmp_path / "bad.lbr"
+    lbr.write_bytes(image[:(index + 1) * 128])
+
+    want = dict(extract_lbr(lbr))
+    assert sorted(want) == ["BADCR.TZT", "BADSQ.TQT", "CUT.TXT", "GONE.TXT", "GOOD.TXT"]
+    assert want["BADSQ.TQT"].startswith(sq) and want["BADCR.TZT"].startswith(v1)
+    assert want["CUT.TXT"] == cut[:128] and want["GONE.TXT"] == b""
+
+    console, files = run_80un(com, lbr, tmp_path / "bad")
+    assert console.count("  Error") == 4, console
+    assert "GOOD.TXT OK" in console, console
+    assert "1 file(s) extracted" in console, console
+    assert sorted(files) == ["badcr.tzt", "badsq.tqt", "cut.txt", "gone.txt", "good.txt"]
+    assert_same(files["good.txt"], want["GOOD.TXT"], "GOOD.TXT")
+    assert files["cut.txt"] == want["CUT.TXT"], console
+    assert files["gone.txt"] == files["badsq.tqt"] == files["badcr.tzt"] == b""
+
+
 def test_lbr_member_of_no_sectors(com, tmp_path):
     """
     A member of no sectors made no file, but its name was taken all the same,

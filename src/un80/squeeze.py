@@ -183,7 +183,9 @@ def unsqueeze(data: bytes) -> bytes:
     node_count = struct.unpack('<h', data[pos:pos+2])[0]
     pos += 2
 
-    if node_count < 0:
+    # A node for each of the 257 symbols (the bytes and the end code) but one,
+    # so 256 at most.  USQ refuses more, and so do 80un and ARC method 4 here.
+    if node_count < 0 or node_count > 256:
         raise SqueezeError(f"Invalid node count: {node_count}")
 
     # Read Huffman tree nodes
