@@ -115,6 +115,13 @@ or not, where they stopped only at a leaf: a tree whose nodes lead back to one
 another never reaches one, and read on for ever too. It now ends at the end of
 the input with what was decoded before it, as it does in `src/un80`.
 
+A Huffman tree with a child past its last node ends the decoding in both, where
+80un went back to the root and wrote whatever the rest of the bits made, and
+`src/un80`'s ARC method 4 raised `IndexError`, which ended `extract_arc` and
+lost the whole archive. `src/un80` raised it too for an empty method 4 member
+with a byte of padding after its node count; that is an empty file now, as it
+already was in `unsqueeze`.
+
 An ARC member that will not decode no longer ends the archive. When a
 member's decoder failed, on a Huffman tree of more than 256 nodes for example,
 or its file could not be written, `extract$arc$member` returned 0 and

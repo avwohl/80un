@@ -166,3 +166,38 @@ class TestArcChecksums:
                 f"{name}:{entry.filename} method {entry.method} CRC mismatch"
             )
         assert checked > 0
+
+
+class TestArcSqueezedTrees:
+    """ARC method 4 trees that are empty or point past themselves."""
+
+    def test_empty_tree_is_an_empty_file(self):
+        """A tree of no nodes is SQ's empty file, padded or not; indexing the
+        empty table with the padding bits raised IndexError."""
+        from un80.arc import decompress_squeezed
+        assert decompress_squeezed(b"\0\0") == b""
+        assert decompress_squeezed(b"\0\0\0") == b""
+        assert decompress_squeezed(b"\0\0\x55\x55") == b""
+
+    def test_child_past_the_tree_stops(self):
+        """Node 0's children are node 5 of a one-node tree: decoding stops,
+        as the squeeze module stops, instead of raising IndexError."""
+        from un80.arc import decompress_squeezed
+        assert decompress_squeezed(bytes([1, 0, 5, 0, 5, 0]) + b"\x55") == b""
+
+    def test_extract_goes_on(self, tmp_path):
+        """An archive with such members extracts all of them."""
+        import struct
+
+        def member(method, name, stored, size):
+            return (bytes([0x1A, method]) + name.ljust(13, b"\0")
+                    + struct.pack("<I", len(stored)) + bytes(6)
+                    + struct.pack("<I", size) + stored)
+
+        after = b"after\r\n" * 4
+        arc = tmp_path / "trees.arc"
+        arc.write_bytes(member(4, b"EMPTY.TXT", b"\0\0\0", 0)
+                        + member(4, b"PAST.TXT", bytes([1, 0, 5, 0, 5, 0, 0x55]), 0)
+                        + member(2, b"AFTER.TXT", after, len(after)) + b"\x1a\0")
+        assert extract_arc(arc) == [("EMPTY.TXT", b""), ("PAST.TXT", b""),
+                                    ("AFTER.TXT", after)]

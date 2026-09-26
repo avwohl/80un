@@ -223,6 +223,13 @@ def decompress_squeezed(data: bytes) -> bytes:
     if node_count > 256:
         raise ArcError(f"Too many Huffman nodes: {node_count}")
 
+    # An empty file is a tree of no nodes: only the end code, which takes no
+    # bits (USQ makes both children of its node 0 the end code for it).  Any
+    # bits after the count are padding.  Indexing the empty table with them
+    # raised IndexError, which ended extract_arc.
+    if node_count == 0:
+        return b''
+
     # Read node table
     nodes = []
     for _ in range(node_count):
@@ -242,6 +249,8 @@ def decompress_squeezed(data: bytes) -> bytes:
             node = 0
             while node >= 0:
                 bit = bits.read_bits(1)
+                if node >= len(nodes):
+                    raise ArcError(f"Huffman child {node} past the tree")
                 left, right = nodes[node]
                 node = right if bit else left
 

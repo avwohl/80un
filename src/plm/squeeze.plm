@@ -113,8 +113,15 @@ unsqueeze: procedure byte public;
                 end;
                 node = huff$nodes;
             end;
-            else do;
+            else if left < huff$nodes then do;
                 node = left;
+            end;
+            else do;
+                /* A child past the tree: nothing after it can be decoded.
+                   Going back to the root and on, as this did, wrote
+                   whatever the rest of the bits made; src/un80 stops. */
+                done = 1;
+                node = huff$nodes;
             end;
         end;
     end;
