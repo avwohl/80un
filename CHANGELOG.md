@@ -95,6 +95,14 @@ over 64K compressed, a method 4 member of exactly 65535 bytes, a squeezed LBR
 member of 678 sectors, and an ARC and an LBR member with whole symbols in their
 last byte.
 
+A squeezed file that uses every byte value no longer hangs 80un. With the end
+code that is 257 symbols, and a Huffman tree of 256 nodes, and `unsqueeze` and
+ARC method 4 counted the nodes read in a BYTE up to `LOW(node$count)`, which is
+0 for 256: the tree was read as empty and the decoder walked stale nodes until
+cpmemu gave up after 9 billion instructions. Binaries are the files most likely
+to use every value. The count is 16 bits now, and a squeezed file and an ARC
+method 4 member of all 256 values extract correctly under both compilers.
+
 ## [0.3.2] - 2026-09-23
 
 ### Changed

@@ -21,7 +21,8 @@ declare input$short byte external;
 
 unsqueeze: procedure byte public;
     declare msg$sqtree data('Bad Huffman tree$');
-    declare (b, i) byte;
+    declare b byte;
+    declare i address;
     declare (node$count, node, left, symbol) address;
     declare p address;
     declare done byte;
@@ -52,10 +53,13 @@ unsqueeze: procedure byte public;
         return 0;
     end;
 
-    /* Read Huffman tree nodes */
+    /* Read Huffman tree nodes.  A file that uses every byte value has 257
+       symbols with the end code, and so 256 nodes: I counts in 16 bits,
+       because LOW(256) is 0 and the tree used to be read as empty, which
+       left the decoder walking stale nodes for ever. */
     i = 0;
-    do while i < low(node$count);
-        p = huff$tree$ptr + shl(double(i), 2);
+    do while i < node$count;
+        p = huff$tree$ptr + shl(i, 2);
         huff$tree(p - huff$tree$ptr) = getbyte;
         huff$tree(p - huff$tree$ptr + 1) = getbyte;
         huff$tree(p - huff$tree$ptr + 2) = getbyte;

@@ -83,7 +83,8 @@ end arc$decomp$rle;
 
 /* ARC method 4: Squeezed (Huffman + RLE) */
 arc$decomp$squeezed: procedure byte;
-    declare (i, b) byte;
+    declare b byte;
+    declare i address;
     declare (node$count, node, left, symbol) address;
     declare p address;
     declare done byte;
@@ -92,10 +93,11 @@ arc$decomp$squeezed: procedure byte;
     node$count = read$bits$lsb(16);
     if node$count > 256 then return 0;
 
-    /* Read Huffman tree */
+    /* Read Huffman tree: up to 256 nodes, so I counts in 16 bits (see
+       unsqueeze) */
     i = 0;
-    do while i < low(node$count);
-        p = huff$tree$ptr + shl(double(i), 2);
+    do while i < node$count;
+        p = huff$tree$ptr + shl(i, 2);
         /* Read left (16 bits) and right (16 bits) as signed */
         call writeword(p, read$bits$lsb(16));
         call writeword(p + 2, read$bits$lsb(16));
