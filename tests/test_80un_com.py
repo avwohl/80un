@@ -378,6 +378,76 @@ def test_lbr_member_that_will_not_decode(com, tmp_path):
     assert files["gone.txt"] == files["badsq.tqt"] == files["badcr.tzt"] == b""
 
 
+def test_crunch_v2_member_cut_short(com, tmp_path):
+    """
+    A Crunch V2 member cut short finished its last code with the bits of the
+    ^Z read past the end of its sectors, and wrote what that decoded to:
+    -SOURCE.NZT cut to one sector came out as 110 bytes ending "bably not."
+    where src/un80, whose BitReader gives the end code when fewer bits than a
+    code are left, writes 109 ending "bably not".  80un stops there too now.
+    A V2 member cut short in its header said OK with an empty file; src/un80
+    refuses it ("Data too short for info bytes") and writes it as it is
+    stored, and 80un says Error.  The member after each comes out.
+    """
+    nzt = (TESTS / "samples" / "crunch" / "-SOURCE.NZT").read_bytes()
+    info = nzt.index(0, 2) + 1
+    assert nzt[info + 1] == 0x20                # V2
+    head = b"\x76\xfe" + b"N" * 123 + b"\0" + nzt[info:]    # info bytes at 126
+    good = b"a member after one cut short\r\n" * 4
+    lbr = tmp_path / "cut.lbr"
+    lbr.write_bytes(_lbr([("SOURCE", "NZT", nzt[:128]), ("GOOD", "TXT", good),
+                          ("HEAD", "NZT", head[:128]), ("LAST", "TXT", good)]))
+
+    want = [data for _, data in extract_lbr(lbr)]
+    assert len(want[0]) == 109 and want[0].endswith(b"bably not")
+    assert want[2] == head[:128]
+
+    console, files = run_80un(com, lbr, tmp_path / "cut")
+    assert "SOURCE.NZT OK" in console, console
+    assert "  HEAD.NZT\n  Error\n" in console, console
+    assert "3 file(s) extracted" in console, console
+    assert sorted(files) == ["good.txt", "head.nzt", "last.txt", "source.nzt"], console
+    assert_same(files["source.nzt"], want[0], "SOURCE.NZT")
+    assert files["head.nzt"] == b"", console
+    assert_same(files["good.txt"], want[1], "GOOD.TXT")
+    assert_same(files["last.txt"], want[3], "LAST.TXT")
+
+
+def test_squeeze_tree_cut_short(com, tmp_path):
+    """
+    A squeezed member cut short in its Huffman tree said OK with an empty
+    file: the nodes missing were read as the ^Z getbyte gives past the end,
+    whose children are past the tree.  src/un80 refuses it ("Data too short
+    for Huffman tree", and in ARC method 4 "Unexpected end of data") and
+    writes it as it is stored.  80un says Error now, as for any member that
+    will not decode, and goes on: an LBR member of the first sector of
+    test.aqm, whose tree takes three, and an ARC method 4 member of three
+    nodes with one in the member.
+    """
+    aqm = (TESTS / "test.aqm").read_bytes()
+    good = b"a member after a tree cut short\r\n" * 4
+    lbr = tmp_path / "tree.lbr"
+    lbr.write_bytes(_lbr([("TREE", "AQM", aqm[:128]), ("GOOD", "TXT", good)]))
+    want = [data for _, data in extract_lbr(lbr)]
+    assert want == [aqm[:128], good.ljust(256, b"\x1a")]
+    console, files = run_80un(com, lbr, tmp_path / "lbr")
+    assert "  TREE.AQM\n  Error\n" in console, console
+    assert "1 file(s) extracted" in console, console
+    assert files == {"tree.aqm": b"", "good.txt": want[1]}, console
+
+    tree = struct.pack("<Hhh", 3, -66, 1)       # 3 nodes, only node 0 here
+    arc = tmp_path / "tree.arc"
+    arc.write_bytes(_arc_member(4, b"TREE.TXT", tree, b"A")
+                    + _arc_member(2, b"GOOD.TXT", good, good) + b"\x1a\0")
+    assert extract_arc(arc) == [("TREE.TXT", tree), ("GOOD.TXT", good)]
+    console, files = run_80un(com, arc, tmp_path / "arc")
+    assert "  TREE.TXT\n  Error\n" in console, console
+    assert "1 file(s) extracted" in console, console
+    assert sorted(files) == ["good.txt", "tree.txt"], console
+    assert files["tree.txt"] == b"", console
+    assert_same(files["good.txt"], good, "GOOD.TXT")
+
+
 def test_lbr_member_of_no_sectors(com, tmp_path):
     """
     A member of no sectors made no file, but its name was taken all the same,

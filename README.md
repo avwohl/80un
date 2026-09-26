@@ -550,7 +550,7 @@ PL/M-80 source is in `src/plm/`:
 - CP/M 2.2 or compatible (MP/M, ZCPR, etc.)
 - About 58KB of TPA (Transient Program Area) for 80UN.COM: its buffers and
   room for one name must end 128 bytes below the BDOS entry at 0006H, so that
-  must be at about E7A0H or above (the exact figure depends on the build).
+  must be at about E800H or above (the exact figure depends on the build).
   With more room it keeps up to 256 names (2.75KB), about 100 in a 64K CP/M
   2.2, whose BDOS entry is at EC06H. With less, 80UN says `Not enough memory`
   and stops.

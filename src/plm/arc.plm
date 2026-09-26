@@ -90,6 +90,7 @@ arc$decomp$squeezed: procedure byte;
     declare done byte;
 
     /* Read node count */
+    input$short = 0;
     node$count = read$bits$lsb(16);
     if node$count > 256 then return 0;
 
@@ -103,6 +104,10 @@ arc$decomp$squeezed: procedure byte;
         call writeword(p + 2, read$bits$lsb(16));
         i = i + 1;
     end;
+
+    /* A tree that is not all in the member will not decode, as in src/un80,
+       which raises there and writes the member as stored (see unsqueeze) */
+    if input$short then return 0;
 
     huff$nodes = node$count;
 
@@ -118,7 +123,6 @@ arc$decomp$squeezed: procedure byte;
        or not, which also ends a tree that never reaches a leaf.  See
        unsqueeze. */
     done = 0;
-    input$short = 0;
     do while done = 0 and (bits$left <> 0 or input$avail <> 0);
         node = 0;
         do while node < huff$nodes;

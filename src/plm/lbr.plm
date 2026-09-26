@@ -196,24 +196,27 @@ extract$lbr: procedure byte public;
                            That is a decoder that fails: unsqueeze on a tree
                            of more than 256 nodes; uncrunch on a Crunch V1
                            siglevel of 11H to 1FH, a V1 code that names no
-                           entry, or V1 input that ends before code 0; and
-                           uncrlzh on a version byte of 21H or more.  It is
-                           also a member none of whose sectors are in the
-                           file, a stored one whose sectors are not all there,
-                           a file that will not take the member, and an
-                           archive that will not reopen.  It used to say OK
-                           and be counted whatever became of it.
+                           entry, or V1 input that ends before code 0;
+                           uncrlzh on a version byte of 21H or more; and
+                           unsqueeze and uncrunch on a header, or a squeeze
+                           tree, that is not all in the member.  It is also a
+                           member none of whose sectors are in the file, a
+                           stored one whose sectors are not all there, a file
+                           that will not take the member, and an archive that
+                           will not reopen.  It used to say OK and be counted
+                           whatever became of it.
 
-                           OK is not a member come out whole.  Of the
-                           compressed ones only Crunch V1 finds a member cut
-                           short.  The squeeze and Crunch V2 decoders stop
-                           where the sectors in the file end, and the member
-                           says OK with what those decode to, the bytes
-                           src/un80 writes.  CrLZH decodes on past the end,
-                           from the ^Z getbyte gives there, until they happen
-                           to make its stop code; src/un80 decodes on from
-                           zero bits, so the two write different bytes after
-                           the data in the file. */
+                           OK is not a member come out whole.  A squeezed or
+                           Crunch V2 member cut short after its header, and a
+                           squeezed one's tree, is decoded up to the first
+                           code that needs a bit from past the sectors in the
+                           file, and says OK with what the codes before that
+                           decode to, the bytes src/un80 writes.  A Crunch V1
+                           member cut short is an Error.  CrLZH decodes on
+                           past the end, from the ^Z getbyte gives there,
+                           until they happen to make its stop code; src/un80
+                           decodes on from zero bits, so the two write
+                           different bytes after the data in the file. */
                         result = 0;
                         if openfile(ifcb$ptr) <> 0ffh then do;
                             /* Skip to member */
@@ -268,9 +271,10 @@ extract$lbr: procedure byte public;
                                 /* A decoder that fails leaves its last part
                                    record unwritten: the file holds the whole
                                    128-byte records decoded before the error,
-                                   none for a Huffman tree of more than 256
-                                   nodes or a crunch siglevel refused, which
-                                   fail before a byte is decoded.  src/un80
+                                   none when it fails before a byte is
+                                   decoded (a tree of more than 256 nodes, a
+                                   siglevel or CrLZH version refused, a header
+                                   or squeeze tree cut short).  src/un80
                                    writes the member's stored sectors
                                    instead. */
                                 if result then result = flush$outbuf;

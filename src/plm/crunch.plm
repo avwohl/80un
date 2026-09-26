@@ -17,6 +17,7 @@ declare lzw$max$bits byte external;
 declare work$ptr address external;
 declare work based work$ptr (1) byte;
 declare work$len address external;
+declare input$short byte external;
 
 /* Crunch dictionary-replacement tables.  See main.plm for where these live:
    they overlay buffers that no crunch file ever uses. */
@@ -419,6 +420,8 @@ uncrunch$v1: procedure byte;
 
     do while input$avail;
         code = read$code$msb(12);
+        /* The input ends inside this code, before code 0 (see uncrunch) */
+        if input$short then return 0;
         if code = 0 then return 1;          /* EOF */
 
         skip = 0;                            /* 1A89H: the first code adds nothing */
@@ -462,6 +465,7 @@ uncrunch: procedure byte public;
     declare replacing byte;
 
     /* Magic already verified, skip it */
+    input$short = 0;
     b = getbyte;  /* 76 */
     b = getbyte;  /* FE */
 
@@ -488,6 +492,11 @@ uncrunch: procedure byte public;
         checksum = getbyte;
         checksum = checksum + shl(double(getbyte), 8);
     end;
+
+    /* A header that is not all in the input is no crunched file, as in
+       src/un80.  The V2 loop below would have found no input left and
+       written an empty file. */
+    if input$short then return 0;
 
     /* Initialize LZW and bit reader */
     call init$bits$msb;
@@ -519,8 +528,20 @@ uncrunch: procedure byte public;
             code = read$code$msb(lzw$code$size);
         end;
 
-        /* Handle special codes */
-        if code = 256 then do;
+        /* A code that needs a bit from past the end of the input is no
+           code: the input ends here, as src/un80 ends it (its BitReader
+           gives the end code when fewer bits than a code are left).
+           INPUT$AVAIL says only that a byte is left, and a code is 9 to 12
+           bits, so the last code of a member cut short was finished with the
+           bits of the ^Z getbyte gives past the end, and decoded: 1 to 144
+           bytes more than src/un80 writes, in 177 of the 544 ways the four
+           V2 samples can be cut at a sector.  (The skip above ends: a code
+           all from past the end is never 258 or 259, which have six 0 bits
+           in a row, and 1AH repeated has no more than four.) */
+        if input$short then do;
+            done = 1;
+        end;
+        else if code = 256 then do;
             /* EOF */
             done = 1;
         end;

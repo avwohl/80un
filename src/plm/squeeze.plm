@@ -29,6 +29,7 @@ unsqueeze: procedure byte public;
     declare (lo$byte, hi$byte) byte;
 
     /* Magic already verified, skip it */
+    input$short = 0;
     b = getbyte;  /* 76 */
     b = getbyte;  /* FF */
 
@@ -67,6 +68,15 @@ unsqueeze: procedure byte public;
         i = i + 1;
     end;
 
+    /* A header or tree that is not all in the input (INPUT$SHORT: a byte
+       was asked for from past its end) is no squeezed file, as in src/un80
+       ("Data too short for Huffman tree"), which writes such an LBR member
+       as it is stored.  The nodes missing were read as the ^Z getbyte gives
+       there, and the first code bit came from past the end too, so an LBR
+       member cut short in its tree said OK with an empty file.  (A node
+       count read from past the end is 1A00H or more, refused above.) */
+    if input$short then return 0;
+
     huff$nodes = node$count;
 
     /* An empty file has no symbol but the end code, and SQ writes it as a
@@ -88,7 +98,6 @@ unsqueeze: procedure byte public;
        also ends a tree whose nodes lead back to one another, which never
        reaches a leaf and used to read on for ever. */
     done = 0;
-    input$short = 0;
     do while done = 0 and (bits$left <> 0 or input$avail <> 0);
         node = 0;
         do while node < huff$nodes;

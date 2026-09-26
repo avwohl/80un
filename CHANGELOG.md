@@ -159,12 +159,35 @@ method 4 refuse it: the 257 symbols, the bytes and the end code, take a node
 for each but one. It decoded such a tree when the file was long enough to hold
 it.
 
-A compressed LBR member cut short still says `OK`: of the decoders only Crunch
-V1's finds one. A squeezed or Crunch V2 member holds what its sectors in the
-file decode to, the bytes `src/un80` writes. A CrLZH member is decoded on past
-the end, by 80un from the ^Z it reads there and by `src/un80` from zero bits,
-until that happens to make the stop code, so the two write different bytes
-after the data there.
+A squeezed or Crunch V2 member cut short in its codes, its sectors not all in
+the file, comes out as `src/un80` writes it. The Crunch V2 decoder went on
+while a byte of its input was left, and a code is 9 to 12 bits, so it finished
+the last code with bits of the ^Z that `getbyte` gives past the end, and
+decoded it: `-SOURCE.NZT` cut to one sector gave 110 bytes ending `bably not.`,
+where `src/un80`, whose bit reader gives the end code when fewer bits than a
+code are left, writes 109 ending `bably not`. A code that needs a bit from past
+the end now ends the decoding. A squeezed member cut short in its Huffman tree
+said `OK` with an empty file: the nodes missing were read as ^Z, whose children
+are past the tree. `src/un80` refuses it ("Data too short for Huffman tree")
+and writes it as it is stored; 80un says `Error` now, as for any member that
+will not decode, and so it does for a crunched member cut short in its header,
+which said `OK` with an empty file when it was V2, and for an ARC method 4
+member whose tree is not all in the member. Each sample of the two formats was
+made the last member of an LBR, its directory length left whole, and cut at
+every sector, and each cut was run under both compilers alike: of the 544 cuts
+of the four Crunch V2 samples (`-SOURCE.NZT`, `COMMON.LZB`, `CRUNCH.CZM`,
+`tests/test.lzt`), 177 wrote 1 to 144 bytes more than `src/un80`, and all 544
+are what it writes now; of the 71 cuts of the four squeezed ones (`555-ic.bqs`,
+`mbastip.tqt`, `tests/test.aqm`, `tests/test.dqc`), the 9 in the tree say
+`Error`, and the other 62 are what `src/un80` writes, as they were.
+
+So a squeezed or Crunch V2 LBR member cut short says `OK` when its header, and
+a squeezed member's tree, are in the file, and holds what the codes before the
+first one cut short decode to, and it is an `Error` when they are not. A Crunch
+V1 member cut short is an `Error`. A CrLZH member is decoded on past the end,
+by 80un from the ^Z it reads there and by `src/un80` from zero bits, until that
+happens to make the stop code, so the two write different bytes after the data
+there.
 
 Crunch V1 is decoded, by 80un and by `src/un80`. The one file in
 `tests/samples/crunch/zex-sage.dzc` is V1 (siglevel 10H): `src/un80` refused
@@ -232,14 +255,14 @@ there an ARC of more than about 150 members wrote names over the BDOS, where
 24739a3, whose data ended at E058H, fit. 80un now reads 0006H at startup, keeps
 128 bytes under it for the stack (which goes no deeper than 24 bytes on any
 test input), and keeps as many names as fit in the rest, up to 256: about 100
-in a 64K CP/M 2.2 (101 with uplm80 0.4.2, 107 with the BYTE shift rule, the
+in a 64K CP/M 2.2 (95 with uplm80 0.4.2, 101 with the BYTE shift rule, the
 archive's own among them). Past that, names are still made by the rule but no
 longer kept, so two members made alike after the first hundred or so can land
 on one file; an archive of fewer members, or of more with names that do not
 come out alike, is not touched by it. When the buffers and one name do not fit
 below the BDOS, 80un says `Not enough memory` and stops, where it used to run
 and write over the BDOS. It needs about 58K of TPA: the BDOS entry at 0006H
-must be at E7B8H or above (E775H with the BYTE shift rule).
+must be at E7F6H or above (E7B3H with the BYTE shift rule).
 
 No member is written over the archive being read. A member whose name, as made
 by the rule, was the archive's own deleted the archive and wrote itself in its
@@ -268,13 +291,20 @@ EC06H, and one at D006H. Of the 722 files they give, 721 are what `src/un80`
 writes; the other is the member that will not decode, which 80un leaves as far
 as it got (empty) and `src/un80` writes as stored. The D006H run says `Not
 enough memory` and writes nothing. Both compilers give the same files and the
-same console output for every one of these inputs. The three fixes made after
-those, to the LBR directory's length, a Huffman leaf above 256 and an LBR
-member that will not decode, leave the files and the console output of all of
-these inputs as they were, under both compilers. They were checked on the
-review's `badleaf.arc`, whose `BADLEAF.TXT` 80un and `src/un80` now both write
-as `A`, on its LBR of a 260-sector directory, which both now refuse, and on the
-inputs of the tests below.
+same console output for every one of these inputs. The four fixes made after
+those, to the LBR directory's length, a Huffman leaf above 256, an LBR member
+that will not decode and a member cut short, leave the files and the console
+output of all of these inputs as they were, under both compilers, but for one
+run. The checks for a member cut short take 62 bytes, and with uplm80 0.4.2
+that leaves room below EC06H for 95 names where there was room for 101: of the
+100 members of one name in the archive of 100 run there, the first 94 come out
+as `D.TXT` and `D-1.TXT` to `D-93.TXT`, and the other six all as `D-94.TXT`,
+which holds the last of them, as happens past the names kept (above). With the
+BYTE shift rule there is room for 101, and all 100 come out. They were checked
+on the review's `badleaf.arc`, whose `BADLEAF.TXT` 80un and `src/un80` now both
+write as `A`, on its LBR of a 260-sector directory, which both now refuse, on
+every sector cut of the squeeze and Crunch V2 samples above, and on the inputs
+of the tests below.
 
 ### Added
 
@@ -285,25 +315,30 @@ runs it under cpmemu in binary mode, and compares every file it writes with
 what `src/un80` extracts: all 18 members of `tests/test.arc`, `zex-sage.dzc`
 (Crunch V1, stored as `ZEX/SAGE.DOC`), an ARC made on the fly with a stored
 member of 100000 bytes and a packed one over 64K, and one of names CP/M cannot
-take. Eight more tests build their inputs the same way: an empty squeezed file
+take. Ten more tests build their inputs the same way: an empty squeezed file
 alone, in an LBR and in an ARC, with ARC method 4 trees that loop and that
 point past their end; a Huffman leaf of 299 in a squeezed file alone, as an LBR
 member and as an ARC member; an ARC member that will not decode, followed by
 two that must come out; an LBR of a squeezed member of 300 nodes, a Crunch V1
 member of siglevel 15H, a stored member cut short and one wholly past the end
 of the file, which must each say `Error`, and a member that must come out; an
-LBR member of no sectors followed by one of the same name; an ARC and an LBR
-that each hold a member of their own name, which must be left as they were; an
-ARC of 300 members, run as it is, with 80un.com patched to find its BDOS at
-EC06H as in a 64K CP/M 2.2, and at D006H, where it must say `Not enough
-memory`; and an LBR whose directory is 260 sectors long, which must be refused,
-and one that ends inside its directory. Every run of 80un is given 60 seconds,
-where the longest takes under 10, so that a decoder that never ends fails its
-test there; three of the nine tests before these fixes gave it 60 seconds and
-the other six 300. The tests are skipped when make, uplm80, um80, ul80 or
-cpmemu is missing. All twelve fail on the sources at 24739a3, the last eight on
-those at 782334d, and the three for the directory's length, the leaf and the
-LBR member that will not decode on those at 3cfeaf3.
+LBR of `-SOURCE.NZT` cut to one sector, which must come out as `src/un80`
+writes it, and of a Crunch V2 member cut short in its header, and an LBR member
+and an ARC method 4 member cut short in their Huffman trees, which must each
+say `Error`, each followed by a member that must come out; an LBR member of no
+sectors followed by one of the same name; an ARC and an LBR that each hold a
+member of their own name, which must be left as they were; an ARC of 300
+members, run as it is, with 80un.com patched to find its BDOS at EC06H as in a
+64K CP/M 2.2, and at D006H, where it must say `Not enough memory`; and an LBR
+whose directory is 260 sectors long, which must be refused, and one that ends
+inside its directory. Every run of 80un is given 60 seconds, where the longest
+takes under 10, so that a decoder that never ends fails its test there; three
+of the nine tests before these fixes gave it 60 seconds and the other six 300.
+The tests are skipped when make, uplm80, um80, ul80 or cpmemu is missing. All
+fourteen fail on the sources at 24739a3, the ten that build their inputs on
+those at 782334d, the five for the directory's length, the leaf, the LBR member
+that will not decode and the members cut short on those at 3cfeaf3, and the two
+for the members cut short on those at 4fa1e83.
 
 `tests/test_arc.py` checks that `src/un80`'s ARC method 4 reads an empty tree
 with padding after it, a tree whose child is past its end and one with a leaf
