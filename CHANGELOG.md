@@ -192,6 +192,14 @@ kept, so two members can then land on one file; the names of an LBR, at most
 below the BDOS, 80un says `Not enough memory` and stops, where it used to run
 and write over the BDOS. It needs about 58K of TPA.
 
+No member is written over the archive being read. A member whose name, as made
+by the rule, was the archive's own deleted the archive and wrote itself in its
+place: under cpmemu `SELF.ARC` holding `SELF.ARC` was overwritten, an LBR,
+which is reopened for each member, lost every member after that one, and on
+CP/M the blocks freed can go to the new file in the middle of the read. The
+archive's name now counts as one made already, when the archive is on the
+drive the members are written to, so such a member is written as `SELF-1.ARC`.
+
 With these changes 80un extracts all 142 files under `tests/`, under uplm80
 0.4.2 and under uplm80 with the BYTE shift rule alike: 133 byte for byte as
 `src/un80` extracts them and the other 9 the same up to the ^Z padding of the

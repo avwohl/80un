@@ -356,6 +356,15 @@ main: procedure public;
         return;
     end;
 
+    /* The archive is a file of the drive the members are made on, unless it
+       was named with another drive.  A member made under its name deleted it
+       while it was being read, and wrote itself in its place: on CP/M the
+       blocks the delete frees can go to the new file, and an LBR, reopened
+       for each member, is gone.  Its name is taken first, so that such a
+       member is made as NAME-1 (names.plm). */
+    if fcb(0) = 0 or fcb(0) = mon2(25, 0) + 1 then
+        call reserve$name(fcb$ptr + 1);
+
     /* Get extension for type detection */
     ext(0) = fcb(9) and 07fh;
     ext(1) = fcb(10) and 07fh;

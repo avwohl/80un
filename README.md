@@ -480,7 +480,11 @@ every format (`src/plm/names.plm`):
   `UNNAMED`;
 - a name already made in this run gets `-1`, `-2`, ... on its end, cut to fit,
   so that two members never land on one file (for as many names as 80un
-  keeps: 256, or as many as fit below the BDOS, about 120 in a 64K CP/M 2.2).
+  keeps: 256, or as many as fit below the BDOS, about 120 in a 64K CP/M 2.2);
+- the archive's own name counts as one made already, when the archive is on the
+  drive the members are written to, so that no member is written over the
+  archive while it is being read: `SELF.ARC` holding `SELF.ARC` writes it as
+  `SELF-1.ARC`.
 
 A crunched or CrLZH file's name ends at a `[`, where a note begins, as UNCR24
 and `src/un80` end it. When the name made differs from the one stored, 80un

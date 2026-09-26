@@ -20,7 +20,10 @@
  *   - a name already made this run gets -1, -2 ... on its end, cutting the
  *     name to fit, so that no member overwrites another.  That holds for as
  *     many names as the table keeps: 256, or as many as fit below the BDOS
- *     (main.plm), about 120 in a 64K CP/M 2.2.
+ *     (main.plm), about 120 in a 64K CP/M 2.2;
+ *   - the archive's own name counts as made already, when it is on the drive
+ *     the members are made on, so that no member is made over the archive
+ *     while it is being read.
  *
  * src/un80 replaces the characters a host filesystem cannot take with '_'
  * (un80.cpm.safe_filename).  '_' is a delimiter to the CP/M 2.2 CCP, which
@@ -70,6 +73,24 @@ name$taken: procedure byte;
     end;
     return 0;
 end name$taken;
+
+/* Take the 11-byte name at NAME11, an FCB's, as one made already this run, so
+   that no member is made under it.  main.plm gives it the archive's own. */
+reserve$name: procedure(name11) public;
+    declare name11 address;
+    declare s based name11 (11) byte;
+    declare i byte;
+    declare p address;
+
+    if name$count >= name$max then return;
+    p = name$count * 11;
+    i = 0;
+    do while i < 11;
+        name$table(p + i) = s(i) and 7fh;
+        i = i + 1;
+    end;
+    name$count = name$count + 1;
+end reserve$name;
 
 /* Set up OFCB for the member stored as NAME$PTR (LEN bytes, or up to a NUL),
    record the name, and print " -> NAME.TYP" when it is not the stored name. */
