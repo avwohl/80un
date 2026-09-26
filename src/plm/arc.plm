@@ -533,13 +533,18 @@ extract$arc$member: procedure byte public;
     if result then do;
         call printstr(.(' OK$'));
         file$count = file$count + 1;
+        call crlf;
+        return 1;
     end;
-    else do;
-        call printstr(.(13, 10, '  Error$'));
-    end;
-    call crlf;
 
-    return result;
+    /* The member would not decode, or its file would not take all of it.
+       Its data has been read through all the same (skip$input above), so
+       the next header is where it should be: go on to it, as src/un80 does.
+       Returning 0 here ended the archive, and every member after this one
+       was lost. */
+    call printstr(.(13, 10, '  Error$'));
+    call crlf;
+    return 2;
 end extract$arc$member;
 
 /* Extract all files from ARC archive */
@@ -562,8 +567,8 @@ extract$arc: procedure byte public;
             return 1;  /* End of archive */
 
         result = extract$arc$member;
-        if result = 0 then return 0;  /* Error */
-        /* Result = 2 means skip but continue */
+        if result = 0 then return 0;  /* End of archive */
+        /* Result = 2: the member was skipped or went wrong; go on */
     end;
 
     return 1;

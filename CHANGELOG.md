@@ -115,6 +115,16 @@ or not, where they stopped only at a leaf: a tree whose nodes lead back to one
 another never reaches one, and read on for ever too. It now ends at the end of
 the input with what was decoded before it, as it does in `src/un80`.
 
+An ARC member that will not decode no longer ends the archive. When a
+member's decoder failed, on a Huffman tree of more than 256 nodes for example,
+or its file could not be written, `extract$arc$member` returned 0 and
+`extract$arc` stopped, although the member's data had been read through and
+the next header was where it should be: every member after it was lost. 80un
+now says `Error` for that member and goes on, as `src/un80` does and as it
+already did for one that cannot be created. What the member's file holds is
+what was written of it before the error; `src/un80` writes the member's stored
+data instead.
+
 Crunch V1 is decoded, by 80un and by `src/un80`. The one file in
 `tests/samples/crunch/zex-sage.dzc` is V1 (siglevel 10H): `src/un80` refused
 it, and 80un, had it been able to create the file, would have run it through
