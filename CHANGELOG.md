@@ -49,6 +49,52 @@ its 162304 bytes and the five members after it are lost; and the one file in
 `zex-sage.dzc` is stored as `ZEX/SAGE.DOC`, which cannot be created. The
 committed binaries are not rebuilt.
 
+An archive member of 64K or more is read to its end. `getbyte` stops at the
+end of the member being decoded, and it counted that end in one 16-bit word,
+with 0FFFFH standing for no limit at all. An ARC header gives the compressed
+size in 32 bits, and `extract$arc$member` kept only the low word, so a member
+of 64K or more stopped early and the next header was looked for in the middle
+of its data: `BYE520.ASM` in `tests/test.arc`, 75584 bytes compressed, stopped
+after 10048 of them with 19840 of its 162304 bytes written, and the five members
+after it were lost. A member of exactly 65535 bytes read as no limit and ran on
+into the next one, and method 3 took its size as the same low word. The limit is
+now 32 bits (`set$input$limit` in `src/plm/io.plm`), every ARC method reads to
+it and no further, and all 18 members of `tests/test.arc` come out with the
+CRC-16 their headers carry. A member whose file cannot be created is skipped
+over rather than leaving the next header unfound.
+
+An LBR member is held to its length too. The length is a count of 128-byte
+sectors, at most 65535 of them (8 MB less 128 bytes, the most the format can
+describe), and a squeezed, crunched or CrLZH member was decoded with no limit,
+so a stream that did not end read on into the next member. It now stops at the
+member's last sector, a limit of up to 23 bits. `uncrlzh` reads its header
+through `getbyte`, as `unsqueeze` and `uncrunch` do, so that the header counts.
+
+The squeeze decoders, `unsqueeze` and ARC method 4, stopped as soon as the last
+byte of their input had been read. A Huffman code can be a single bit, so whole
+symbols after the one that fetched that byte were dropped, and with the limit an
+LBR member whose stream fills its last sector would have lost them too. They now
+go on while bits are left, and stop at a symbol that would need a bit past the
+end.
+
+Nothing else carries a member's size. The squeeze, crunch and CrLZH streams
+have no length field and end with a code of their own, the output is written a
+128-byte record at a time with no count kept, and the position of the next
+header is only ever the input file's own sequential position. Every format here
+can hold a member of 64K or more: ARC sizes are 32 bits, an LBR member runs to
+65535 sectors, and the streams have no size at all; the bound is CP/M 2.2's own
+8 MB file.
+
+With uplm80 0.4.2 and with uplm80 giving a shifted BYTE a BYTE result, 80un now
+extracts 141 of the 142 files under `tests/`, each identical to what `src/un80`
+extracts apart from the ^Z padding of its last record, and every ARC member's
+CRC-16 checks; only `ZEX/SAGE.DOC` is still missing. Seven archives built to
+cross the old limits extract correctly under both compilers, and four of them
+did not before: a method 2 member of 100000 bytes, method 3 and method 4 members
+over 64K compressed, a method 4 member of exactly 65535 bytes, a squeezed LBR
+member of 678 sectors, and an ARC and an LBR member with whole symbols in their
+last byte.
+
 ## [0.3.2] - 2026-09-23
 
 ### Changed

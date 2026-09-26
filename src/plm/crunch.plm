@@ -17,7 +17,6 @@ declare lzw$max$bits byte external;
 declare work$ptr address external;
 declare work based work$ptr (1) byte;
 declare work$len address external;
-declare input$limit address external;
 
 /* Crunch dictionary-replacement tables.  See main.plm for where these live:
    they overlay buffers that no crunch file ever uses. */

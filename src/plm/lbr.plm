@@ -26,7 +26,6 @@ declare inbuf based inbuf$ptr (1) byte;
 declare inbuf$pos address external;
 declare inbuf$end address external;
 declare outbuf$pos address external;
-declare input$limit address external;
 declare file$count byte external;
 
 /* Procedures from earlier modules - visible when compiled together */
@@ -66,7 +65,7 @@ extract$lbr: procedure byte public;
     dir$ptr = work$ptr;
     inbuf$pos = 0;
     inbuf$end = 0;
-    input$limit = 0ffffh;  /* No limit for LBR */
+    call clear$input$limit;  /* No limit while reading the directory */
 
     /* Read first sector to get directory size */
     call setdmaaddr(dir$ptr);
@@ -183,10 +182,17 @@ extract$lbr: procedure byte public;
                                 sectors$left = sectors$left - 1;
                             end;
 
+                            /* A compressed member is decoded through getbyte,
+                               which now stops at the member's end rather than
+                               reading on into the next member.  The length is
+                               in 128-byte sectors, up to 65535 of them, so the
+                               limit in bytes takes 23 bits. */
                             inbuf$pos = 0;
                             inbuf$end = 0;
-                            input$limit = 0ffffh;  /* No byte limit for LBR members */
+                            call set$input$limit(shl(member$length, 7),
+                                                 shr(member$length, 9));
                             if fill$inbuf = 0 then do;
+                                call clear$input$limit;
                                 call closefile(ofcb$ptr);
                                 call crlf;
                             end;
@@ -220,6 +226,7 @@ extract$lbr: procedure byte public;
                                     end;
                                 end;
 
+                                call clear$input$limit;
                                 call closefile(ofcb$ptr);
                                 file$count = file$count + 1;
                                 call printstr(.msg$ok);

@@ -58,7 +58,6 @@ declare lzw$suffix$ptr address external;
 declare ring$ptr address external;
 declare work$ptr address external;
 declare file$count byte external;
-declare input$limit address external;
 
 /*
  * Note: When compiling all files together with uplm80, procedures
@@ -83,7 +82,7 @@ decompress$file: procedure byte;
     /* Read file into buffer */
     inbuf$pos = 0;
     inbuf$end = 0;
-    input$limit = 0ffffh;  /* No limit for single file */
+    call clear$input$limit;  /* No limit for single file */
     if fill$inbuf = 0 then return 0;
 
     /* Detect compression type */

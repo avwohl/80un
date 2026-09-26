@@ -109,8 +109,14 @@ declare work$len address public;
 declare file$count byte public;
 declare error$flag byte public;
 
-/* Input byte limit for ARC decompression (0FFFFH = no limit) */
+/* Input byte limit for one archive member.  An ARC member's compressed size
+   is 32 bits and an LBR member can run to 65535 sectors, so the limit is
+   INPUT$LIMIT$HI * 65536 + INPUT$LIMIT bytes, and INPUT$LIMITED says whether
+   there is one at all: 0 reads on to the end of the file.  See
+   set$input$limit in io.plm. */
 declare input$limit address public;
+declare input$limit$hi address public;
+declare input$limited byte public;
 
 /*========================================================
  * Console Output

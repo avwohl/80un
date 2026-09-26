@@ -10,7 +10,8 @@ declare cpm$eof literally '01AH';
 declare huff$tree$ptr address external;
 declare huff$tree based huff$tree$ptr (1) byte;
 declare huff$nodes address external;
-declare input$limit address external;
+declare bits$left byte external;
+declare input$short byte external;
 
 /* Procedures from common.plm and io.plm - visible when compiled together */
 
@@ -68,9 +69,13 @@ unsqueeze: procedure byte public;
     call init$bits$lsb;
     call init$rle;
 
-    /* Decode symbols */
+    /* Decode symbols.  A Huffman code can be a single bit, so the byte that
+       holds the end of the input can hold whole symbols after the one that
+       fetched it: go on while bits are left, and stop at a symbol that ran
+       past the end of the input (INPUT$SHORT) rather than write it. */
     done = 0;
-    do while done = 0 and input$avail <> 0;
+    input$short = 0;
+    do while done = 0 and (bits$left <> 0 or input$avail <> 0);
         node = 0;
         do while node < huff$nodes;
             p = huff$tree$ptr + shl(double(low(node)), 2);
@@ -81,7 +86,7 @@ unsqueeze: procedure byte public;
 
             if (left and 8000h) <> 0 then do;
                 symbol = (not left);
-                if symbol = 256 then do;
+                if symbol = 256 or input$short then do;
                     done = 1;
                 end;
                 else do;

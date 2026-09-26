@@ -20,6 +20,8 @@ declare outbuf based outbuf$ptr (1) byte;
 declare outbuf$size address external;
 declare outbuf$pos address external;
 declare input$limit address external;
+declare input$limit$hi address external;
+declare input$limited byte external;
 declare bit$buffer address external;
 declare bits$left byte external;
 
@@ -55,23 +57,59 @@ fill$inbuf: procedure byte public;
     return 1;
 end fill$inbuf;
 
+/* Set when getbyte had no byte left to give and returned CPM$EOF instead */
+declare input$short byte public;
+
+/* Limit the input to the next HI * 65536 + LO bytes: one archive member.
+   The limit used to be one 16-bit count, with 0FFFFH standing for no limit.
+   An ARC member's compressed size is 32 bits, and taking only its low word
+   stopped BYE520.ASM in tests/test.arc (75584 bytes compressed) after 10048
+   bytes, 19840 of its 162304 written, and lost the five members after it;
+   a member of exactly 65535 bytes read on into the next one. */
+set$input$limit: procedure(lo, hi) public;
+    declare (lo, hi) address;
+    input$limit = lo;
+    input$limit$hi = hi;
+    input$limited = 1;
+end set$input$limit;
+
+/* Read on to the end of the file */
+clear$input$limit: procedure public;
+    input$limited = 0;
+end clear$input$limit;
+
+/* Has the member's last byte been read? */
+input$spent: procedure byte;
+    if input$limited = 0 then return 0;
+    if input$limit <> 0 then return 0;
+    if input$limit$hi <> 0 then return 0;
+    return 1;
+end input$spent;
+
 /* Get next byte from input buffer */
 getbyte: procedure byte public;
     declare b byte;
     declare p address;
 
-    if input$limit = 0 then
+    if input$spent then do;
+        input$short = 1;
         return cpm$eof;
+    end;
 
     if inbuf$pos >= inbuf$end then do;
-        if fill$inbuf = 0 then
+        if fill$inbuf = 0 then do;
+            input$short = 1;
             return cpm$eof;
+        end;
     end;
 
     p = inbuf$ptr + inbuf$pos;
     inbuf$pos = inbuf$pos + 1;
-    if input$limit <> 0ffffh then
+    if input$limited then do;
+        if input$limit = 0 then
+            input$limit$hi = input$limit$hi - 1;
         input$limit = input$limit - 1;
+    end;
     return inbuf(p - inbuf$ptr);
 end getbyte;
 
@@ -79,7 +117,7 @@ end getbyte;
 peekbyte: procedure byte public;
     declare p address;
 
-    if input$limit = 0 then
+    if input$spent then
         return cpm$eof;
 
     if inbuf$pos >= inbuf$end then do;
@@ -93,10 +131,19 @@ end peekbyte;
 
 /* Check if more input available */
 input$avail: procedure byte public;
-    if input$limit = 0 then return 0;
+    if input$spent then return 0;
     if inbuf$pos < inbuf$end then return 1;
     return fill$inbuf;
 end input$avail;
+
+/* Discard what is left of the member (the limit must be set) */
+skip$input: procedure public;
+    declare b byte;
+
+    do while input$avail;
+        b = getbyte;
+    end;
+end skip$input;
 
 /*========================================================
  * Buffered Output

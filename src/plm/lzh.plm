@@ -23,12 +23,9 @@ declare n$char literally '315';       /* 256 + 1 + 58 */
 declare lzh$t literally '629';        /* N_CHAR * 2 - 1 */
 declare lzh$r literally '628';        /* T - 1, root node */
 declare max$freq literally '08000H';  /* Trigger tree reconstruction */
+declare cpm$eof literally '01AH';
 
 /* External declarations */
-declare inbuf$ptr address external;
-declare inbuf based inbuf$ptr (1) byte;
-declare inbuf$pos address external;
-declare inbuf$end address external;
 declare outbuf$ptr address external;
 declare outbuf based outbuf$ptr (1) byte;
 declare outbuf$pos address external;
@@ -43,7 +40,6 @@ declare prnt (944) address;    /* T + N_CHAR */
 declare son (629) address;     /* T */
 
 /* Bit reader state (MSB first for CrLZH) */
-declare lzh$pos address;       /* Current input position */
 declare lzh$buf address;       /* Bit buffer (16-bit) */
 declare lzh$buf$len byte;      /* Bits available in buffer */
 
@@ -364,17 +360,14 @@ uncrlzh: procedure byte public;
     /* Initialize tables */
     call init$lzh$tables;
 
-    /* Skip magic bytes (already verified) */
-    lzh$pos = 2;
-
-    /* Skip original filename (null-terminated) */
-    do while lzh$pos < inbuf$end and inbuf(lzh$pos) <> 0;
-        lzh$pos = lzh$pos + 1;
+    /* Skip the magic bytes (already verified) and the original filename
+       (null-terminated) through getbyte, as unsqueeze and uncrunch do, so an
+       LBR member's input limit counts the header too.  This used to step
+       INBUF$POS past them, which left the limit that many bytes long. */
+    b = getbyte;
+    b = getbyte;
+    do while (b := getbyte) <> 0 and b <> cpm$eof;
     end;
-    lzh$pos = lzh$pos + 1;  /* Skip null */
-
-    /* Sync inbuf$pos with lzh$pos for getbyte() to work */
-    inbuf$pos = lzh$pos;
 
     /* Initialize bit reader */
     lzh$buf = 0;

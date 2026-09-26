@@ -12,11 +12,12 @@ declare rle$marker literally '090H';
 declare ofcb$ptr address external;
 declare ofcb based ofcb$ptr (36) byte;
 declare outbuf$pos address external;
-declare input$limit address external;
 declare file$count byte external;
 declare huff$tree$ptr address external;
 declare huff$tree based huff$tree$ptr (1) byte;
 declare huff$nodes address external;
+declare bits$left byte external;
+declare input$short byte external;
 declare lzw$prefix$ptr address external;
 declare lzw$suffix$ptr address external;
 declare lzw$next$code address external;
@@ -34,55 +35,29 @@ end lzw$output$raw;
  * ARC Decompression Methods
  *========================================================*/
 
-/* ARC method 1/2: Stored (no compression)
- * Handles 32-bit sizes using two 16-bit words.
- * Total bytes = size$hi * 65536 + size$lo */
-arc$decomp$stored: procedure(size$lo, size$hi) byte;
-    declare (size$lo, size$hi) address;
-    declare b byte;
-    declare i address;
-
-    /* First process size$lo bytes */
-    do while size$lo <> 0;
-        b = getbyte;
-        if putbyte(b) = 0 then return 0;
-        size$lo = size$lo - 1;
+/* ARC method 1/2: Stored (no compression).  The member's size, all 32 bits
+   of it, is the input limit, so this copies until getbyte runs out. */
+arc$decomp$stored: procedure byte;
+    do while input$avail;
+        if putbyte(getbyte) = 0 then return 0;
     end;
-
-    /* Then process size$hi * 65536 bytes (one 64KB chunk per iteration) */
-    do while size$hi <> 0;
-        /* Process 65536 bytes using wrap-around counter */
-        i = 1;  /* Start at 1 so we can check for wrap to 0 */
-        do while i <> 0;
-            b = getbyte;
-            if putbyte(b) = 0 then return 0;
-            i = i + 1;  /* Wraps from 0xFFFF to 0 after 65535 iterations */
-        end;
-        /* Process one more byte to complete 65536 */
-        b = getbyte;
-        if putbyte(b) = 0 then return 0;
-        size$hi = size$hi - 1;
-    end;
-
     return 1;
 end arc$decomp$stored;
 
-/* ARC method 3: RLE only */
-arc$decomp$rle: procedure(size) byte;
-    declare size address;
+/* ARC method 3: RLE only.  It too runs to the end of the member's input: its
+   size used to be passed in as the low 16 bits of the compressed size. */
+arc$decomp$rle: procedure byte;
     declare (b, cnt, prev) byte;
 
     prev = 0;
-    do while size > 0;
+    do while input$avail;
         b = getbyte;
-        size = size - 1;
 
         if b = rle$marker then do;
             /* A marker with no count byte after it carries no data, so it is
                dropped - the same as rle$decode$byte and UNCR24 do */
-            if size <> 0 then do;
+            if input$avail then do;
                 cnt = getbyte;
-                size = size - 1;
                 if cnt = 0 then do;
                     /* Literal 090H; the previous byte is left alone */
                     if putbyte(rle$marker) = 0 then return 0;
@@ -130,9 +105,14 @@ arc$decomp$squeezed: procedure byte;
     huff$nodes = node$count;
     call init$rle;
 
-    /* Decode symbols */
+    /* Decode symbols.  The member's last byte can hold whole symbols after
+       the one that fetched it, and the loop used to stop as soon as that byte
+       was read, which dropped them: go on while bits are left, and stop at a
+       symbol that ran past the end of the member (INPUT$SHORT) rather than
+       write it.  See unsqueeze. */
     done = 0;
-    do while done = 0 and input$avail <> 0;
+    input$short = 0;
+    do while done = 0 and (bits$left <> 0 or input$avail <> 0);
         node = 0;
         do while node < huff$nodes;
             p = huff$tree$ptr + shl(double(low(node)), 2);
@@ -143,7 +123,7 @@ arc$decomp$squeezed: procedure byte;
 
             if (left and 8000h) <> 0 then do;
                 symbol = not left;
-                if symbol = 256 then
+                if symbol = 256 or input$short then
                     done = 1;
                 else do;
                     if rle$decode$byte(low(symbol)) = 0 then return 0;
@@ -492,31 +472,34 @@ extract$arc$member: procedure byte public;
         ofcb(11) = ' ';
     end;
 
-    /* Create output file */
+    /* The member's data is the next COMP$SIZE$HI * 65536 + COMP$SIZE bytes,
+       and the next header follows it, so every path below reads through the
+       limit and no further. */
+    call set$input$limit(comp$size, comp$size$hi);
+
+    /* Create output file.  A member that cannot be created is skipped over:
+       returning before its data left the next header unfound, so the members
+       after it were lost. */
     call deletefile(ofcb$ptr);
     if makefile(ofcb$ptr) = 0ffh then do;
         call printstr(.(13, 10, 'Cannot create file$'));
+        call crlf;
+        call skip$input;
+        call clear$input$limit;
         return 2;  /* Skip but continue */
     end;
 
     outbuf$pos = 0;
     result = 1;
 
-    /* Set input byte limit for compressed methods (16-bit limit) */
-    /* For stored files > 64KB, arc$decomp$stored handles its own count */
-    if (method = 1 or method = 2) and comp$size$hi > 0 then
-        input$limit = 0ffffh;  /* Stored handles its own count for large files */
-    else
-        input$limit = comp$size;
-
     /* Decompress based on method */
     if method = 1 or method = 2 then do;
-        /* Stored - pass full 32-bit size */
-        result = arc$decomp$stored(comp$size, comp$size$hi);
+        /* Stored */
+        result = arc$decomp$stored;
     end;
     else if method = 3 then do;
         /* Packed (RLE) */
-        result = arc$decomp$rle(comp$size);
+        result = arc$decomp$rle;
     end;
     else if method = 4 then do;
         /* Squeezed */
@@ -544,22 +527,18 @@ extract$arc$member: procedure byte public;
         call printstr(.msg$method);
         call printchar(' ');
         call printhex(method);
-        /* Skip the compressed data - already limited by input$limit */
-        do while input$limit > 0;
-            i = getbyte;
-        end;
+        /* Skip the compressed data */
+        call skip$input;
         call closefile(ofcb$ptr);
-        input$limit = 0ffffh;
+        call clear$input$limit;
         return 2;
     end;
 
     /* Skip any remaining bytes in compressed data */
-    do while input$limit > 0 and input$limit <> 0ffffh;
-        i = getbyte;
-    end;
+    call skip$input;
 
     /* Reset input limit for next member */
-    input$limit = 0ffffh;
+    call clear$input$limit;
 
     /* Flush and close output */
     if result then
@@ -584,7 +563,7 @@ extract$arc: procedure byte public;
     declare b byte;
 
     file$count = 0;
-    input$limit = 0ffffh;  /* No limit when scanning for headers */
+    call clear$input$limit;  /* No limit when scanning for headers */
 
     do while input$avail;
         /* Check for ARC marker */

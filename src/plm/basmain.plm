@@ -29,7 +29,6 @@ declare inbuf$end address external;
 declare outbuf$ptr address external;
 declare outbuf$size address external;
 declare outbuf$pos address external;
-declare input$limit address external;
 
 /* Linker provides __END__ at end of all code/data - bridged via heap.asm */
 declare heap$base address external;
@@ -97,7 +96,7 @@ main: procedure public;
     /* Read file into buffer */
     inbuf$pos = 0;
     inbuf$end = 0;
-    input$limit = 0ffffh;
+    call clear$input$limit;
     if fill$inbuf = 0 then do;
         call printstr(.msg$err);
         call crlf;
