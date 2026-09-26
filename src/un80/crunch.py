@@ -12,14 +12,17 @@ File format:
 - Compressed data (MSB-first bit stream)
 
 There are two main versions:
-- V1.x: siglevel 0x10-0x1F, 12-bit fixed codes (a different algorithm; see below)
+- V1.x: siglevel up to 0x10, 12-bit fixed codes (a different algorithm; see below)
 - V2.x: siglevel 0x20-0x2F, 9-12 bit variable codes
 
-Special codes:
+Special codes (V2):
 - 0x100 (256): EOF
 - 0x101 (257): Adaptive reset (V2)
 - 0x102-0x103 (258-259): Filler codes (skip)
 - 0x104+ (260+): Dictionary entries
+
+Both versions follow the compressed data with a 16-bit checksum, the sum of
+the decoded bytes, starting at the byte after the one the EOF code ends in.
 
 The V2 decoder below follows GEL Uncruncher v2.4 (UNCR24.COM), because CRUNCH's
 dictionary does not simply freeze when it fills up.  Once 4096 entries exist,
@@ -30,8 +33,15 @@ desynchronises from the compressor the moment the table fills, which corrupts
 everything from that point on.  Comments name the UNCR24 addresses each
 behaviour was taken from.
 
-V1 (siglevel below 0x20) is a different algorithm living in a separate routine
-of UNCR24 and is not implemented here; V1 input decodes to little or nothing.
+V1 (siglevel below 0x20) is a different algorithm, in a separate routine of
+UNCR24 (1768-19AA), and uncrunch_v1 below follows that routine.  Its codes are
+12 bits throughout, and a code is not a count but a slot in a 4096-entry table
+that the string was hashed into: the slot is the middle twelve bits of
+((prefix + suffix) OR 800H) squared, a collision goes to the end of the chain
+from that slot and then to the first free slot from 101 past it, and slot 0 is
+reserved, which makes code 0 the end of the stream.  That is the "crunched"
+LZW of ARC methods 5 and 6 with slot 0 taken out.  UNCR24 decodes V1 only up
+to siglevel 0x10 and refuses 0x11-0x1F.
 """
 
 import struct
@@ -466,6 +476,123 @@ def uncrunch_lzw(data: bytes, start_pos: int, initial_bits: int, is_v2: bool) ->
     return bytes(result)
 
 
+# Crunch V1: UNCR24's second decoder, 1768-19AA.
+_V1_TABLE = 4096
+_V1_ENTRIES = 4095        # slot 0 is reserved (1927-192C), so 4095 fit
+_V1_EOF = 0               # code 0 ends the stream (18CE-18D2)
+_V1_EMPTY = -1            # T0 = 80H: "slot unused" (1912-1920)
+_V1_RESERVED = -2         # T0 = 7FH: slot 0 (1927-192C)
+_V1_ROOT = 0xFFFF         # a single-byte entry's prefix
+_V1_PROBE = 101           # 1931-1943: the free-slot search starts here
+_V1_MAX_SIGLEVEL = 0x10   # 17D0-17D7: UNCR24 refuses V1 above this
+
+
+def _v1_hash(prefix: int, suffix: int) -> int:
+    """
+    The slot for (prefix, suffix) (UNCR24 197F).
+
+    UNCR24 multiplies floor(v/2) by ceil(v/2) in 16 bits and keeps bits 4-15,
+    which is exactly bits 6-17 of v squared - the mid-square hash of ARC's
+    methods 5 and 6.  For the root of byte 0, v is FFFFH and the multiply is
+    skipped (198F), which gives 800H, the same as the formula.
+    """
+    v = ((prefix + suffix) & 0xFFFF) | 0x0800
+    return ((v * v) >> 6) & 0x0FFF
+
+
+class _V1Table:
+    """UNCR24's V1 dictionary: prefix, suffix and chain link per slot."""
+
+    def __init__(self) -> None:
+        self.prefix = [_V1_EMPTY] * _V1_TABLE
+        self.suffix = bytearray(_V1_TABLE)
+        self.link = [0] * _V1_TABLE      # next slot on the chain, 0 = end
+        self.prefix[0] = _V1_RESERVED
+        self.left = _V1_ENTRIES          # 18FE: IX counts the free entries
+        self.full = False
+        for byte in range(256):          # 1905-190F: the roots
+            self.insert(_V1_ROOT, byte)
+
+    def known(self, code: int) -> bool:
+        return self.prefix[code] != _V1_EMPTY
+
+    def insert(self, prefix: int, suffix: int) -> int:
+        """Add (prefix, suffix) at its hashed slot or the next free one (1865);
+        return the slot."""
+        slot = _v1_hash(prefix, suffix)
+        if self.prefix[slot] != _V1_EMPTY:
+            while self.link[slot]:                   # 1879-1888: chain end
+                slot = self.link[slot]
+            end = slot
+            slot = (end + _V1_PROBE) % _V1_TABLE     # 192E-1943
+            for _ in range(_V1_TABLE):               # 1954-1969: CPIR, wrapping
+                if self.prefix[slot] == _V1_EMPTY:
+                    break
+                slot = (slot + 1) % _V1_TABLE
+            else:
+                raise CrunchError("Crunch V1 table has no free slot")
+            self.link[end] = slot                    # 1970-197A
+        self.prefix[slot] = prefix
+        self.suffix[slot] = suffix
+        self.left -= 1                               # 189A-18A4
+        if self.left == 0:
+            self.full = True
+        return slot
+
+    def string(self, code: int) -> bytes:
+        """The bytes code stands for (1819-1863, iteratively)."""
+        out = []
+        while True:
+            prefix = self.prefix[code]
+            if prefix < 0:
+                raise CrunchError(f"Crunch V1 code {code:03X} names no entry")
+            out.append(self.suffix[code])
+            if prefix == _V1_ROOT:
+                break
+            code = prefix
+            if len(out) > _V1_TABLE:
+                raise CrunchError("Crunch V1 string loops")
+        return bytes(reversed(out))
+
+
+def uncrunch_v1(data: bytes, start_pos: int) -> tuple[bytes, int]:
+    """
+    Decode a Crunch V1 stream (UNCR24 17E4-1817).
+
+    Returns the decoded bytes, still RLE90-encoded, and the offset of the
+    checksum that follows the EOF code.
+    """
+    bits = BitReader(data, start_pos)
+    table = _V1Table()
+    result = bytearray()
+    prev = None           # 1A87H
+    first = 0             # 1A8DH: first byte of the string last written
+
+    while True:
+        if bits.pos >= len(data) and bits.bits_in_buffer < 12:
+            raise CrunchError("Crunch V1 stream ends without its EOF code")
+        code = bits.read_code(12)
+        if code == _V1_EOF:
+            break
+        skip_insert = prev is None           # 1A89H starts at 1
+        if not table.known(code):
+            # The KwKwK case: the compressor used the entry it was about to
+            # make, so make it now (182E-1841), and not again afterwards.
+            if prev is None or table.full:
+                raise CrunchError(f"Crunch V1 code {code:03X} names no entry")
+            table.insert(prev, first)
+            if not table.known(code):
+                raise CrunchError(f"Crunch V1 code {code:03X} names no entry")
+            skip_insert = True
+        string = table.string(code)
+        result += string
+        first = string[0]
+        if not skip_insert and not table.full:
+            table.insert(prev, first)        # 17F5-1802
+        prev = code
+    return bytes(result), bits.pos
+
+
 def uncrunch(data: bytes) -> bytes:
     """
     Decompress crunched data.
@@ -482,13 +609,15 @@ def uncrunch(data: bytes) -> bytes:
     header = parse_header(data)
 
     # V1 (siglevel below 0x20) is a different algorithm, which UNCR24 handles in
-    # a separate routine.  Running the V2 decoder over V1 input produces a short
-    # run of rubbish, so say so rather than reporting success.
+    # a separate routine, and that routine stops at siglevel 0x10.
     if not header.is_v2:
-        raise CrunchError(
-            f"Crunch V1 (siglevel 0x{header.siglevel:02X}) is not supported; "
-            "V1 uses a different algorithm from V2"
-        )
+        if header.siglevel > _V1_MAX_SIGLEVEL:
+            raise CrunchError(
+                f"Crunch V1 siglevel 0x{header.siglevel:02X} is not supported; "
+                f"UNCR24 decodes V1 only up to 0x{_V1_MAX_SIGLEVEL:02X}"
+            )
+        result, _ = uncrunch_v1(data, header.data_offset)
+        return decode_rle(result) if RLE_MARKER in result else result
 
     # Decompress using LZW
     result = uncrunch_lzw(

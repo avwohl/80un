@@ -355,3 +355,128 @@ class TestMalformedInput:
             except CrunchError:
                 continue
             assert isinstance(result, bytes)
+
+
+def _v1_encode(data: bytes, name: bytes = b'FUZZ.TXT') -> bytes:
+    """
+    Crunch V1 as the V1 decoder's table reads it, for tests: RLE90, then
+    12-bit codes that are table slots, code 0 at the end, then the byte sum.
+
+    GEL's UNCR24.COM, run under cpmemu, decodes what this makes for the
+    60000-byte table-filling test below back to the input, padded to its last
+    128-byte record with ^Z, and reports no checksum error (checked when the V1
+    decoder was written); here it round-trips through un80.
+    """
+    from un80.crunch import _V1Table, _V1_ROOT
+
+    stream = bytearray()
+    i = 0
+    while i < len(data):
+        c = data[i]
+        n = 1
+        while i + n < len(data) and data[i + n] == c and n < 255 and c != 0x90:
+            n += 1
+        if c == 0x90:
+            stream += b'\x90\x00'
+        elif n >= 3:
+            stream += bytes([c, 0x90, n])
+        else:
+            stream.append(c)
+            n = 1
+        i += n
+
+    table = _V1Table()
+    where = {(table.prefix[s], table.suffix[s]): s
+             for s in range(4096) if table.prefix[s] == _V1_ROOT}
+    codes = []
+    w = where[(_V1_ROOT, stream[0])]
+    for c in stream[1:]:
+        if (w, c) in where:
+            w = where[(w, c)]
+            continue
+        codes.append(w)
+        if not table.full:
+            where[(w, c)] = table.insert(w, c)
+        w = where[(_V1_ROOT, c)]
+    codes += [w, 0]
+    body = _pack_codes(codes, width=12)
+    return (b'\x76\xfe' + name + b'\x00\x12\x10\x00\x00' + body
+            + (sum(data) & 0xFFFF).to_bytes(2, 'little'))
+
+
+class TestCrunchV1:
+    """
+    Crunch V1, siglevel 10H: UNCR24's second decoder, 1768-19AA.
+
+    The expected output of zex-sage.dzc is what GEL Uncruncher v2.4
+    (UNCR24.COM, a member of mouse.lbr) writes for it under cpmemu, with the
+    '/' in the stored name changed to '_' on a copy, because cpmemu will not
+    create ZEX/SAGE.DOC.  The file's own checksum agrees.
+    """
+
+    SAMPLE = SAMPLES_DIR / "zex-sage.dzc"
+
+    def _sample(self) -> bytes:
+        if not self.SAMPLE.exists():
+            pytest.skip("zex-sage.dzc sample not available")
+        return self.SAMPLE.read_bytes()
+
+    def test_decodes_as_uncr24_does(self):
+        result = uncrunch(self._sample())
+        assert len(result) == 4992
+        assert hashlib.sha256(result).hexdigest() == (
+            '11f7b57a708c4f640d17c34df19f2cb8bbb54c7acce2cd61893e0f0c6eb5ac3a'
+        )
+
+    def test_checksum_after_the_eof_code(self):
+        """The two bytes after code 0 are the byte sum of the output."""
+        from un80.crunch import parse_header, uncrunch_v1
+
+        data = self._sample()
+        raw, pos = uncrunch_v1(data, parse_header(data).data_offset)
+        assert int.from_bytes(data[pos:pos + 2], 'little') == sum(decode_rle(raw)) & 0xFFFF
+
+    def test_slots_are_the_mid_square_hash(self):
+        """zex-sage.dzc starts with the roots of ' ', 90H and 0EH."""
+        from un80.crunch import _v1_hash
+
+        assert _v1_hash(0xFFFF, 0x20) == 0x7CF
+        assert _v1_hash(0xFFFF, 0x90) == 0x4FF
+        assert _v1_hash(0xFFFF, 0x0E) == 0x342
+        assert self._sample()[19:22] == bytes.fromhex('7cf4ff')
+        # The root of byte 0 overflows UNCR24's multiply, which it special-cases
+        assert _v1_hash(0xFFFF, 0x00) == 0x800
+
+    def test_siglevel_above_0x10_is_refused(self):
+        """UNCR24 decodes V1 only up to siglevel 10H (17D0-17D7)."""
+        data = bytearray(self._sample())
+        data[16] = 0x11
+        with pytest.raises(CrunchError, match='siglevel 0x11'):
+            uncrunch(bytes(data))
+
+    @pytest.mark.parametrize("text", [b'A', b'AB', b'ABABABA', b'\x90\x90x\x90',
+                                      b'the rain in spain ' * 40, bytes(range(256)) * 3])
+    def test_round_trip(self, text):
+        assert uncrunch(_v1_encode(text)) == text
+
+    def test_a_stream_that_fills_the_table(self):
+        """Past 4095 entries (slot 0 is reserved) no more are made."""
+        import random
+
+        rng = random.Random(77)
+        words = [bytes(rng.choice(b'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')
+                       for _ in range(rng.randint(1, 9))) for _ in range(4000)]
+        text = bytearray()
+        while len(text) < 60000:
+            text += b' '.join(rng.choice(words) for _ in range(12)) + b'\r\n'
+        text = bytes(text[:60000])
+        assert uncrunch(_v1_encode(text)) == text
+
+    def test_missing_eof_code_raises(self):
+        data = _v1_encode(b'hello, world')
+        with pytest.raises(CrunchError):
+            uncrunch(data[:-4])
+
+    def test_unknown_first_code_raises(self):
+        with pytest.raises(CrunchError, match='names no entry'):
+            uncrunch(b'\x76\xfeFUZZ.TXT\x00\x12\x10\x00\x00' + _pack_codes([5, 0], width=12))

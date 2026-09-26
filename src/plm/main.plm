@@ -370,6 +370,9 @@ main: procedure public;
      *   hash low bytes  5003 in HUFF_TREE + RING      (5120 available)
      *   hash high bytes 5003 in LZW_PREFIX + 8192     (8192 available)
      *   referenced bits  512 right after those        (3189 available)
+     * Crunch V1 needs no hash table: its prefixes are the first 4096 words of
+     * LZW_PREFIX and its chain links the other 4096, in place of the V2 hash
+     * bytes above - a file is V1 or V2, never both.
      */
     crunch$hash$lo$ptr = huff$tree$ptr;
     crunch$hash$hi$ptr = lzw$prefix$ptr + 8192;

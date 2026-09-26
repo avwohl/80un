@@ -312,6 +312,141 @@ init$crunch$lzw: procedure;
 end init$crunch$lzw;
 
 /*========================================================
+ * Crunch V1 (UNCR24's second decoder, 1768-19AA)
+ *
+ * V1 codes are 12 bits throughout, and a code is not a count but the slot in
+ * a 4096-entry table that its string was hashed into: the middle twelve bits
+ * of ((prefix + suffix) OR 800H) squared, and on a collision the first free
+ * slot from 101 past the end of the chain that starts there.  Slot 0 is
+ * reserved, so code 0 ends the stream.  That is the "crunched" LZW of ARC
+ * methods 5 and 6 with slot 0 taken out.
+ *
+ * The prefix of each slot is a word in the low half of LZW$PREFIX (8000H for
+ * an empty slot, 0FFFFH for a single byte), the chain link a word in its high
+ * half (0 for none), and the suffix a byte in LZW$SUFFIX, so lzw$output can
+ * write a V1 string as it writes a V2 one.
+ *========================================================*/
+
+declare v1$empty literally '8000H';      /* UNCR24 T0 = 80H, slot unused */
+declare v1$reserved literally '7FFFH';   /* UNCR24 T0 = 7FH, slot 0 */
+declare v1$links literally '8192';       /* link words, from LZW$PREFIX */
+declare v1$left address;                 /* free entries left (UNCR24 IX) */
+declare v1$full byte;                    /* UNCR24 1A86H */
+
+v1$prefix: procedure(code) address;
+    declare code address;
+    return readword(lzw$prefix$ptr + shl(code, 1));
+end v1$prefix;
+
+v1$link: procedure(code) address;
+    declare code address;
+    return readword(lzw$prefix$ptr + v1$links + shl(code, 1));
+end v1$link;
+
+/* The slot a (prefix, suffix) pair hashes to (UNCR24 197F).  UNCR24 takes
+   bits 4-15 of floor(v/2) * ceil(v/2) in 16 bits, which are bits 6-17 of v
+   squared; for the root of byte 0, v is 0FFFFH and this gives 800H, as
+   UNCR24's own special case (198F) does. */
+v1$hash: procedure(prefix, suffix) address;
+    declare prefix address;
+    declare suffix byte;
+    declare v address;
+
+    v = (prefix + suffix) or 0800h;
+    return shr(shr(v, 1) * (shr(v, 1) + (v and 1)), 4) and 0fffh;
+end v1$hash;
+
+/* Enter (prefix, suffix) at its slot, or at the first free one from 101 past
+   the end of the chain there (UNCR24 1865, 192E).  Returns 0 if the table
+   has no free slot. */
+v1$insert: procedure(prefix, suffix) byte;
+    declare prefix address;
+    declare suffix byte;
+    declare (slot, last, n) address;
+
+    slot = v1$hash(prefix, suffix);
+    if v1$prefix(slot) <> v1$empty then do;
+        do while v1$link(slot) <> 0;
+            slot = v1$link(slot);
+        end;
+        last = slot;
+        slot = (last + 101) and 0fffh;
+        n = 0;
+        do while v1$prefix(slot) <> v1$empty;
+            slot = (slot + 1) and 0fffh;
+            n = n + 1;
+            if n >= 4096 then return 0;
+        end;
+        call writeword(lzw$prefix$ptr + v1$links + shl(last, 1), slot);
+    end;
+    call writeword(lzw$prefix$ptr + shl(slot, 1), prefix);
+    lzw$suffix(slot) = suffix;
+    /* 189A: after the 4095th entry, the last free slot, no more are made */
+    v1$left = v1$left - 1;
+    if v1$left = 0 then v1$full = 1;
+    return 1;
+end v1$insert;
+
+/* Clear the table, reserve slot 0 and enter the 256 roots (UNCR24 18FE) */
+init$v1: procedure;
+    declare i address;
+    declare b byte;
+
+    i = 0;
+    do while i < 4096;
+        call writeword(lzw$prefix$ptr + shl(i, 1), v1$empty);
+        call writeword(lzw$prefix$ptr + v1$links + shl(i, 1), 0);
+        i = i + 1;
+    end;
+    call writeword(lzw$prefix$ptr, v1$reserved);
+    v1$left = 4095;
+    v1$full = 0;
+    i = 0;
+    do while i < 256;
+        b = v1$insert(0ffffh, low(i));
+        i = i + 1;
+    end;
+end init$v1;
+
+/* Decode a V1 stream (UNCR24 17E4-1817) */
+uncrunch$v1: procedure byte;
+    declare (code, prev) address;
+    declare (first, have$prev, skip) byte;
+
+    call init$v1;
+    have$prev = 0;
+    first = 0;
+
+    do while input$avail;
+        code = read$code$msb(12);
+        if code = 0 then return 1;          /* EOF */
+
+        skip = 0;                            /* 1A89H: the first code adds nothing */
+        if have$prev = 0 then skip = 1;
+        if v1$prefix(code) = v1$empty then do;
+            /* The compressor used the entry it was about to make (KwKwK):
+               make it now, and not again below (182E-1841) */
+            if have$prev = 0 or v1$full then return 0;
+            if v1$insert(prev, first) = 0 then return 0;
+            if v1$prefix(code) = v1$empty then return 0;
+            skip = 1;
+        end;
+
+        if lzw$output(code) = 0 then return 0;
+        first = work(work$len - 1);          /* 1A8DH: the string's first byte */
+
+        if skip = 0 and v1$full = 0 then do;
+            if v1$insert(prev, first) = 0 then return 0;
+        end;
+        prev = code;
+        have$prev = 1;
+    end;
+
+    /* The input ran out before code 0 */
+    return 0;
+end uncrunch$v1;
+
+/*========================================================
  * Crunch Decompression
  *========================================================*/
 
@@ -357,6 +492,13 @@ uncrunch: procedure byte public;
     /* Initialize LZW and bit reader */
     call init$bits$msb;
     call init$rle;
+
+    /* V1 is UNCR24's other decoder, and UNCR24 takes it only up to
+       siglevel 10H */
+    if is$v2 = 0 then do;
+        if siglevel > 10h then return 0;
+        return uncrunch$v1;
+    end;
 
     lzw$code$size = initial$bits;
     lzw$max$bits = 12;

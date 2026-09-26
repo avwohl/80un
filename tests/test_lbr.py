@@ -220,9 +220,11 @@ class TestExtractionIsResilient:
 
     def test_a_member_that_will_not_decompress_is_kept_raw(self):
         """
-        A Crunch V1 member cannot be decompressed, and raising used to abort the
-        whole extraction.  The member must come back as stored, under its
-        directory name, and the members around it must survive.
+        A member that cannot be decompressed used to abort the whole
+        extraction by raising.  The member must come back as stored, under its
+        directory name, and the members around it must survive.  The member
+        here is zex-sage.dzc with its siglevel raised to 15H: Crunch V1, which
+        UNCR24 decodes only up to siglevel 10H.
         """
         v1_path = Path(__file__).parent / "samples" / "crunch" / "zex-sage.dzc"
         if not v1_path.exists():
@@ -230,9 +232,13 @@ class TestExtractionIsResilient:
 
         from un80.crunch import CrunchError, uncrunch
 
-        v1 = v1_path.read_bytes()
+        v1 = bytearray(v1_path.read_bytes())
+        siglevel = v1.index(0, 2) + 2       # after the name's NUL and reflevel
+        assert v1[siglevel] == 0x10
+        v1[siglevel] = 0x15
+        v1 = bytes(v1)
         with pytest.raises(CrunchError):
-            uncrunch(v1)          # V1 is refused rather than yielding rubbish
+            uncrunch(v1)          # refused rather than yielding rubbish
 
         archive = self._build_lbr(
             [('BEFORE.TXT', b'first\r\n'), ('ZEXSAGE.DZC', v1), ('AFTER.TXT', b'last\r\n')]

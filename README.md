@@ -559,7 +559,7 @@ The test suite needs additional sample files to achieve complete coverage:
 | Format | What's Tested | What's Missing |
 |--------|---------------|----------------|
 | **Squeeze** | ✅ Complete, checked against the header checksum | - |
-| **Crunch** | ✅ V2.x (siglevel ≥ 0x20), byte for byte against UNCR24.COM | V1.x (fixed 12-bit codes) is a different algorithm and is not decoded |
+| **Crunch** | ✅ V2.x (siglevel ≥ 0x20) and V1.x (siglevel up to 0x10), byte for byte against UNCR24.COM | V1.x siglevel 0x11-0x1F, which UNCR24 refuses too |
 | **CrLZH** | ✅ V1.x and V2.0 | - |
 | **ARC** | ✅ Methods 2, 3, 8, 9, checked against each member's CRC-16 | Methods 1, 4-7 (stored old, squeezed, old crunched); two method 8 members still fail their CRC |
 | **LBR** | ✅ Archive with nested compression | - |
@@ -569,7 +569,9 @@ Crunch expectations are ground truth rather than recorded behaviour:
 `tests/samples/lbr/mouse.lbr` carries `UNCR24.COM`, the original CP/M
 uncruncher, so the expected output is what that program produces when run under
 cpmemu. ARC and squeeze are checked against the CRC-16 and the 16-bit checksum
-those formats already store.
+those formats already store. The one Crunch V1 sample, `zex-sage.dzc`, is checked
+against UNCR24's output too, and against the byte sum crunch stores after its
+end code.
 
 Use `-v` with `-l` to check file versions: `80un file.czm -l -v`
 
