@@ -479,7 +479,8 @@ every format (`src/plm/names.plm`):
 - the name is cut to 8 characters and the type to 3, and an empty name becomes
   `UNNAMED`;
 - a name already made in this run gets `-1`, `-2`, ... on its end, cut to fit,
-  so that two members never land on one file (for the first 256 names).
+  so that two members never land on one file (for as many names as 80un
+  keeps: 256, or as many as fit below the BDOS, about 120 in a 64K CP/M 2.2).
 
 A crunched or CrLZH file's name ends at a `[`, where a note begins, as UNCR24
 and `src/un80` end it. When the name made differs from the one stored, 80un
@@ -543,13 +544,17 @@ PL/M-80 source is in `src/plm/`:
 ### Requirements
 
 - CP/M 2.2 or compatible (MP/M, ZCPR, etc.)
-- ~62KB TPA (Transient Program Area) for 80UN.COM
+- About 58KB of TPA (Transient Program Area) for 80UN.COM: its buffers and
+  room for one name must end 128 bytes below the BDOS entry at 0006H, so that
+  must be at about E700H or above. With more room it keeps up to 256 names
+  (2.75KB), about 120 in a 64K CP/M 2.2, whose BDOS entry is at EC06H. With
+  less, 80UN says `Not enough memory` and stops.
 - ~18KB TPA for 80UNBAS.COM
 - Z80 processor
 
 ### Memory-Constrained Systems
 
-80UN.COM requires approximately 62KB of TPA to support ARC method 9 (squashed) with its 8192-entry LZW dictionary. For systems with limited memory, 80UNBAS.COM is provided as a separate utility for MBASIC detokenization, requiring only ~18KB TPA.
+80UN.COM requires approximately 58KB of TPA, most of it for ARC method 9 (squashed) with its 8192-entry LZW dictionary. For systems with limited memory, 80UNBAS.COM is provided as a separate utility for MBASIC detokenization, requiring only ~18KB TPA.
 
 ---
 

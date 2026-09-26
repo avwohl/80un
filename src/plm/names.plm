@@ -18,7 +18,9 @@
  *   - the name is cut to 8 characters and the type to 3, and an empty name
  *     becomes UNNAMED;
  *   - a name already made this run gets -1, -2 ... on its end, cutting the
- *     name to fit, so that no member overwrites another.
+ *     name to fit, so that no member overwrites another.  That holds for as
+ *     many names as the table keeps: 256, or as many as fit below the BDOS
+ *     (main.plm), about 120 in a 64K CP/M 2.2.
  *
  * src/un80 replaces the characters a host filesystem cannot take with '_'
  * (un80.cpm.safe_filename).  '_' is a delimiter to the CP/M 2.2 CCP, which
@@ -28,11 +30,12 @@
 declare ofcb$ptr address external;
 declare ofcb based ofcb$ptr (36) byte;
 
-/* The names made this run, 11 bytes each; main.plm finds the room */
+/* The names made this run, 11 bytes each.  main.plm finds the room: after
+   the buffers, and NAME$MAX names, as many as fit below the BDOS, up to 256. */
 declare name$table$ptr address public;
 declare name$table based name$table$ptr (1) byte;
 declare name$count address public;
-declare name$max literally '256';
+declare name$max address public;
 
 /* The character CP/M gets for C: upper case, or '-' if CP/M will not take it */
 cpm$char: procedure(c) byte;

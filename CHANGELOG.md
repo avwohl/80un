@@ -178,14 +178,26 @@ An LBR member of no sectors is written as an empty file, as `src/un80` writes
 it. 80un made no file for it, while `cpm$name` took its name all the same, so a
 later member of that name came out as `NAME-1` with no `NAME`.
 
+80un keeps its table of names below the BDOS, and refuses a TPA too small for
+its buffers. The buffers end 34120 bytes past the program, and 256 names of 11
+bytes after them ended near F05AH with uplm80 0.4.2. 80un never compared either
+with the BDOS address at 0006H, and a 64K CP/M 2.2 has its BDOS entry at EC06H:
+there an ARC of more than about 150 members wrote names over the BDOS, where
+24739a3, whose data ended at E058H, fit. 80un now reads 0006H at startup, keeps
+128 bytes under it for the stack (which goes no deeper than 24 bytes on any
+test input), and keeps as many names as fit in the rest, up to 256: about 120
+in a 64K CP/M 2.2. Past that, names are still made by the rule but no longer
+kept, so two members can then land on one file; the names of an LBR, at most
+127, and of most archives are fewer. When the buffers and one name do not fit
+below the BDOS, 80un says `Not enough memory` and stops, where it used to run
+and write over the BDOS. It needs about 58K of TPA.
+
 With these changes 80un extracts all 142 files under `tests/`, under uplm80
 0.4.2 and under uplm80 with the BYTE shift rule alike: 133 byte for byte as
 `src/un80` extracts them and the other 9 the same up to the ^Z padding of the
 last record, with every ARC member's CRC-16, the squeeze checksums and the
 crunch byte sums checking. An ARC, an LBR and a squeezed file of 25 names CP/M
-cannot take as they stand come out under the names the rule gives. The name
-table takes 2816 bytes above the buffers, so 80un's data now ends about 60K
-into memory with uplm80 0.4.2, within the 62K TPA the README asks for.
+cannot take as they stand come out under the names the rule gives.
 
 ### Added
 

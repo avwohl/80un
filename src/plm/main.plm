@@ -60,6 +60,7 @@ declare work$ptr address external;
 declare file$count byte external;
 declare name$table$ptr address external;
 declare name$count address external;
+declare name$max address external;
 
 /*
  * Note: When compiling all files together with uplm80, procedures
@@ -257,13 +258,15 @@ main: procedure public;
     declare msg$noopen data('Cannot open input file$');
     declare msg$extract data('Extracting:$');
     declare msg$done data(' file(s) extracted$');
+    declare msg$nomem data('Not enough memory$');
+    declare stack$room literally '128';
 
     declare (i, j, result) byte;
     declare ext (4) byte;
     declare is$lbr byte;
     declare is$arc byte;
     declare magic (2) byte;
-    declare base address;
+    declare (base, top) address;
 
     /* Initialize pointers */
     fcb$ptr = 005ch;
@@ -280,8 +283,9 @@ main: procedure public;
      *   LZW_PREFIX: 16384 bytes (base + 5448)
      *   LZW_SUFFIX: 8192 bytes  (base + 21832)
      *   WORK:       4096 bytes  (base + 30024)
-     *   NAMES:      2816 bytes  (base + 34120), 256 names of 11 bytes
-     * Total: 36936 bytes from base
+     *   NAMES:      up to 2816 bytes (base + 34120), 256 names of 11 bytes,
+     *               or as many as fit below the BDOS (see below)
+     * Total: up to 36936 bytes from base
      *
      * HUFF_TREE sits next to RING so that the two form one 5120-byte run.
      * Crunch needs three tables of its own and there is no spare memory in a
@@ -322,6 +326,25 @@ main: procedure public;
     call crlf;
     call printstr(.msg$banner);
     call crlf;
+
+    /* All of it must end below the BDOS, whose entry is at 0006H, and leave
+       STACK$ROOM under that for the stack, which starts there (it goes no
+       deeper than 24 bytes on any of the test inputs; locals are static).
+       The buffers end 34120 bytes past the program, and the name table takes
+       what is left, up to 256 names.  Nothing checked this: 256 names end
+       near F05AH, and a 64K CP/M 2.2 has its BDOS at EC06H, so an archive of
+       more than about 150 members wrote names over it.  A TPA that the
+       buffers and one name do not fit is refused. */
+    top = read16(6);
+    if name$table$ptr < base or top < name$table$ptr
+       or top - name$table$ptr < stack$room + 11 then do;
+        call crlf;
+        call printstr(.msg$nomem);
+        call crlf;
+        return;
+    end;
+    name$max = (top - name$table$ptr - stack$room) / 11;
+    if name$max > 256 then name$max = 256;
 
     /* Check if filename provided */
     if fcb(1) = ' ' then do;
