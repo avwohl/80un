@@ -82,19 +82,29 @@ extract$lbr: procedure byte public;
         return 0;
     end;
 
-    /* Get directory size in sectors */
+    /* Get directory size in sectors.  It is 16 bits, like every length in
+       the directory, and only its low byte was read: a directory of 260
+       (0104H) sectors was taken as 4, and only the members in its first four
+       sectors were extracted, with nothing said.  WORK holds 32 sectors,
+       128 entries; a directory of none or of more than that, a high byte
+       other than 0 among them, is refused, as src/un80 refuses it ("Invalid
+       directory size"), and nothing is extracted. */
     dir$sectors = ent(14);
+    if ent(15) <> 0 then dir$sectors = 0;
     if dir$sectors = 0 or dir$sectors > 32 then do;
         call printstr(.msg$badlbr);
         return 0;
     end;
 
-    /* Read remaining directory sectors into work buffer */
+    /* Read remaining directory sectors into work buffer.  A file that ends
+       inside its directory has only the sectors read: the entries past them
+       used to be taken from whatever WORK held before, which made members
+       called UNNAMED out of nothing.  src/un80 stops at the same place. */
     k = 1;
     do while k < dir$sectors;
         call setdmaaddr(dir$ptr + shl(double(k), 7));  /* k * 128 */
         if readfile(ifcb$ptr) <> 0 then
-            k = dir$sectors;  /* Exit on error */
+            dir$sectors = k;  /* Exit on error */
         else
             k = k + 1;
     end;

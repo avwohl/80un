@@ -212,10 +212,12 @@ def test_names_cpm_cannot_take(com, tmp_path):
 HANG = 60
 
 
-def _lbr(members):
-    """An LBR image; MEMBERS is [(name, type, bytes)], b"" for no sectors."""
+def _lbr(members, dsec=None):
+    """An LBR image; MEMBERS is [(name, type, bytes)], b"" for no sectors.
+    DSEC is the directory's length in sectors, by default the fewest that
+    hold its entries."""
     count = len(members) + 1
-    dsec = -(-count * 32 // 128)
+    dsec = dsec or -(-count * 32 // 128)
     directory = b"\0" + b" " * 11 + struct.pack("<HH", 0, dsec) + bytes(16)
     body = b""
     index = dsec
@@ -375,3 +377,30 @@ def test_many_members_and_the_bdos(com, tmp_path):
                               tmp_path / "d006", timeout=HANG)
     assert "Not enough memory" in console, console
     assert files == {}, console
+
+
+def test_lbr_directory_length_is_16_bits(com, tmp_path):
+    """
+    The directory's length is 16 bits, and 80un read only its low byte: a
+    directory of 260 (0104H) sectors was taken as 4, and 15 of its 20 members
+    came out with nothing said.  src/un80 refuses it ("Invalid directory
+    size"), and so does 80un now, whose buffer holds 32 sectors.  A file that
+    ends inside its directory has only the entries it holds, where 80un made
+    members called UNNAMED out of what its buffer held before.
+    """
+    members = [(f"F{i:02d}", "TXT", f"member {i:02d}\r\n".encode()) for i in range(20)]
+    lbr = tmp_path / "long.lbr"
+    lbr.write_bytes(_lbr(members, dsec=0x104))
+    with pytest.raises(ValueError, match="Invalid directory size"):
+        extract_lbr(lbr)
+    console, files = run_80un(com, lbr, tmp_path / "long")
+    assert "Invalid LBR file" in console, console
+    assert "0 file(s) extracted" in console, console
+    assert files == {}, console
+
+    cut = tmp_path / "cut.lbr"
+    cut.write_bytes(_lbr([("A", "TXT", b"a\r\n"), ("B", "TXT", b"b\r\n"),
+                          ("C", "TXT", b"c\r\n")], dsec=2)[:128])
+    assert extract_lbr(cut) == [("A.TXT", b""), ("B.TXT", b""), ("C.TXT", b"")]
+    console, files = run_80un(com, cut, tmp_path / "cut")
+    assert files == {"a.txt": b"", "b.txt": b"", "c.txt": b""}, console

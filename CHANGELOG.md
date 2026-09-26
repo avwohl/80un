@@ -178,6 +178,17 @@ An LBR member of no sectors is written as an empty file, as `src/un80` writes
 it. 80un made no file for it, while `cpm$name` took its name all the same, so a
 later member of that name came out as `NAME-1` with no `NAME`.
 
+An LBR's directory length is read in 16 bits, as every length in the directory
+is. 80un read only its low byte, so a directory of 260 (0104H) sectors was
+taken as 4: of the 20 members of such an LBR it extracted the 15 in the first
+four sectors, said nothing of the other 5, and ended `15 file(s) extracted`.
+`src/un80` refuses that directory ("Invalid directory size"), and so does 80un
+now: its buffer holds 32 sectors, 128 entries, the most `src/un80` takes, and a
+directory of no sectors or of more than 32 is refused with `Invalid LBR file`,
+and nothing is extracted. An LBR that ends inside its directory has only the
+entries in the sectors there, as in `src/un80`; 80un took the rest from
+whatever its buffer held before, and made members called `UNNAMED` out of them.
+
 80un keeps its table of names below the BDOS, and refuses a TPA too small for
 its buffers. The buffers end 34120 bytes past the program, and 256 names of 11
 bytes after them ended near F05AH with uplm80 0.4.2. 80un never compared either
