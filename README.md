@@ -607,6 +607,11 @@ The test suite needs additional sample files to achieve complete coverage:
 | **LBR** | ✅ Archive with nested compression | - |
 | **MBASIC** | ✅ Standard (0xFF) and Protected (0xFE) | - |
 
+`tests/test_80un_com.py` runs the CP/M program itself: it builds `80un.com`
+with the uplm80 on PATH (or `$UPLM80`) in a scratch directory, runs it under
+cpmemu, and compares what it writes with `src/un80`. It is skipped when the
+toolchain or cpmemu (`$CPMEMU`, PATH, or `~/src/cpmemu/src/cpmemu`) is missing.
+
 Crunch expectations are ground truth rather than recorded behaviour:
 `tests/samples/lbr/mouse.lbr` carries `UNCR24.COM`, the original CP/M
 uncruncher, so the expected output is what that program produces when run under

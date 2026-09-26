@@ -108,19 +108,19 @@ Crunch V1 is decoded, by 80un and by `src/un80`. The one file in
 it, and 80un, had it been able to create the file, would have run it through
 the V2 decoder with 12-bit codes and written rubbish. V1 is the second decoder
 in GEL's UNCR24 (1768-19AA), and both now follow it. Its codes are 12 bits
-throughout, and a code is the slot in a
-4096-entry table that its string was hashed into: the middle twelve bits of
-((prefix + suffix) OR 800H) squared, and on a collision the first free slot
-from 101 past the end of the chain that starts there. That is the "crunched"
-LZW of ARC methods 5 and 6 except that slot 0 is reserved, which makes code 0
-the end of the stream; a table that takes slot 0 as free goes wrong at the
-first string hashed there, 900 bytes into `ZEX/SAGE.DOC`. Past 4095 entries no
-more are made. UNCR24 decodes V1 only up to siglevel 10H, and so do these; 11H
-to 1FH is refused. `zex-sage.dzc` now decodes to the 4992 bytes UNCR24 writes
-for it under cpmemu, whose byte sum is the 9882H the file stores after its end
-code, and a 60000-byte V1 stream that fills the table decodes to its input
-under UNCR24, `src/un80` and both builds of 80un. Its tables take the space
-of the V2 ones, so 80un needs no more memory.
+throughout, and a code is the slot in a 4096-entry table that its string was
+hashed into: the middle twelve bits of ((prefix + suffix) OR 800H) squared, and
+on a collision the first free slot from 101 past the end of the chain that
+starts there. That is the "crunched" LZW of ARC methods 5 and 6 except that
+slot 0 is reserved, which makes code 0 the end of the stream; a table that
+takes slot 0 as free goes wrong at the first string hashed there, 900 bytes
+into `ZEX/SAGE.DOC`. Past 4095 entries no more are made. UNCR24 decodes V1 only
+up to siglevel 10H, and so do these; 11H to 1FH is refused. `zex-sage.dzc` now
+decodes to the 4992 bytes UNCR24 writes for it under cpmemu, whose byte sum is
+the 9882H the file stores after its end code, and a 60000-byte V1 stream that
+fills the table decodes to its input under UNCR24, `src/un80` and both builds
+of 80un. Its tables take the space of the V2 ones, so 80un needs no more
+memory.
 
 80un makes a CP/M name for every member, from any stored name, by one rule
 (`src/plm/names.plm`, described in the README under "Member names on CP/M").
@@ -153,6 +153,18 @@ crunch byte sums checking. An ARC, an LBR and a squeezed file of 25 names CP/M
 cannot take as they stand come out under the names the rule gives. The name
 table takes 2816 bytes above the buffers, so 80un's data now ends about 60K
 into memory with uplm80 0.4.2, within the 62K TPA the README asks for.
+
+### Added
+
+`tests/test_80un_com.py` checks the CP/M program itself. It builds `80un.com`
+from `src/plm` with the Makefile's rule in a scratch directory (the committed
+binary is left alone), with the uplm80 on PATH or the command in `$UPLM80`,
+runs it under cpmemu in binary mode, and compares every file it writes with
+what `src/un80` extracts: all 18 members of `tests/test.arc`, `zex-sage.dzc`
+(Crunch V1, stored as `ZEX/SAGE.DOC`), an ARC made on the fly with a stored
+member of 100000 bytes and a packed one over 64K, and one of names CP/M cannot
+take. It is skipped when make, uplm80, um80, ul80 or cpmemu is missing, and
+all four of its tests fail on the sources before these fixes.
 
 ## [0.3.2] - 2026-09-23
 
