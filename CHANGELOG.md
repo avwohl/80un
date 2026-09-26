@@ -159,6 +159,13 @@ method 4 refuse it: the 257 symbols, the bytes and the end code, take a node
 for each but one. It decoded such a tree when the file was long enough to hold
 it.
 
+A compressed LBR member cut short still says `OK`: of the decoders only Crunch
+V1's finds one. A squeezed or Crunch V2 member holds what its sectors in the
+file decode to, the bytes `src/un80` writes. A CrLZH member is decoded on past
+the end, by 80un from the ^Z it reads there and by `src/un80` from zero bits,
+until that happens to make the stop code, so the two write different bytes
+after the data there.
+
 Crunch V1 is decoded, by 80un and by `src/un80`. The one file in
 `tests/samples/crunch/zex-sage.dzc` is V1 (siglevel 10H): `src/un80` refused
 it, and 80un, had it been able to create the file, would have run it through

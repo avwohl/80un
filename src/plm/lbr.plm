@@ -188,12 +188,29 @@ extract$lbr: procedure byte public;
                         call copymem(.saved$fcb, ifcb$ptr, 12);
                         call fillmem(ifcb$ptr + 12, 24, 0);
 
-                        /* RESULT is set to 1 only by a member that comes
-                           out whole.  One that will not decode, whose sectors
-                           are not all in the file, or that its file will not
-                           take is an Error, and the next member is gone on
-                           to, as in an ARC (extract$arc$member).  It used to
-                           say OK and be counted whatever became of it. */
+                        /* A member says OK and is counted when RESULT is 1:
+                           its decoder, or the copy of a stored member, came
+                           to its end and its file took all it was given.
+                           Anything else is an Error, and the next member is
+                           gone on to, as in an ARC (extract$arc$member): a
+                           decoder that fails (a squeeze tree of more than 256
+                           nodes, a Crunch V1 siglevel refused, V1 input that
+                           ends before its end code), a stored member whose
+                           sectors are not all in the file, a file that will
+                           not take the member, an archive that will not
+                           reopen.  It used to say OK and be counted whatever
+                           became of it.
+
+                           OK is not a member come out whole.  Of the
+                           compressed ones only Crunch V1 finds a member cut
+                           short.  The squeeze and Crunch V2 decoders stop
+                           where the sectors in the file end, and the member
+                           says OK with what those decode to, the bytes
+                           src/un80 writes.  CrLZH decodes on past the end,
+                           from the ^Z getbyte gives there, until they happen
+                           to make its stop code; src/un80 decodes on from
+                           zero bits, so the two write different bytes after
+                           the data in the file. */
                         result = 0;
                         if openfile(ifcb$ptr) <> 0ffh then do;
                             /* Skip to member */
