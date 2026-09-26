@@ -482,21 +482,21 @@ detok$line: procedure;
         end;
         else if b = 00EH or b = 01CH then do;
             /* 2-byte integer constant */
-            n = inbuf(bas$pos + 1) + shl(inbuf(bas$pos + 2), 8);
+            n = inbuf(bas$pos + 1) + shl(double(inbuf(bas$pos + 2)), 8);
             call emit$num(n);
             bas$pos = bas$pos + 2;
             prev$tok = '0';
         end;
         else if b = 00CH then do;
             /* 2-byte hex constant */
-            n = inbuf(bas$pos + 1) + shl(inbuf(bas$pos + 2), 8);
+            n = inbuf(bas$pos + 1) + shl(double(inbuf(bas$pos + 2)), 8);
             call emit$hex(n);
             bas$pos = bas$pos + 2;
             prev$tok = '0';
         end;
         else if b = 00BH then do;
             /* 2-byte octal constant */
-            n = inbuf(bas$pos + 1) + shl(inbuf(bas$pos + 2), 8);
+            n = inbuf(bas$pos + 1) + shl(double(inbuf(bas$pos + 2)), 8);
             call emit$oct(n);
             bas$pos = bas$pos + 2;
             prev$tok = '0';
@@ -544,7 +544,7 @@ detokenize$basic: procedure byte public;
     /* Process each line */
     do while bas$pos + 4 < inbuf$end;
         /* Read link pointer (2 bytes, little endian) */
-        link = inbuf(bas$pos) + shl(inbuf(bas$pos + 1), 8);
+        link = inbuf(bas$pos) + shl(double(inbuf(bas$pos + 1)), 8);
         if link = 0 then do;
             /* End of program */
             call emit$crlf;
@@ -552,7 +552,7 @@ detokenize$basic: procedure byte public;
         end;
 
         /* Read line number (2 bytes, little endian) */
-        linenum = inbuf(bas$pos + 2) + shl(inbuf(bas$pos + 3), 8);
+        linenum = inbuf(bas$pos + 2) + shl(double(inbuf(bas$pos + 3)), 8);
         if linenum = 0 then do;
             call emit$crlf;
             return 1;

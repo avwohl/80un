@@ -159,7 +159,7 @@ lzh$get$bit: procedure byte;
     /* Ensure we have bits */
     do while lzh$buf$len <= 8;
         b = getbyte;  /* Uses buffered I/O with auto-refill */
-        lzh$buf = lzh$buf or shl(b, 8 - lzh$buf$len);
+        lzh$buf = lzh$buf or shl(double(b), 8 - lzh$buf$len);
         lzh$buf$len = lzh$buf$len + 8;
     end;
 
@@ -312,7 +312,7 @@ decode$pos$v1: procedure address;
     i = lzh$get$byte;
 
     /* Upper 6 bits from d_code table */
-    c = shl(d$code(i), 6);
+    c = shl(double(d$code(i)), 6);
 
     /* Number of additional bits to read */
     j = d$len(i) - 2;

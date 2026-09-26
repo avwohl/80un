@@ -120,7 +120,7 @@ arc$decomp$squeezed: procedure byte;
     /* Read Huffman tree */
     i = 0;
     do while i < low(node$count);
-        p = huff$tree$ptr + shl(i, 2);
+        p = huff$tree$ptr + shl(double(i), 2);
         /* Read left (16 bits) and right (16 bits) as signed */
         call writeword(p, read$bits$lsb(16));
         call writeword(p + 2, read$bits$lsb(16));
@@ -135,7 +135,7 @@ arc$decomp$squeezed: procedure byte;
     do while done = 0 and input$avail <> 0;
         node = 0;
         do while node < huff$nodes;
-            p = huff$tree$ptr + shl(low(node), 2);
+            p = huff$tree$ptr + shl(double(low(node)), 2);
             if read$bit$lsb then
                 left = readword(p + 2);
             else
@@ -303,10 +303,10 @@ arc$decomp$lzw8: procedure byte;
             end;
 
             if first$flag = 0 and prev$code <> 0ffffh and done = 0 then do;
-                if lzw$next$code < shl(1, lzw$max$bits) then do;
+                if lzw$next$code < shl(double(1), lzw$max$bits) then do;
                     call lzw$add$entry(prev$code, fb);
                     /* Increase code size when needed */
-                    max$code = shl(1, lzw$code$size) - 1;
+                    max$code = shl(double(1), lzw$code$size) - 1;
                     if lzw$next$code > max$code and lzw$code$size < lzw$max$bits then
                         lzw$code$size = lzw$code$size + 1;
                 end;
@@ -386,7 +386,7 @@ arc$decomp$squashed: procedure byte;
 
             if first$flag = 0 and prev$code <> 0ffffh and done = 0 then do;
                 call lzw$add$entry(prev$code, fb);
-                max$code = shl(1, lzw$code$size) - 1;
+                max$code = shl(double(1), lzw$code$size) - 1;
                 if lzw$next$code > max$code and lzw$code$size < lzw$max$bits then
                     lzw$code$size = lzw$code$size + 1;
             end;
@@ -426,9 +426,9 @@ extract$arc$member: procedure byte public;
 
     /* Read compressed size (4 bytes LE) - full 32-bit value */
     comp$size = getbyte;
-    comp$size = comp$size + shl(getbyte, 8);
+    comp$size = comp$size + shl(double(getbyte), 8);
     comp$size$hi = getbyte;
-    comp$size$hi = comp$size$hi + shl(getbyte, 8);
+    comp$size$hi = comp$size$hi + shl(double(getbyte), 8);
 
     /* Read date/time (4 bytes, skip) */
     i = getbyte;
@@ -443,9 +443,9 @@ extract$arc$member: procedure byte public;
     /* Read original size (4 bytes LE) for method >= 2 */
     if method >= 2 then do;
         orig$size = getbyte;
-        orig$size = orig$size + shl(getbyte, 8);
+        orig$size = orig$size + shl(double(getbyte), 8);
         orig$size$hi = getbyte;
-        orig$size$hi = orig$size$hi + shl(getbyte, 8);
+        orig$size$hi = orig$size$hi + shl(double(getbyte), 8);
     end;
     else do;
         orig$size = comp$size;

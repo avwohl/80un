@@ -92,7 +92,7 @@ extract$lbr: procedure byte public;
     /* Read remaining directory sectors into work buffer */
     k = 1;
     do while k < dir$sectors;
-        call setdmaaddr(dir$ptr + shl(k, 7));  /* k * 128 */
+        call setdmaaddr(dir$ptr + shl(double(k), 7));  /* k * 128 */
         if readfile(ifcb$ptr) <> 0 then
             k = dir$sectors;  /* Exit on error */
         else
@@ -136,8 +136,8 @@ extract$lbr: procedure byte public;
                 end;
 
                 /* Save member info */
-                member$index = ent(12) + shl(ent(13), 8);
-                member$length = ent(14) + shl(ent(15), 8);
+                member$index = ent(12) + shl(double(ent(13)), 8);
+                member$length = ent(14) + shl(double(ent(15)), 8);
 
                 /* Set up output FCB.  An LBR directory entry is arbitrary
                    bytes, and CP/M refuses to create a file whose name holds a

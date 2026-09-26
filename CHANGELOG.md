@@ -3,6 +3,45 @@
 All notable changes to 80un, the unpacker for CP/M compression and packing
 formats, are documented here.
 
+## 0.3.3 — unreleased
+
+### Fixed
+
+The PL/M sources no longer rely on uplm80 widening a shifted BYTE. In PL/M-80
+the result of `SHL` and `SHR` has the type of the value shifted, so `SHL(b, 8)`
+of a BYTE is a BYTE, and 0; Intel's PL/M-80 V3.1 compiles it that way. uplm80
+before 0.4.3 widened the BYTE to an ADDRESS first, and 80un was written against
+that: `lo + shl(b, 8)` built the 16-bit values in `read16` and `readword`, the
+ARC and LBR header sizes, the crunch header checksum, the squeeze node count
+and the BASIC link pointers, line numbers and constants; `shl(i, 7)`,
+`shl(i, 2)` and `shl(low(node), 2)` of a BYTE addressed the sector and
+Huffman-node buffers; `shl(1, n)` set the LZW dictionary limits in
+`lzw$add$entry` and the ARC decoders; and CrLZH shifted each input byte into
+its 16-bit bit buffer (`lzh$get$bit`) and a `d$code` entry into the upper bits
+of a V1 match position (`decode$pos$v1`). Built by a compiler that follows the
+language, 80un extracted one member of `tests/test.arc` where the 0.4.1 build
+extracts 13, and from the 23 archives and compressed files under `tests/` it
+wrote 39 files, 4 of them correct, where the 0.4.1 build writes 136.
+
+The 29 sites where a BYTE is shifted and the bits shifted out of it are wanted
+now read `SHL(DOUBLE(x), n)`, which is correct PL/M-80 under any compiler. The
+ten BYTE shifts left alone either go into a BYTE (the crunch code-width
+threshold, `lzh$get$byte`, the crunch used-code bit mask, `read$bit$sq`) or
+cannot pass eight bits (a hex digit `SHR(b, 4)`, the used-code test,
+`SHL(dir$sectors, 2)` of at most 32 directory sectors).
+
+With uplm80 0.4.1 the fixed sources compile to the same assembly, and the same
+`80un.com` and `80unbas.com`, byte for byte, as before the change. With uplm80
+patched to give a shifted BYTE a BYTE result, the new build extracts from the
+23 archives and compressed files under `tests/` the same 136 files the 0.4.1
+build extracts, byte for byte, and detokenises BASIC identically. The 23 hold
+142 files; both builds lose the same six to older defects this change does not
+touch. In `tests/test.arc` the compressed size of `BYE520.ASM` passes 64K and
+`input$limit` keeps only its low 16 bits, so that member comes out as 19840 of
+its 162304 bytes and the five members after it are lost; and the one file in
+`zex-sage.dzc` is stored as `ZEX/SAGE.DOC`, which cannot be created. The
+committed binaries are not rebuilt.
+
 ## [0.3.2] - 2026-09-23
 
 ### Changed

@@ -44,7 +44,7 @@ fill$inbuf: procedure byte public;
 
     loop$cnt = 0;
     do while loop$cnt < max$sectors;
-        call setdmaaddr(inbuf$ptr + shl(loop$cnt, 7));
+        call setdmaaddr(inbuf$ptr + shl(double(loop$cnt), 7));
         result = readfile(ifcb$ptr);
         if result <> 0 then
             return loop$cnt > 0;
@@ -114,7 +114,7 @@ flush$outbuf: procedure byte public;
 
     i = 0;
     do while i < sectors;
-        call setdmaaddr(outbuf$ptr + shl(i, 7));
+        call setdmaaddr(outbuf$ptr + shl(double(i), 7));
         result = writefile(ofcb$ptr);
         if result <> 0 then return 0;
         i = i + 1;
@@ -122,7 +122,7 @@ flush$outbuf: procedure byte public;
 
     if remaining > 0 then do;
         call fillmem(outbuf$ptr + outbuf$pos, 128 - remaining, cpm$eof);
-        call setdmaaddr(outbuf$ptr + shl(sectors, 7));
+        call setdmaaddr(outbuf$ptr + shl(double(sectors), 7));
         result = writefile(ofcb$ptr);
         if result <> 0 then return 0;
     end;

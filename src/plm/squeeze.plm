@@ -41,7 +41,7 @@ unsqueeze: procedure byte public;
     /* Read node count */
     lo$byte = getbyte;
     hi$byte = getbyte;
-    node$count = lo$byte + shl(hi$byte, 8);
+    node$count = lo$byte + shl(double(hi$byte), 8);
 
     if node$count > 256 then do;
         call printstr(.msg$sqtree);
@@ -54,7 +54,7 @@ unsqueeze: procedure byte public;
     /* Read Huffman tree nodes */
     i = 0;
     do while i < low(node$count);
-        p = huff$tree$ptr + shl(i, 2);
+        p = huff$tree$ptr + shl(double(i), 2);
         huff$tree(p - huff$tree$ptr) = getbyte;
         huff$tree(p - huff$tree$ptr + 1) = getbyte;
         huff$tree(p - huff$tree$ptr + 2) = getbyte;
@@ -73,7 +73,7 @@ unsqueeze: procedure byte public;
     do while done = 0 and input$avail <> 0;
         node = 0;
         do while node < huff$nodes;
-            p = huff$tree$ptr + shl(low(node), 2);
+            p = huff$tree$ptr + shl(double(low(node)), 2);
             if read$bit$lsb then
                 left = readword(p + 2);
             else

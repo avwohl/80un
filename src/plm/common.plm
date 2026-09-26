@@ -262,7 +262,7 @@ read16: procedure(addr) address public;
     declare lo byte;
     lo = b;
     addr = addr + 1;
-    return lo + shl(b, 8);
+    return lo + shl(double(b), 8);
 end read16;
 
 /* Write a 16-bit little-endian value to memory */
@@ -279,7 +279,7 @@ end write16;
 readword: procedure(addr) address public;
     declare addr address;
     declare p based addr (2) byte;
-    return p(0) + shl(p(1), 8);
+    return p(0) + shl(double(p(1)), 8);
 end readword;
 
 /* Write 16-bit LE to based pointer */
