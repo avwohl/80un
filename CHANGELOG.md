@@ -200,6 +200,9 @@ CP/M the blocks freed can go to the new file in the middle of the read. The
 archive's name now counts as one made already, when the archive is on the
 drive the members are written to, so such a member is written as `SELF-1.ARC`.
 
+The count of files extracted is 16 bits. It was a BYTE, and an ARC can hold
+more than 255 members: one of 300 ended `44 file(s) extracted`.
+
 With these changes 80un extracts all 142 files under `tests/`, under uplm80
 0.4.2 and under uplm80 with the BYTE shift rule alike: 133 byte for byte as
 `src/un80` extracts them and the other 9 the same up to the ^Z padding of the

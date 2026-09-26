@@ -105,8 +105,9 @@ declare work$ptr address public;
 declare work based work$ptr (1) byte;
 declare work$len address public;
 
-/* File count and status */
-declare file$count byte public;
+/* File count and status.  The count is 16 bits: an ARC can hold more than
+   255 members, and 300 were reported as 44. */
+declare file$count address public;
 declare error$flag byte public;
 
 /* Input byte limit for one archive member.  An ARC member's compressed size

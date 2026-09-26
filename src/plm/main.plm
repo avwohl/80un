@@ -57,7 +57,7 @@ declare lzw$prefix$ptr address external;
 declare lzw$suffix$ptr address external;
 declare ring$ptr address external;
 declare work$ptr address external;
-declare file$count byte external;
+declare file$count address external;
 declare name$table$ptr address external;
 declare name$count address external;
 declare name$max address external;

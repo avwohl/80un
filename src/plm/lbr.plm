@@ -26,7 +26,7 @@ declare inbuf based inbuf$ptr (1) byte;
 declare inbuf$pos address external;
 declare inbuf$end address external;
 declare outbuf$pos address external;
-declare file$count byte external;
+declare file$count address external;
 
 /* Procedures from earlier modules - visible when compiled together */
 

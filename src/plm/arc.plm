@@ -12,7 +12,7 @@ declare rle$marker literally '090H';
 declare ofcb$ptr address external;
 declare ofcb based ofcb$ptr (36) byte;
 declare outbuf$pos address external;
-declare file$count byte external;
+declare file$count address external;
 declare huff$tree$ptr address external;
 declare huff$tree based huff$tree$ptr (1) byte;
 declare huff$nodes address external;
