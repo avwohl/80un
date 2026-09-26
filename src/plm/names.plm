@@ -1,0 +1,199 @@
+/*
+ * names.plm - CP/M names for archive members
+ *
+ * A member's stored name is whatever the archiver wrote: an ARC name made on
+ * MS-DOS or Unix, a crunched file's name with a path in it (zex-sage.dzc holds
+ * ZEX/SAGE.DOC), lower case, too long.  The BDOS takes any bytes in an FCB,
+ * but such a file cannot then be named at the CCP, and cpmemu refuses to make
+ * it.  cpm$name makes a name CP/M can take:
+ *
+ *   - bit 7 of each byte (an attribute) is dropped, and leading and trailing
+ *     blanks;
+ *   - lower case letters become upper case, as the CCP makes every name;
+ *   - the type is what follows the last '.', the name what comes before it;
+ *   - a character CP/M does not take in a name becomes '-': a control
+ *     character or blank, DEL, and < > . , ; : = ? * [ ] _ | ( ) / \ ^ % "
+ *     (the CP/M manual's list, the 2.2 CCP's delimiters, among them '_', and
+ *     what CP/M 3's parser and cpmemu refuse);
+ *   - the name is cut to 8 characters and the type to 3, and an empty name
+ *     becomes UNNAMED;
+ *   - a name already made this run gets -1, -2 ... on its end, cutting the
+ *     name to fit, so that no member overwrites another.
+ *
+ * src/un80 replaces the characters a host filesystem cannot take with '_'
+ * (un80.cpm.safe_filename).  '_' is a delimiter to the CP/M 2.2 CCP, which
+ * reads TYPE ZEX_SAGE.DOC as TYPE ZEX, so here the stand-in is '-'.
+ */
+
+declare ofcb$ptr address external;
+declare ofcb based ofcb$ptr (36) byte;
+
+/* The names made this run, 11 bytes each; main.plm finds the room */
+declare name$table$ptr address public;
+declare name$table based name$table$ptr (1) byte;
+declare name$count address public;
+declare name$max literally '256';
+
+/* The character CP/M gets for C: upper case, or '-' if CP/M will not take it */
+cpm$char: procedure(c) byte;
+    declare c byte;
+    declare bad data('<>.,;:=?*[]_|()/\^%"', 0);
+    declare i byte;
+
+    if c >= 'a' and c <= 'z' then return c - 20h;
+    if c <= ' ' or c >= 7fh then return '-';
+    i = 0;
+    do while bad(i) <> 0;
+        if c = bad(i) then return '-';
+        i = i + 1;
+    end;
+    return c;
+end cpm$char;
+
+/* Is the name in OFCB one made already this run? */
+name$taken: procedure byte;
+    declare (e, p) address;
+    declare i byte;
+
+    e = 0;
+    do while e < name$count;
+        p = e * 11;
+        i = 0;
+        do while i < 11 and ofcb(i + 1) = name$table(p + i);
+            i = i + 1;
+        end;
+        if i = 11 then return 1;
+        e = e + 1;
+    end;
+    return 0;
+end name$taken;
+
+/* Set up OFCB for the member stored as NAME$PTR (LEN bytes, or up to a NUL),
+   record the name, and print " -> NAME.TYP" when it is not the stored name. */
+cpm$name: procedure(name$ptr, len) public;
+    declare name$ptr address;
+    declare len byte;
+    declare s based name$ptr (1) byte;
+    declare orig (64) byte;
+    declare base (8) byte;
+    declare (n, i, j, start, dot, w, keep, same) byte;
+    declare k address;
+
+    /* The stored name: seven bits, to its NUL, without the blanks around it */
+    n = 0;
+    do while n < len and n < 64 and (s(n) and 7fh) <> 0;
+        orig(n) = s(n) and 7fh;
+        n = n + 1;
+    end;
+    do while n > 0 and orig(n - 1) = ' ';
+        n = n - 1;
+    end;
+    start = 0;
+    do while start < n and orig(start) = ' ';
+        start = start + 1;
+    end;
+
+    /* The type follows the last '.' */
+    dot = n;
+    i = start;
+    do while i < n;
+        if orig(i) = '.' then dot = i;
+        i = i + 1;
+    end;
+
+    call fillmem(ofcb$ptr, 36, 0);
+    call fillmem(ofcb$ptr + 1, 11, ' ');
+    j = 1;
+    i = start;
+    do while i < dot and j <= 8;
+        ofcb(j) = cpm$char(orig(i));
+        i = i + 1;
+        j = j + 1;
+    end;
+    if j = 1 then
+        call copymem(.('UNNAMED'), ofcb$ptr + 1, 7);
+    if dot < n then do;
+        j = 9;
+        i = dot + 1;
+        do while i < n and j <= 11;
+            ofcb(j) = cpm$char(orig(i));
+            i = i + 1;
+            j = j + 1;
+        end;
+    end;
+
+    /* A name made already this run: end it -1, -2 ... instead */
+    call copymem(ofcb$ptr + 1, .base, 8);
+    w = 8;
+    do while w > 0 and base(w - 1) = ' ';
+        w = w - 1;
+    end;
+    k = 0;
+    do while name$taken and k < 999;
+        k = k + 1;
+        if k < 10 then keep = 6;
+        else if k < 100 then keep = 5;
+        else keep = 4;
+        if keep > w then keep = w;
+        call fillmem(ofcb$ptr + 1, 8, ' ');
+        call copymem(.base, ofcb$ptr + 1, keep);
+        j = keep + 1;
+        ofcb(j) = '-';
+        if k >= 100 then do;
+            j = j + 1;
+            ofcb(j) = '0' + low(k / 100);
+        end;
+        if k >= 10 then do;
+            j = j + 1;
+            ofcb(j) = '0' + low((k / 10) mod 10);
+        end;
+        j = j + 1;
+        ofcb(j) = '0' + low(k mod 10);
+    end;
+    if name$count < name$max then do;
+        call copymem(ofcb$ptr + 1, name$table$ptr + name$count * 11, 11);
+        name$count = name$count + 1;
+    end;
+
+    /* Say so when the name made is not the name stored */
+    same = 1;
+    i = start;
+    j = 1;
+    do while j <= 8 and ofcb(j) <> ' ';
+        if i >= n then same = 0;
+        else if orig(i) <> ofcb(j) then same = 0;
+        i = i + 1;
+        j = j + 1;
+    end;
+    if ofcb(9) <> ' ' then do;
+        if i >= n then same = 0;
+        else if orig(i) <> '.' then same = 0;
+        i = i + 1;
+        j = 9;
+        do while j <= 11 and ofcb(j) <> ' ';
+            if i >= n then same = 0;
+            else if orig(i) <> ofcb(j) then same = 0;
+            i = i + 1;
+            j = j + 1;
+        end;
+    end;
+    if i <> n then same = 0;
+    if same = 0 then do;
+        call printstr(.(' -> $'));
+        j = 1;
+        do while j <= 8 and ofcb(j) <> ' ';
+            call printchar(ofcb(j));
+            j = j + 1;
+        end;
+        if ofcb(9) <> ' ' then do;
+            call printchar('.');
+            j = 9;
+            do while j <= 11 and ofcb(j) <> ' ';
+                call printchar(ofcb(j));
+                j = j + 1;
+            end;
+        end;
+    end;
+end cpm$name;
+
+eof

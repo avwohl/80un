@@ -45,11 +45,12 @@ extract$lbr: procedure byte public;
     declare msg$ok data(' OK$');
 
     declare saved$fcb (36) byte;
+    declare member$name (12) byte;
+    declare (n, m) byte;
 
     declare result byte;
     declare dir$sectors byte;
     declare k byte;
-    declare b byte;
     declare entry$num address;
     declare max$entries address;
     declare sectors$left address;
@@ -119,19 +120,37 @@ extract$lbr: procedure byte public;
                 call printchar(' ');
                 call printchar(' ');
 
-                /* Print filename */
+                /* The member's name, NAME.TYP without the blanks that pad
+                   the directory fields, and print it */
+                n = 0;
+                m = 0;
                 k = 1;
                 do while k <= 8;
-                    if (ent(k) and 07fh) <> ' ' then call printchar(ent(k) and 07fh);
+                    member$name(n) = ent(k) and 07fh;
+                    n = n + 1;
+                    if member$name(n - 1) <> ' ' then m = n;
                     k = k + 1;
                 end;
-                if (ent(9) and 07fh) <> ' ' then do;
-                    call printchar('.');
+                n = m;
+                k = 9;
+                do while k <= 11;
+                    if (ent(k) and 07fh) <> ' ' then m = k;
+                    k = k + 1;
+                end;
+                if m >= 9 then do;
+                    member$name(n) = '.';
+                    n = n + 1;
                     k = 9;
-                    do while k <= 11;
-                        if (ent(k) and 07fh) <> ' ' then call printchar(ent(k) and 07fh);
+                    do while k <= m;
+                        member$name(n) = ent(k) and 07fh;
+                        n = n + 1;
                         k = k + 1;
                     end;
+                end;
+                k = 0;
+                do while k < n;
+                    call printchar(member$name(k));
+                    k = k + 1;
                 end;
 
                 /* Save member info */
@@ -139,21 +158,11 @@ extract$lbr: procedure byte public;
                 member$length = ent(14) + shl(double(ent(15)), 8);
 
                 /* Set up output FCB.  An LBR directory entry is arbitrary
-                   bytes, and CP/M refuses to create a file whose name holds a
-                   delimiter, so map those to '_' rather than lose the member.
-                   mouse.lbr carries CCP/M.COM and CCP/M.LTR, which used to be
-                   skipped with a file creation error. */
-                call fillmem(ofcb$ptr, 36, 0);
-                k = 1;
-                do while k <= 11;
-                    b = ent(k) and 07fh;
-                    if b < ' ' or b = '/' or b = ':' or b = '.' or b = ';' or
-                       b = '=' or b = ',' or b = '[' or b = ']' or b = '<' or
-                       b = '>' or b = '*' or b = '?' or b = '|' or b = 07fh then
-                        b = '_';
-                    ofcb(k) = b;
-                    k = k + 1;
-                end;
+                   bytes, and CP/M refuses a name that holds a delimiter, so
+                   cpm$name (names.plm) makes one it takes: mouse.lbr carries
+                   CCP/M.COM and CCP/M.LTR, which come out as CCP-M.COM and
+                   CCP-M.LTR. */
+                call cpm$name(.member$name, n);
 
                 if member$length <> 0 then do;
                     call deletefile(ofcb$ptr);

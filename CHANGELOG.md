@@ -106,8 +106,9 @@ method 4 member of all 256 values extract correctly under both compilers.
 Crunch V1 is decoded, by 80un and by `src/un80`. The one file in
 `tests/samples/crunch/zex-sage.dzc` is V1 (siglevel 10H): `src/un80` refused
 it, and 80un, had it been able to create the file, would have run it through
-the V2 decoder with 12-bit codes and written rubbish. V1 is the second decoder in GEL's UNCR24 (1768-19AA), and both now
-follow it. Its codes are 12 bits throughout, and a code is the slot in a
+the V2 decoder with 12-bit codes and written rubbish. V1 is the second decoder
+in GEL's UNCR24 (1768-19AA), and both now follow it. Its codes are 12 bits
+throughout, and a code is the slot in a
 4096-entry table that its string was hashed into: the middle twelve bits of
 ((prefix + suffix) OR 800H) squared, and on a collision the first free slot
 from 101 past the end of the chain that starts there. That is the "crunched"
@@ -120,6 +121,38 @@ for it under cpmemu, whose byte sum is the 9882H the file stores after its end
 code, and a 60000-byte V1 stream that fills the table decodes to its input
 under UNCR24, `src/un80` and both builds of 80un. Its tables take the space
 of the V2 ones, so 80un needs no more memory.
+
+80un makes a CP/M name for every member, from any stored name, by one rule
+(`src/plm/names.plm`, described in the README under "Member names on CP/M").
+`ZEX/SAGE.DOC` could not be created: the ARC, squeeze, crunch and CrLZH paths
+copied the stored name into the FCB as it stood, so a `/`, a lower-case name
+from MS-DOS or Unix, or any other character CP/M does not take either failed
+with "cannot create" or made a file the CCP cannot name, and a one- or
+two-letter ARC type put NULs into the FCB. Only LBR mapped a few delimiters, to
+`_`. Now bit 7 and the blanks around the name go, lower case becomes upper
+case, the type is what follows the last `.`, every character CP/M does not take
+in a name becomes `-`, the name is cut to 8 and the type to 3, an empty name
+becomes `UNNAMED`, and a name already made in the run gets `-1`, `-2`, ... on
+its end instead of overwriting the earlier file. A crunched or CrLZH name ends
+at a `[`, as UNCR24 and `src/un80` end it, instead of carrying the note's `[`
+into the name. When the name made differs from the one stored, 80un prints
+`stored -> made`. `zex-sage.dzc` now extracts as `ZEX-SAGE.DOC`, and mouse.lbr's
+`CCP/M.COM` and `CCP/M.LTR` as `CCP-M.COM` and `CCP-M.LTR`.
+
+It is `src/un80`'s rule (replace, never split, number the duplicates) made for
+CP/M, and it differs in the stand-in: `src/un80` writes `_`, and the CP/M 2.2
+CCP takes `_` as a delimiter, like `=`, so `TYPE ZEX_SAGE.DOC` types a file
+called `ZEX` and `ERA ZEX_SAGE.DOC` erases it. `-` is taken by every CCP and
+every host. For the same reason a `_` in a stored name becomes `-` on CP/M.
+
+With these changes 80un extracts all 142 files under `tests/`, under uplm80
+0.4.2 and under uplm80 with the BYTE shift rule alike: 133 byte for byte as
+`src/un80` extracts them and the other 9 the same up to the ^Z padding of the
+last record, with every ARC member's CRC-16, the squeeze checksums and the
+crunch byte sums checking. An ARC, an LBR and a squeezed file of 25 names CP/M
+cannot take as they stand come out under the names the rule gives. The name
+table takes 2816 bytes above the buffers, so 80un's data now ends about 60K
+into memory with uplm80 0.4.2, within the 62K TPA the README asks for.
 
 ## [0.3.2] - 2026-09-23
 

@@ -12,8 +12,8 @@ PLMDIR = src/plm
 
 # Source files for 80un (order matters - startup first, main last)
 SRCS = $(PLMDIR)/startup.plm $(PLMDIR)/common.plm $(PLMDIR)/io.plm \
-       $(PLMDIR)/squeeze.plm $(PLMDIR)/crunch.plm $(PLMDIR)/lzh.plm \
-       $(PLMDIR)/arc.plm $(PLMDIR)/lbr.plm $(PLMDIR)/main.plm
+       $(PLMDIR)/names.plm $(PLMDIR)/squeeze.plm $(PLMDIR)/crunch.plm \
+       $(PLMDIR)/lzh.plm $(PLMDIR)/arc.plm $(PLMDIR)/lbr.plm $(PLMDIR)/main.plm
 
 # Source files for 80unbas (BASIC detokenizer only)
 BAS_SRCS = $(PLMDIR)/startup.plm $(PLMDIR)/common.plm $(PLMDIR)/io.plm \

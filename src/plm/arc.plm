@@ -443,36 +443,10 @@ extract$arc$member: procedure byte public;
         i = i + 1;
     end;
 
-    /* Set up output FCB */
-    call fillmem(ofcb$ptr, 36, 0);
-    i = 0;
-    do while i < 8 and filename(i) <> 0 and filename(i) <> '.';
-        ofcb(i + 1) = filename(i);
-        i = i + 1;
-    end;
-    /* Pad filename with spaces */
-    do while i < 8;
-        ofcb(i + 1) = ' ';
-        i = i + 1;
-    end;
-    /* Find and copy extension */
-    i = 0;
-    do while filename(i) <> 0 and filename(i) <> '.';
-        i = i + 1;
-    end;
-    if filename(i) = '.' then do;
-        i = i + 1;  /* Skip dot */
-        ofcb(9) = filename(i);
-        if filename(i) <> 0 then i = i + 1;
-        ofcb(10) = filename(i);
-        if filename(i) <> 0 then i = i + 1;
-        ofcb(11) = filename(i);
-    end;
-    else do;
-        ofcb(9) = ' ';
-        ofcb(10) = ' ';
-        ofcb(11) = ' ';
-    end;
+    /* Set up output FCB with a name CP/M can take (names.plm).  An ARC name
+       was often made on MS-DOS or Unix; this used to copy it as it stood, and
+       a type of one or two letters put NULs into the FCB. */
+    call cpm$name(.filename, 13);
 
     /* The member's data is the next COMP$SIZE$HI * 65536 + COMP$SIZE bytes,
        and the next header follows it, so every path below reads through the

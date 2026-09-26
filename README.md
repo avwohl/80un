@@ -349,7 +349,8 @@ dropped; read it with `get_crunch_info()` or `CrunchHeader.note`.
 A CP/M filename may contain characters that a host filesystem treats as special,
 `/` in particular, which is an ordinary filename character under CP/M.  Those
 characters are replaced with `_`, so a member called `CCP/M.COM` extracts as
-`CCP_M.COM`.
+`CCP_M.COM`.  On CP/M, `80un.com` has a stricter rule of its own, with `-` in
+place of `_` (see [Member names on CP/M](#member-names-on-cpm)).
 
 ### Duplicate filenames in archive
 
@@ -459,6 +460,46 @@ Creating: SOURCE.ASM OK
 - Original filenames are restored from compressed file headers
 - Nested compression is handled (e.g., crunched files inside LBR)
 
+### Member names on CP/M
+
+A member's stored name is whatever the archiver wrote: an ARC name made on
+MS-DOS or Unix, lower case, too long, or a crunched file's name with a `/` in
+it (`zex-sage.dzc` holds `ZEX/SAGE.DOC`). The BDOS will put any bytes into a
+directory entry, but a file with such a name cannot be named at the CCP, and
+cpmemu refuses to make it. `80un.com` makes a name CP/M takes, the same way for
+every format (`src/plm/names.plm`):
+
+- bit 7 of each byte, an attribute, is dropped, and so are blanks at either end;
+- lower case letters become upper case, as the CCP makes every name;
+- the type is what follows the last `.`, the name what comes before it;
+- a character CP/M does not take in a name becomes `-`: a control character or
+  blank, DEL, and `< > . , ; : = ? * [ ] _ | ( ) / \ ^ % "` - the CP/M
+  manual's reserved characters, the CP/M 2.2 CCP's delimiters, and what the
+  CP/M 3 parser and cpmemu refuse;
+- the name is cut to 8 characters and the type to 3, and an empty name becomes
+  `UNNAMED`;
+- a name already made in this run gets `-1`, `-2`, ... on its end, cut to fit,
+  so that two members never land on one file (for the first 256 names).
+
+A crunched or CrLZH file's name ends at a `[`, where a note begins, as UNCR24
+and `src/un80` end it. When the name made differs from the one stored, 80un
+shows both:
+
+```
+Creating: ZEX/SAGE.DOC -> ZEX-SAGE.DOC [Crunch V1] OK
+  CCP/M.COM -> CCP-M.COM OK
+  ccp_m.com -> CCP-M-1.COM OK
+```
+
+This is `src/un80`'s rule for a host filesystem (`un80.cpm.safe_filename`:
+replace, never split, and number the duplicates) made for CP/M, with one
+difference that CP/M forces: the stand-in is `-`, not `_`. The CP/M 2.2 CCP
+takes `_` as a delimiter, the same as `=`, so `TYPE ZEX_SAGE.DOC` would type a
+file called `ZEX`, and `ERA ZEX_SAGE.DOC` erase one. So `src/un80` writes
+`ZEX_SAGE.DOC` and `CCP_M.COM` where `80un.com` writes `ZEX-SAGE.DOC` and
+`CCP-M.COM`, and an ARC member named `MY_FILE.TXT` keeps its name on a host but
+becomes `MY-FILE.TXT` on CP/M.
+
 ### Building from Source
 
 Requires the [uplm80](https://github.com/avwohl/uplm80) toolchain:
@@ -488,6 +529,7 @@ PL/M-80 source is in `src/plm/`:
 | `startup.plm` | Entry point |
 | `common.plm` | BDOS interface, memory ops |
 | `io.plm` | Buffered I/O, bit readers |
+| `names.plm` | CP/M names for archive members |
 | `squeeze.plm` | Huffman decompressor |
 | `crunch.plm` | LZW decompressor |
 | `lzh.plm` | LZSS decompressor |

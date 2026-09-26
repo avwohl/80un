@@ -58,6 +58,8 @@ declare lzw$suffix$ptr address external;
 declare ring$ptr address external;
 declare work$ptr address external;
 declare file$count byte external;
+declare name$table$ptr address external;
+declare name$count address external;
 
 /*
  * Note: When compiling all files together with uplm80, procedures
@@ -74,7 +76,7 @@ decompress$file: procedure byte;
     declare msg$ok data(' OK$');
     declare msg$err data(' Error$');
     declare (i, j, result) byte;
-    declare orig$name (13) byte;
+    declare orig$name (64) byte;
     declare name$pos byte;
     declare siglevel byte;  /* Crunch version level */
     declare ver1 byte;      /* CrLZH version byte */
@@ -91,46 +93,21 @@ decompress$file: procedure byte;
         /* Skip magic (2 bytes) and checksum (2 bytes), read name */
         name$pos = 0;
         i = 4;
-        do while inbuf(i) <> 0 and name$pos < 12;
+        do while inbuf(i) <> 0 and name$pos < 63 and i < 127;
             orig$name(name$pos) = inbuf(i);
             name$pos = name$pos + 1;
             i = i + 1;
         end;
-        orig$name(name$pos) = 0;
-
-        /* Set up output FCB from original name */
-        call fillmem(ofcb$ptr, 36, 0);
-        i = 0;
-        j = 1;
-        do while orig$name(i) <> 0 and orig$name(i) <> '.' and j <= 8;
-            ofcb(j) = orig$name(i);
-            i = i + 1;
-            j = j + 1;
-        end;
-        do while j <= 8;
-            ofcb(j) = ' ';
-            j = j + 1;
-        end;
-        if orig$name(i) = '.' then do;
-            i = i + 1;
-            j = 9;
-            do while orig$name(i) <> 0 and j <= 11;
-                ofcb(j) = orig$name(i);
-                i = i + 1;
-                j = j + 1;
-            end;
-        end;
-        do while j <= 11;
-            ofcb(j) = ' ';
-            j = j + 1;
-        end;
 
         call printstr(.msg$creating);
         i = 0;
-        do while orig$name(i) <> 0;
+        do while i < name$pos;
             call printchar(orig$name(i));
             i = i + 1;
         end;
+
+        /* Set up output FCB with a name CP/M can take (names.plm) */
+        call cpm$name(.orig$name, name$pos);
 
         call deletefile(ofcb$ptr);
         if makefile(ofcb$ptr) = 0ffh then do;
@@ -152,50 +129,31 @@ decompress$file: procedure byte;
     end;
 
     if inbuf(0) = magic$cr$hi and inbuf(1) = magic$cr$lo then do;
-        /* Crunched file - similar to squeeze */
+        /* Crunched file - similar to squeeze.  The name ends at a '[', as
+           UNCR24 ends it: what follows is a note, as in MOUSE.MAC[04/01/87]. */
         name$pos = 0;
         i = 2;
-        do while inbuf(i) <> 0 and name$pos < 12;
+        do while inbuf(i) <> 0 and inbuf(i) <> '[' and name$pos < 63 and i < 120;
             orig$name(name$pos) = inbuf(i);
             name$pos = name$pos + 1;
             i = i + 1;
         end;
-        orig$name(name$pos) = 0;
+        do while inbuf(i) <> 0 and i < 120;
+            i = i + 1;
+        end;
         /* i now points to null terminator, siglevel is at i+2 */
         siglevel = inbuf(i + 2);
 
-        call fillmem(ofcb$ptr, 36, 0);
-        i = 0;
-        j = 1;
-        do while orig$name(i) <> 0 and orig$name(i) <> '.' and j <= 8;
-            ofcb(j) = orig$name(i);
-            i = i + 1;
-            j = j + 1;
-        end;
-        do while j <= 8;
-            ofcb(j) = ' ';
-            j = j + 1;
-        end;
-        if orig$name(i) = '.' then do;
-            i = i + 1;
-            j = 9;
-            do while orig$name(i) <> 0 and j <= 11;
-                ofcb(j) = orig$name(i);
-                i = i + 1;
-                j = j + 1;
-            end;
-        end;
-        do while j <= 11;
-            ofcb(j) = ' ';
-            j = j + 1;
-        end;
-
         call printstr(.msg$creating);
         i = 0;
-        do while orig$name(i) <> 0;
+        do while i < name$pos;
             call printchar(orig$name(i));
             i = i + 1;
         end;
+
+        /* Set up output FCB with a name CP/M can take (names.plm) */
+        call cpm$name(.orig$name, name$pos);
+
         /* Show version info */
         if siglevel >= 20h then
             call printstr(.(' [Crunch V2]$'));
@@ -222,59 +180,38 @@ decompress$file: procedure byte;
     end;
 
     if inbuf(0) = magic$lzh$hi and inbuf(1) = magic$lzh$lo then do;
-        /* CrLZH file - filename ends at null or high-bit char */
+        /* CrLZH file - filename ends at null or high-bit char, or at a '['
+           as src/un80 ends it */
         name$pos = 0;
         i = 2;
-        do while inbuf(i) <> 0 and (inbuf(i) and 80h) = 0 and name$pos < 12;
+        do while inbuf(i) <> 0 and (inbuf(i) and 80h) = 0 and inbuf(i) <> '['
+                 and name$pos < 63 and i < 120;
             orig$name(name$pos) = inbuf(i);
             name$pos = name$pos + 1;
             i = i + 1;
         end;
         /* If high bit set, include that char (with high bit cleared) */
-        if (inbuf(i) and 80h) <> 0 and name$pos < 12 then do;
+        if (inbuf(i) and 80h) <> 0 and name$pos < 63 then do;
             orig$name(name$pos) = inbuf(i) and 7fh;
             name$pos = name$pos + 1;
             i = i + 1;  /* Skip past high-bit char */
         end;
-        orig$name(name$pos) = 0;
         /* Skip to null terminator and get version byte after it */
-        do while inbuf(i) <> 0;
+        do while inbuf(i) <> 0 and i < 120;
             i = i + 1;
         end;
         ver1 = inbuf(i + 1);  /* Version byte is after null */
 
-        call fillmem(ofcb$ptr, 36, 0);
-        i = 0;
-        j = 1;
-        do while orig$name(i) <> 0 and orig$name(i) <> '.' and j <= 8;
-            ofcb(j) = orig$name(i);
-            i = i + 1;
-            j = j + 1;
-        end;
-        do while j <= 8;
-            ofcb(j) = ' ';
-            j = j + 1;
-        end;
-        if orig$name(i) = '.' then do;
-            i = i + 1;
-            j = 9;
-            do while orig$name(i) <> 0 and j <= 11;
-                ofcb(j) = orig$name(i);
-                i = i + 1;
-                j = j + 1;
-            end;
-        end;
-        do while j <= 11;
-            ofcb(j) = ' ';
-            j = j + 1;
-        end;
-
         call printstr(.msg$creating);
         i = 0;
-        do while orig$name(i) <> 0;
+        do while i < name$pos;
             call printchar(orig$name(i));
             i = i + 1;
         end;
+
+        /* Set up output FCB with a name CP/M can take (names.plm) */
+        call cpm$name(.orig$name, name$pos);
+
         /* Show version info */
         if ver1 >= 20h then
             call printstr(.(' [CrLZH V2.0]$'));
@@ -343,7 +280,8 @@ main: procedure public;
      *   LZW_PREFIX: 16384 bytes (base + 5448)
      *   LZW_SUFFIX: 8192 bytes  (base + 21832)
      *   WORK:       4096 bytes  (base + 30024)
-     * Total: 34120 bytes from base
+     *   NAMES:      2816 bytes  (base + 34120), 256 names of 11 bytes
+     * Total: 36936 bytes from base
      *
      * HUFF_TREE sits next to RING so that the two form one 5120-byte run.
      * Crunch needs three tables of its own and there is no spare memory in a
@@ -365,6 +303,8 @@ main: procedure public;
     lzw$prefix$ptr = ring$ptr + 4096;
     lzw$suffix$ptr = lzw$prefix$ptr + 16384;  /* 8192 entries × 2 for method 9 */
     work$ptr = lzw$suffix$ptr + 8192;          /* 8192 entries × 1 for method 9 */
+    name$table$ptr = work$ptr + 4096;          /* the names made, names.plm */
+    name$count = 0;
 
     /* Crunch-only overlays, all dead while crunch runs:
      *   hash low bytes  5003 in HUFF_TREE + RING      (5120 available)
