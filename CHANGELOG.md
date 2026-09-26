@@ -205,16 +205,17 @@ An LBR member of no sectors is written as an empty file, as `src/un80` writes
 it. 80un made no file for it, while `cpm$name` took its name all the same, so a
 later member of that name came out as `NAME-1` with no `NAME`.
 
-An LBR's directory length is read in 16 bits, as every length in the directory
-is. 80un read only its low byte, so a directory of 260 (0104H) sectors was
-taken as 4: of the 20 members of such an LBR it extracted the 15 in the first
-four sectors, said nothing of the other 5, and ended `15 file(s) extracted`.
+An LBR's directory length is 16 bits, as every length in the directory is, and
+80un read only its low byte, so a directory of 260 (0104H) sectors was taken as
+4: of the 20 members of such an LBR it extracted the 15 in the first four
+sectors, said nothing of the other 5, and ended `15 file(s) extracted`.
 `src/un80` refuses that directory ("Invalid directory size"), and so does 80un
 now: its buffer holds 32 sectors, 128 entries, the most `src/un80` takes, and a
-directory of no sectors or of more than 32 is refused with `Invalid LBR file`,
-and nothing is extracted. An LBR that ends inside its directory has only the
-entries in the sectors there, as in `src/un80`; 80un took the rest from
-whatever its buffer held before, and made members called `UNNAMED` out of them.
+directory of no sectors or of more than 32, a high byte other than 0 among
+them, is refused with `Invalid LBR file`, and nothing is extracted. An LBR that
+ends inside its directory has only the entries in the sectors there, as in
+`src/un80`; 80un took the rest from whatever its buffer held before, and made
+members called `UNNAMED` out of them.
 
 80un keeps its table of names below the BDOS, and refuses a TPA too small for
 its buffers. The buffers end 34120 bytes past the program, and 256 names of 11
@@ -224,14 +225,14 @@ there an ARC of more than about 150 members wrote names over the BDOS, where
 24739a3, whose data ended at E058H, fit. 80un now reads 0006H at startup, keeps
 128 bytes under it for the stack (which goes no deeper than 24 bytes on any
 test input), and keeps as many names as fit in the rest, up to 256: about 100
-in a 64K CP/M 2.2 (103 with uplm80 0.4.2, 109 with the BYTE shift rule, the
+in a 64K CP/M 2.2 (101 with uplm80 0.4.2, 107 with the BYTE shift rule, the
 archive's own among them). Past that, names are still made by the rule but no
 longer kept, so two members made alike after the first hundred or so can land
 on one file; an archive of fewer members, or of more with names that do not
 come out alike, is not touched by it. When the buffers and one name do not fit
 below the BDOS, 80un says `Not enough memory` and stops, where it used to run
 and write over the BDOS. It needs about 58K of TPA: the BDOS entry at 0006H
-must be at E79BH or above (E758H with the BYTE shift rule).
+must be at E7B8H or above (E775H with the BYTE shift rule).
 
 No member is written over the archive being read. A member whose name, as made
 by the rule, was the archive's own deleted the archive and wrote itself in its
@@ -250,16 +251,23 @@ With these changes 80un extracts all 142 files under `tests/`, under uplm80
 last record, with every ARC member's CRC-16, the squeeze checksums and the
 crunch byte sums checking. An ARC, an LBR and a squeezed file of 25 names CP/M
 cannot take as they stand come out under the names the rule gives, and the 17
-files of the nine big-member archives come out right. Sixteen more inputs were
-made for the fixes after those: empty squeezed files and trees that loop or
-point past their end, an ARC member that will not decode, an LBR member of no
-sectors, archives holding their own names, and archives of 100 and 300 members
-run with the BDOS entry at FD00H and EC06H, and one at D006H. Of the 722 files
-they give, 721 are what `src/un80` writes; the other is the member that will not
-decode, which 80un leaves as far as it got (empty) and `src/un80` writes as
-stored. The D006H run says `Not enough memory` and writes nothing. Both
-compilers give the same files and the same console output for every one of these
-inputs.
+files of the nine big-member archives come out right: the seven above, and
+`ALL256.ARC` and `ALL256.BQN`, the ARC method 4 member and the squeezed file of
+all 256 byte values. Sixteen more inputs were made for the fixes after those:
+empty squeezed files and trees that loop or point past their end, an ARC member
+that will not decode, an LBR member of no sectors, archives holding their own
+names, and archives of 100 and 300 members run with the BDOS entry at FD00H and
+EC06H, and one at D006H. Of the 722 files they give, 721 are what `src/un80`
+writes; the other is the member that will not decode, which 80un leaves as far
+as it got (empty) and `src/un80` writes as stored. The D006H run says `Not
+enough memory` and writes nothing. Both compilers give the same files and the
+same console output for every one of these inputs. The three fixes made after
+those, to the LBR directory's length, a Huffman leaf above 256 and an LBR
+member that will not decode, leave the files and the console output of all of
+these inputs as they were, under both compilers. They were checked on the
+review's `badleaf.arc`, whose `BADLEAF.TXT` 80un and `src/un80` now both write
+as `A`, on its LBR of a 260-sector directory, which both now refuse, and on the
+inputs of the tests below.
 
 ### Added
 
@@ -270,17 +278,25 @@ runs it under cpmemu in binary mode, and compares every file it writes with
 what `src/un80` extracts: all 18 members of `tests/test.arc`, `zex-sage.dzc`
 (Crunch V1, stored as `ZEX/SAGE.DOC`), an ARC made on the fly with a stored
 member of 100000 bytes and a packed one over 64K, and one of names CP/M cannot
-take. Five more tests build their inputs the same way: an empty squeezed file
+take. Eight more tests build their inputs the same way: an empty squeezed file
 alone, in an LBR and in an ARC, with ARC method 4 trees that loop and that
-point past their end; an ARC member that will not decode, followed by two that
-must come out; an LBR member of no sectors followed by one of the same name; an
-ARC and an LBR that each hold a member of their own name, which must be left as
-they were; and an ARC of 300 members, run as it is, with 80un.com patched to
-find its BDOS at EC06H as in a 64K CP/M 2.2, and at D006H, where it must say
-`Not enough memory`. A decoder that never ends fails its test after 60 seconds.
-It is skipped when make, uplm80, um80, ul80 or cpmemu is missing, and all nine
-of its tests fail on the sources at 24739a3, the last five on those at 782334d
-too.
+point past their end; a Huffman leaf of 299 in a squeezed file alone, as an LBR
+member and as an ARC member; an ARC member that will not decode, followed by
+two that must come out; an LBR of a squeezed member of 300 nodes, a Crunch V1
+member of siglevel 15H, a stored member cut short and one wholly past the end
+of the file, which must each say `Error`, and a member that must come out; an
+LBR member of no sectors followed by one of the same name; an ARC and an LBR
+that each hold a member of their own name, which must be left as they were; an
+ARC of 300 members, run as it is, with 80un.com patched to find its BDOS at
+EC06H as in a 64K CP/M 2.2, and at D006H, where it must say `Not enough
+memory`; and an LBR whose directory is 260 sectors long, which must be refused,
+and one that ends inside its directory. Every run of 80un is given 60 seconds,
+where the longest takes under 10, so that a decoder that never ends fails its
+test there; three of the nine tests before these fixes gave it 60 seconds and
+the other six 300. The tests are skipped when make, uplm80, um80, ul80 or
+cpmemu is missing. All twelve fail on the sources at 24739a3, the last eight on
+those at 782334d, and the three for the directory's length, the leaf and the
+LBR member that will not decode on those at 3cfeaf3.
 
 `tests/test_arc.py` checks that `src/un80`'s ARC method 4 reads an empty tree
 with padding after it, a tree whose child is past its end and one with a leaf

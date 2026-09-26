@@ -46,6 +46,11 @@ if CPMEMU is None:
 
 pytestmark = pytest.mark.skipif(bool(MISSING), reason=f"needs {', '.join(MISSING)}")
 
+# A run of 80un that has not ended after this many seconds fails its test,
+# so that a decoder that never ends is caught.  The longest run here, of
+# tests/test.arc, takes under 10 s.
+HANG = 60
+
 
 @pytest.fixture(scope="module")
 def com(tmp_path_factory):
@@ -62,7 +67,7 @@ def com(tmp_path_factory):
 
 
 def run_80un(com: Path, archive: Path, workdir: Path, name: str | None = None,
-             timeout: int = 300, keep: dict | None = None):
+             keep: dict | None = None):
     """Run 80un.com on a copy of ARCHIVE; return (console, {file: bytes}).
     The copy is left out of the files; if KEEP is a dict, KEEP["archive"] is
     what it holds after the run."""
@@ -73,7 +78,7 @@ def run_80un(com: Path, archive: Path, workdir: Path, name: str | None = None,
     cfg.write_text(f"program = {com}\ncd = {workdir}\n"
                    "default_mode = binary\neol_convert = false\n")
     done = subprocess.run([CPMEMU, str(cfg), name.upper()], capture_output=True,
-                          text=True, errors="replace", timeout=timeout,
+                          text=True, errors="replace", timeout=HANG,
                           stdin=subprocess.DEVNULL)
     if keep is not None:
         keep["archive"] = (workdir / name).read_bytes() if (workdir / name).exists() else None
@@ -208,10 +213,6 @@ def test_names_cpm_cannot_take(com, tmp_path):
     assert "  BYE520.ASM OK" in console, console
 
 
-# A decoder that never ends is killed here rather than at run_80un's 300 s.
-HANG = 60
-
-
 def _lbr(members, dsec=None):
     """An LBR image; MEMBERS is [(name, type, bytes)], b"" for no sectors.
     DSEC is the directory's length in sectors, by default the fewest that
@@ -246,7 +247,7 @@ def test_empty_squeezed_file(com, tmp_path):
     alone = tmp_path / "empty.bqn"
     alone.write_bytes(_empty_squeezed(b"EMPTY.TXT").ljust(128, b"\x1a"))
     assert unsqueeze(alone.read_bytes()) == b""
-    console, files = run_80un(com, alone, tmp_path / "alone", timeout=HANG)
+    console, files = run_80un(com, alone, tmp_path / "alone")
     assert "Creating: EMPTY.TXT OK" in console, console
     assert files == {"empty.txt": b""}, console
 
@@ -257,7 +258,7 @@ def test_empty_squeezed_file(com, tmp_path):
                           ("AFTER", "TXT", after)]))
     want = extract_lbr(lbr)
     assert [data for _, data in want] == [b"", padded]
-    console, files = run_80un(com, lbr, tmp_path / "lbr", timeout=HANG)
+    console, files = run_80un(com, lbr, tmp_path / "lbr")
     assert "2 file(s) extracted" in console, console
     assert files == {"empty.tqt": b"", "after.txt": padded}, console
 
@@ -270,7 +271,7 @@ def test_empty_squeezed_file(com, tmp_path):
                     + _arc_member(2, b"AFTER.TXT", after, after) + b"\x1a\0")
     want = extract_arc(arc)
     assert [data for _, data in want] == [b"", b"", b"", after]
-    console, files = run_80un(com, arc, tmp_path / "arc", timeout=HANG)
+    console, files = run_80un(com, arc, tmp_path / "arc")
     assert "4 file(s) extracted" in console, console
     assert sorted(files) == ["after.txt", "empty.txt", "loop.txt", "past.txt"], console
     assert files["empty.txt"] == files["loop.txt"] == files["past.txt"] == b""
@@ -329,7 +330,7 @@ def test_arc_member_that_will_not_decode(com, tmp_path):
     arc.write_bytes(_arc_member(4, b"BAD.TXT", struct.pack("<H", 300) + bytes(60), b"x")
                     + _arc_member(2, b"AFTER.TXT", body, body)
                     + _arc_member(2, b"LAST.TXT", body[:40], body[:40]) + b"\x1a\0")
-    console, files = run_80un(com, arc, tmp_path / "bad", timeout=HANG)
+    console, files = run_80un(com, arc, tmp_path / "bad")
     assert "Error" in console, console
     assert "2 file(s) extracted" in console, console
     want = dict(extract_arc(arc))
@@ -449,14 +450,14 @@ def test_many_members_and_the_bdos(com, tmp_path):
     arc.write_bytes(b"".join(_arc_member(2, n, b, b) for n, b in members) + b"\x1a\0")
     want = {n.decode().lower(): b for n, b in members}
     for where, program in (("full", com), ("ec06", _tpa(com, 0xEC06, tmp_path / "ec06.com"))):
-        console, files = run_80un(program, arc, tmp_path / where, timeout=HANG)
+        console, files = run_80un(program, arc, tmp_path / where)
         assert "300 file(s) extracted" in console, (where, console)
         assert sorted(files) == sorted(want), where
         for name, data in want.items():
             assert_same(files[name], data, f"{where} {name}")
 
     console, files = run_80un(_tpa(com, 0xD006, tmp_path / "d006.com"), arc,
-                              tmp_path / "d006", timeout=HANG)
+                              tmp_path / "d006")
     assert "Not enough memory" in console, console
     assert files == {}, console
 
