@@ -174,6 +174,10 @@ CCP takes `_` as a delimiter, like `=`, so `TYPE ZEX_SAGE.DOC` types a file
 called `ZEX` and `ERA ZEX_SAGE.DOC` erases it. `-` is taken by every CCP and
 every host. For the same reason a `_` in a stored name becomes `-` on CP/M.
 
+An LBR member of no sectors is written as an empty file, as `src/un80` writes
+it. 80un made no file for it, while `cpm$name` took its name all the same, so a
+later member of that name came out as `NAME-1` with no `NAME`.
+
 With these changes 80un extracts all 142 files under `tests/`, under uplm80
 0.4.2 and under uplm80 with the BYTE shift rule alike: 133 byte for byte as
 `src/un80` extracts them and the other 9 the same up to the ^Z padding of the

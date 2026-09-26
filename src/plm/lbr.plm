@@ -248,6 +248,19 @@ extract$lbr: procedure byte public;
                     end;
                 end;
                 else do;
+                    /* A member of no sectors is an empty file: make it, as
+                       src/un80 does.  It used to be left out while cpm$name
+                       had taken its name all the same, so that a later member
+                       of that name came out as NAME-1 with no NAME. */
+                    call deletefile(ofcb$ptr);
+                    if makefile(ofcb$ptr) = 0ffh then do;
+                        call printstr(.msg$nocreat);
+                    end;
+                    else do;
+                        call closefile(ofcb$ptr);
+                        file$count = file$count + 1;
+                        call printstr(.msg$ok);
+                    end;
                     call crlf;
                 end;
 
