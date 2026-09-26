@@ -277,6 +277,48 @@ def test_empty_squeezed_file(com, tmp_path):
     assert_same(files["after.txt"], after, "AFTER.TXT")
 
 
+def test_huffman_leaf_past_255(com, tmp_path):
+    """
+    A Huffman leaf of 299 (child -300) is neither a byte nor the end code.
+    80un wrote its low byte and went on; src/un80's squeeze module stops at
+    it, and its ARC method 4 raised ValueError, which lost the whole archive.
+    Both stop there now, with what was decoded before it: alone, as an LBR
+    member and as an ARC member, each followed by one that must come out.
+    """
+    tree = struct.pack("<Hhhhh", 2, 1, -300, -66, -67)  # A = 00, B = 01, 299 = 1
+    bits = bytes([0x88, 0x41, 0x00])                    # A B A B 299 A A B A ...
+    squeezed = (b"\x76\xff" + struct.pack("<H", sum(b"ABAB")) + b"BADLEAF.TXT\0"
+                + tree + bits)
+    assert unsqueeze(squeezed) == b"ABAB"
+    alone = tmp_path / "badleaf.tqt"
+    alone.write_bytes(squeezed)
+    console, files = run_80un(com, alone, tmp_path / "alone")
+    assert "Creating: BADLEAF.TXT OK" in console, console
+    assert list(files) == ["badleaf.txt"], console
+    assert_same(files["badleaf.txt"], b"ABAB", "BADLEAF.TXT")
+
+    after = b"the member after the bad leaf\r\n" * 3
+    lbr = tmp_path / "badleaf.lbr"
+    lbr.write_bytes(_lbr([("BADLEAF", "TQT", squeezed), ("AFTER", "TXT", after)]))
+    assert [data for _, data in extract_lbr(lbr)] == [b"ABAB", after.ljust(128, b"\x1a")]
+    console, files = run_80un(com, lbr, tmp_path / "lbr")
+    assert "2 file(s) extracted" in console, console
+    assert sorted(files) == ["after.txt", "badleaf.tqt"], console
+    assert_same(files["badleaf.tqt"], b"ABAB", "BADLEAF.TQT")
+    assert_same(files["after.txt"], after, "AFTER.TXT")
+
+    arc = tmp_path / "badleaf.arc"
+    arc.write_bytes(_arc_member(4, b"BADLEAF.TXT", tree + bits, b"ABAB")
+                    + _arc_member(2, b"AFTER.TXT", after, after) + b"\x1a\0")
+    want = extract_arc(arc)
+    assert want == [("BADLEAF.TXT", b"ABAB"), ("AFTER.TXT", after)]
+    console, files = run_80un(com, arc, tmp_path / "arc")
+    assert "2 file(s) extracted" in console, console
+    assert sorted(files) == ["after.txt", "badleaf.txt"], console
+    for name, data in want:
+        assert_same(files[name.lower()], data, name)
+
+
 def test_arc_member_that_will_not_decode(com, tmp_path):
     """
     A member whose decoder fails ended the archive, although its data had been

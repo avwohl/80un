@@ -122,6 +122,15 @@ lost the whole archive. `src/un80` raised it too for an empty method 4 member
 with a byte of padding after its node count; that is an empty file now, as it
 already was in `unsqueeze`.
 
+So does a Huffman leaf above 256, in both. A leaf is a byte, 0 to 255, or the
+end code 256, and a child of -300, a leaf of 299, is neither: the tree is
+corrupt. 80un wrote the leaf's low byte and went on decoding; `src/un80`'s ARC
+method 4 passed 299 to `bytearray.append`, whose `ValueError` `extract_arc`
+does not catch, and the whole archive was lost. Its squeeze module already
+stopped there. Now all of them stop at the leaf, with what was decoded before
+it, as at a child past the tree, and 80un and `src/un80` write the same file:
+of `ABAB`, the leaf and more, `ABAB`.
+
 An ARC member that will not decode no longer ends the archive. When a
 member's decoder failed, on a Huffman tree of more than 256 nodes for example,
 or its file could not be written, `extract$arc$member` returned 0 and
@@ -256,8 +265,8 @@ of its tests fail on the sources at 24739a3, the last five on those at 782334d
 too.
 
 `tests/test_arc.py` checks that `src/un80`'s ARC method 4 reads an empty tree
-with padding after it, and a tree whose child is past its end, and that an
-archive holding them extracts to its end.
+with padding after it, a tree whose child is past its end and one with a leaf
+of 299, and that an archive holding them extracts to its end.
 
 ## [0.3.2] - 2026-09-23
 

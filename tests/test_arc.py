@@ -169,7 +169,8 @@ class TestArcChecksums:
 
 
 class TestArcSqueezedTrees:
-    """ARC method 4 trees that are empty or point past themselves."""
+    """ARC method 4 trees that are empty, point past themselves, or hold a
+    leaf that is not a byte."""
 
     def test_empty_tree_is_an_empty_file(self):
         """A tree of no nodes is SQ's empty file, padded or not; indexing the
@@ -185,6 +186,17 @@ class TestArcSqueezedTrees:
         from un80.arc import decompress_squeezed
         assert decompress_squeezed(bytes([1, 0, 5, 0, 5, 0]) + b"\x55") == b""
 
+    def test_leaf_past_255_stops(self):
+        """A leaf of 299 (child -300) is neither a byte nor the end code:
+        decoding stops there, as at a child past the tree, where
+        bytearray.append raised ValueError."""
+        import struct
+
+        from un80.arc import decompress_squeezed
+        # A = 00, B = 01, 299 = 1; the bits are A B A B 299 A A B
+        tree = struct.pack("<Hhhhh", 2, 1, -300, -66, -67)
+        assert decompress_squeezed(tree + bytes([0x88, 0x41, 0x00])) == b"ABAB"
+
     def test_extract_goes_on(self, tmp_path):
         """An archive with such members extracts all of them."""
         import struct
@@ -195,9 +207,11 @@ class TestArcSqueezedTrees:
                     + struct.pack("<I", size) + stored)
 
         after = b"after\r\n" * 4
+        badleaf = struct.pack("<Hhhhh", 2, 1, -300, -66, -67) + bytes([0x88, 0x41, 0x00])
         arc = tmp_path / "trees.arc"
         arc.write_bytes(member(4, b"EMPTY.TXT", b"\0\0\0", 0)
                         + member(4, b"PAST.TXT", bytes([1, 0, 5, 0, 5, 0, 0x55]), 0)
+                        + member(4, b"BADLEAF.TXT", badleaf, 4)
                         + member(2, b"AFTER.TXT", after, len(after)) + b"\x1a\0")
         assert extract_arc(arc) == [("EMPTY.TXT", b""), ("PAST.TXT", b""),
-                                    ("AFTER.TXT", after)]
+                                    ("BADLEAF.TXT", b"ABAB"), ("AFTER.TXT", after)]

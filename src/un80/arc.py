@@ -258,6 +258,13 @@ def decompress_squeezed(data: bytes) -> bytes:
             value = -(node + 1)
             if value == 256:  # EOF
                 break
+            if value > 255:
+                # Not a byte, and not the end code: the tree is corrupt, and
+                # nothing after the leaf can be trusted, so it ends the
+                # decoding as a child past the tree does and as the squeeze
+                # module ends it.  bytearray.append raised ValueError, which
+                # extract_arc does not catch, and the whole archive was lost.
+                raise ArcError(f"Huffman leaf {value} is not a byte")
             result.append(value)
         except ArcError:
             break

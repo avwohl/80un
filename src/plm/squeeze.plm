@@ -103,14 +103,15 @@ unsqueeze: procedure byte public;
                 node = huff$nodes;
             end;
             else if (left and 8000h) <> 0 then do;
+                /* A leaf.  256 is the end code, and a leaf above it is no
+                   byte at all but a corrupt tree: it ends the decoding, as a
+                   child past the tree does, where this wrote its low byte
+                   and went on.  src/un80 stops at it too. */
                 symbol = (not left);
-                if symbol = 256 then do;
+                if symbol > 255 then
                     done = 1;
-                end;
-                else do;
-                    if rle$decode$byte(low(symbol)) = 0 then
-                        return 0;
-                end;
+                else if rle$decode$byte(low(symbol)) = 0 then
+                    return 0;
                 node = huff$nodes;
             end;
             else if left < huff$nodes then do;

@@ -133,12 +133,13 @@ arc$decomp$squeezed: procedure byte;
                 node = huff$nodes;
             end;
             else if (left and 8000h) <> 0 then do;
+                /* 256 is the end code, and a leaf above it ends the
+                   decoding too (see unsqueeze) */
                 symbol = not left;
-                if symbol = 256 then
+                if symbol > 255 then
                     done = 1;
-                else do;
-                    if rle$decode$byte(low(symbol)) = 0 then return 0;
-                end;
+                else if rle$decode$byte(low(symbol)) = 0 then
+                    return 0;
                 node = huff$nodes;
             end;
             else if left < huff$nodes then do;
