@@ -603,7 +603,7 @@ The test suite needs additional sample files to achieve complete coverage:
 | **Squeeze** | ✅ Complete, checked against the header checksum | - |
 | **Crunch** | ✅ V2.x (siglevel ≥ 0x20) and V1.x (siglevel up to 0x10), byte for byte against UNCR24.COM | V1.x siglevel 0x11-0x1F, which UNCR24 refuses too |
 | **CrLZH** | ✅ V1.x and V2.0 | - |
-| **ARC** | ✅ Methods 2, 3, 8, 9, checked against each member's CRC-16 | Methods 1, 4-7 (stored old, squeezed, old crunched); two method 8 members still fail their CRC |
+| **ARC** | ✅ Methods 2, 3, 8, 9, checked against each member's CRC-16: all 48 members of the five sample archives pass | Methods 1, 4-7 (stored old, squeezed, old crunched) have no sample archive |
 | **LBR** | ✅ Archive with nested compression | - |
 | **MBASIC** | ✅ Standard (0xFF) and Protected (0xFE) | - |
 

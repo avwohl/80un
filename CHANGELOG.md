@@ -85,15 +85,16 @@ can hold a member of 64K or more: ARC sizes are 32 bits, an LBR member runs to
 65535 sectors, and the streams have no size at all; the bound is CP/M 2.2's own
 8 MB file.
 
-With uplm80 0.4.2 and with uplm80 giving a shifted BYTE a BYTE result, 80un now
-extracts 141 of the 142 files under `tests/`, each identical to what `src/un80`
-extracts apart from the ^Z padding of its last record, and every ARC member's
-CRC-16 checks; only `ZEX/SAGE.DOC` is still missing. Seven archives built to
-cross the old limits extract correctly under both compilers, and four of them
-did not before: a method 2 member of 100000 bytes, method 3 and method 4 members
-over 64K compressed, a method 4 member of exactly 65535 bytes, a squeezed LBR
-member of 678 sectors, and an ARC and an LBR member with whole symbols in their
-last byte.
+Seven archives built to cross the old limits extract correctly under uplm80
+0.4.2 and under uplm80 giving a shifted BYTE a BYTE result: a method 2 member of
+100000 bytes, method 3 and method 4 members over 64K compressed, a method 4
+member of exactly 65535 bytes, a squeezed LBR member of 678 sectors, and an ARC
+and an LBR member with whole symbols in their last byte, each followed by a
+member that must still be found. Before this change four of them came out wrong:
+the method 3 and method 4 members over 64K were cut short and the member after
+each was lost, the member after the one of exactly 65535 bytes was lost, and the
+ARC member with symbols in its last byte lost them. The LBR members came out
+right only because nothing held a member to its length then.
 
 A squeezed file that uses every byte value no longer hangs 80un. With the end
 code that is 257 symbols, and a Huffman tree of 256 nodes, and `unsqueeze` and
