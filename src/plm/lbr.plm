@@ -110,7 +110,7 @@ extract$lbr: procedure byte public;
             k = k + 1;
     end;
 
-    max$entries = shl(dir$sectors, 2);
+    max$entries = shl(double(dir$sectors), 2);  /* 4 entries a sector, at most 128 */
 
     /* Save the original FCB for reopening */
     call copymem(fcb$ptr, .saved$fcb, 12);

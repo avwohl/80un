@@ -3,7 +3,15 @@
 All notable changes to 80un, the unpacker for CP/M compression and packing
 formats, are documented here.
 
-## 0.3.3 — unreleased
+## [0.3.3] - 2026-09-26
+
+### Changed
+
+`80un.com` and `80unbas.com` rebuilt with uplm80 0.4.3, which makes `SHL` and
+`SHR` of a BYTE a BYTE, as PL/M-80 and Intel's compiler do; the build gives
+no warning. 0.3.2 was tagged but not published, on GitHub or on PyPI: 0.3.3 is
+the first release since 0.3.1, and has 0.3.2's rebuild against uplm80 0.3.5
+below.
 
 ### Fixed
 
@@ -26,10 +34,13 @@ files, 4 of them correct, where the 0.4.1 build writes 136.
 
 The 29 sites where a BYTE is shifted and the bits shifted out of it are wanted
 now read `SHL(DOUBLE(x), n)`, which is correct PL/M-80 under any compiler. The
-ten BYTE shifts left alone either go into a BYTE (the crunch code-width
+nine BYTE shifts left alone either go into a BYTE (the crunch code-width
 threshold, `lzh$get$byte`, the crunch used-code bit mask, `read$bit$sq`) or
-cannot pass eight bits (a hex digit `SHR(b, 4)`, the used-code test,
-`SHL(dir$sectors, 2)` of at most 32 directory sectors).
+cannot pass eight bits (a hex digit `SHR(b, 4)`, the used-code test).
+`SHL(dir$sectors, 2)`, of at most 32 directory sectors, cannot pass eight bits
+either, but since the LBR directory check below changed, uplm80 0.4.3 cannot
+tell and warned; it reads `SHL(DOUBLE(dir$sectors), 2)` too, with the same
+value.
 
 `src/plm/archive/80un.plm`, the program in one file from before it was split
 into modules, is left as it was. The Makefile does not build it, and it still
@@ -257,14 +268,16 @@ there an ARC of more than about 150 members wrote names over the BDOS, where
 24739a3, whose data ended at E058H, fit. 80un now reads 0006H at startup, keeps
 128 bytes under it for the stack (which goes no deeper than 24 bytes on any
 test input), and keeps as many names as fit in the rest, up to 256: about 100
-in a 64K CP/M 2.2 (95 with uplm80 0.4.2, 101 with the BYTE shift rule, the
-archive's own among them). Past that, names are still made by the rule but no
-longer kept, so two members made alike after the first hundred or so can land
+in a 64K CP/M 2.2 (101 in the released `80un.com`, built by uplm80 0.4.3; 95
+built by 0.4.2; the archive's own among them). Past that, names are still made
+by the rule but no longer kept, so two members made alike after the first
+hundred or so can land
 on one file; an archive of fewer members, or of more with names that do not
 come out alike, is not touched by it. When the buffers and one name do not fit
 below the BDOS, 80un says `Not enough memory` and stops, where it used to run
 and write over the BDOS. It needs about 58K of TPA: the BDOS entry at 0006H
-must be at E7F6H or above (E7B3H with the BYTE shift rule).
+must be at E7B6H or above for the released `80un.com` (E7F6H built by uplm80
+0.4.2).
 
 No member is written over the archive being read. A member whose name, as made
 by the rule, was the archive's own deleted the archive and wrote itself in its
