@@ -212,7 +212,9 @@ extract$lbr: procedure byte public;
                            code that needs a bit from past the sectors in the
                            file, and says OK with what the codes before that
                            decode to, the bytes src/un80 writes.  A Crunch V1
-                           member cut short is an Error.  CrLZH decodes on
+                           member cut short before its code 0 is an Error;
+                           cut after it, in its checksum, it says OK with all
+                           its bytes, as src/un80 writes them.  CrLZH decodes on
                            past the end, from the ^Z getbyte gives there,
                            until they happen to make its stop code; src/un80
                            decodes on from zero bits, so the two write

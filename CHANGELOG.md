@@ -184,7 +184,9 @@ are what it writes now; of the 71 cuts of the four squeezed ones (`555-ic.bqs`,
 So a squeezed or Crunch V2 LBR member cut short says `OK` when its header, and
 a squeezed member's tree, are in the file, and holds what the codes before the
 first one cut short decode to, and it is an `Error` when they are not. A Crunch
-V1 member cut short is an `Error`. A CrLZH member is decoded on past the end,
+V1 member cut short before its code 0 is an `Error`; cut after it, in the
+checksum V1 does not read, it says `OK` with all its bytes, as `src/un80`
+writes them. A CrLZH member is decoded on past the end,
 by 80un from the ^Z it reads there and by `src/un80` from zero bits, until that
 happens to make the stop code, so the two write different bytes after the data
 there.
