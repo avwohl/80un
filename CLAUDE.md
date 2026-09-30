@@ -64,3 +64,6 @@ When comparing decompressor output:
 - Python with `--text` flag converts CR+LF to LF (Unix format)
 - PL/M via cpmemu (default) outputs LF only (due to emulator conversion)
 - PL/M via cpmemu (binary mode) outputs CR+LF (matches Python raw)
+
+## README stays short
+README.md is at most 150 lines. New detail goes in docs/<topic>.md with a one-line link from the README; never add sections to the README.

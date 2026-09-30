@@ -222,7 +222,7 @@ of 80un. Its tables take the space of the V2 ones, so 80un needs no more
 memory.
 
 80un makes a CP/M name for every member, from any stored name, by one rule
-(`src/plm/names.plm`, described in the README under "Member names on CP/M").
+(`src/plm/names.plm`, described in docs/cpm_version.md under "Member names on CP/M").
 `ZEX/SAGE.DOC` could not be created: the ARC, squeeze, crunch and CrLZH paths
 copied the stored name into the FCB as it stood, so a `/`, a lower-case name
 from MS-DOS or Unix, or any other character CP/M does not take either failed
